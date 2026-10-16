@@ -1,0 +1,306 @@
+'use client';
+
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { AlertCircle, ArrowDownLeft, ArrowUpRight, CheckCircle2, CreditCard, Download, Eye, Loader2, RefreshCw, Wallet } from 'lucide-react';
+import { api } from '@/lib/api';
+import { downloadPaymentReceipt, viewPaymentReceipt } from '@/lib/payment-receipt';
+
+type BillingTransaction = {
+  id: number;
+  entry_type: 'charge' | 'payment';
+  term: string;
+  description: string;
+  amount: number;
+  currency: string;
+  status: 'posted' | 'pending' | 'paid' | 'failed' | 'void';
+  reference: string;
+  gateway: string;
+  gateway_transaction_id?: string | null;
+  receipt_token?: string | null;
+  created_at: string;
+  liability_type?: 'tuition' | 'missed_audio' | 'assignment' | 'quiz' | 'exam' | 'other_penalty' | null;
+};
+
+type StudentBilling = {
+  student: { student_id: string; name: string; cohort: string };
+  currency: string;
+  term: string;
+  total_charges: number;
+  total_paid: number;
+  amount_due: number;
+  account_credit: number;
+  tuition_configured: boolean;
+  flutterwave_enabled: boolean;
+  transactions: BillingTransaction[];
+};
+
+type BillingResponse = { data: StudentBilling };
+
+const money = (amount: number, currency: string) =>
+  new Intl.NumberFormat('en-ZM', { style: 'currency', currency, maximumFractionDigits: 2 }).format(amount);
+
+const liabilityLabel = (transaction: BillingTransaction) => {
+  switch (transaction.liability_type) {
+    case 'missed_audio': return 'Missed class audio';
+    case 'assignment': return 'Missed assignment';
+    case 'quiz': return 'Missed quiz';
+    case 'exam': return 'Missed exam';
+    case 'tuition': return 'Tuition / school fees';
+    default: return transaction.entry_type === 'charge'
+      ? (/tuition|school fees/i.test(transaction.description) ? 'Tuition / school fees' : 'Other charge')
+      : 'Payment';
+  }
+};
+
+export default function StudentBillingPage() {
+  const [account, setAccount] = useState<StudentBilling | null>(null);
+  const [amount, setAmount] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [paying, setPaying] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [receiptAction, setReceiptAction] = useState<{ id: number; mode: 'view' | 'download' } | null>(null);
+
+  const loadBilling = useCallback(async () => {
+    setError('');
+    const response = await api.students.myBilling() as BillingResponse;
+    setAccount(response.data);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      try {
+        const response = await api.students.myBilling() as BillingResponse;
+        if (active) setAccount(response.data);
+      } catch (reason) {
+        if (active) setError(reason instanceof Error ? reason.message : 'Unable to load your student account.');
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    void load();
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const query = new URLSearchParams(window.location.search);
+    const transactionId = query.get('transaction_id');
+    const reference = query.get('tx_ref');
+    const paymentStatus = query.get('status');
+    if (paymentStatus && paymentStatus !== 'successful' && !transactionId) {
+      queueMicrotask(() => {
+        if (!active) return;
+        setNotice('Payment was not completed. No payment has been added to your account.');
+        window.history.replaceState({}, '', window.location.pathname);
+      });
+      return () => { active = false; };
+    }
+    if (!transactionId || !reference) return () => { active = false; };
+
+    queueMicrotask(() => {
+      if (!active) return;
+      setVerifying(true);
+      setNotice('Confirming your Flutterwave payment securely...');
+    });
+    api.students.verifyMyPayment(transactionId, reference)
+      .then(async (response: { message?: string }) => {
+        if (!active) return;
+        setNotice(response.message || 'Payment confirmed. Your account has been updated.');
+        await loadBilling();
+      })
+      .catch((reason: unknown) => {
+        if (!active) return;
+        setNotice('');
+        setError(reason instanceof Error ? reason.message : 'We could not confirm this payment. Your account has not been credited.');
+      })
+      .finally(() => {
+        if (!active) return;
+        setVerifying(false);
+        window.history.replaceState({}, '', window.location.pathname);
+      });
+    return () => { active = false; };
+  }, [loadBilling]);
+
+  const startPayment = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!account) return;
+    const paymentAmount = Number(amount);
+    if (!Number.isFinite(paymentAmount) || paymentAmount <= 0 || paymentAmount > account.amount_due) {
+      setError(`Enter an amount greater than zero and no more than ${money(account.amount_due, account.currency)}.`);
+      return;
+    }
+
+    setPaying(true);
+    setError('');
+    try {
+      const response = await api.students.initiateMyPayment(paymentAmount) as { data: { checkout_url: string } };
+      window.location.assign(response.data.checkout_url);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to start your payment. Please try again.');
+      setPaying(false);
+    }
+  };
+
+  const handleReceipt = async (transaction: BillingTransaction, mode: 'view' | 'download') => {
+    if (!account || transaction.status !== 'paid' || !transaction.receipt_token) {
+      setError('A receipt is available only after a payment has been confirmed.');
+      return;
+    }
+
+    setReceiptAction({ id: transaction.id, mode });
+    setError('');
+    try {
+      const paymentReceipt = {
+        student_name: account.student.name,
+        student_id: account.student.student_id,
+        cohort: account.student.cohort,
+        paid_for: transaction.description,
+        term: transaction.term,
+        amount: transaction.amount,
+        currency: transaction.currency,
+        reference: transaction.reference,
+        gateway: transaction.gateway,
+        gateway_transaction_id: transaction.gateway_transaction_id || null,
+        created_at: transaction.created_at,
+        receipt_token: transaction.receipt_token,
+      };
+      if (mode === 'view') await viewPaymentReceipt(paymentReceipt);
+      else await downloadPaymentReceipt(paymentReceipt);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to create your payment receipt. Please try again.');
+    } finally {
+      setReceiptAction(null);
+    }
+  };
+
+  if (loading) {
+    return <main className="mx-auto max-w-6xl"><div className="flex min-h-64 items-center justify-center gap-3 text-sm font-semibold text-slate-500"><Loader2 className="h-5 w-5 animate-spin" />Loading your student account...</div></main>;
+  }
+
+  return (
+    <main className="mx-auto max-w-8xl space-y-6 pb-10">
+      <header className="flex flex-col justify-between gap-4 border-b border-slate-200 pb-5 sm:flex-row sm:items-end">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-900">Student account</p>
+          <h1 className="mt-1 text-3xl font-black tracking-tight text-slate-950">Billing &amp; payments</h1>
+          <p className="mt-1 text-sm text-slate-500">Review your charges and liabilities, outstanding balance, and payment history.</p>
+        </div>
+        <button type="button" onClick={() => { setLoading(true); void loadBilling().catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Unable to refresh your account.')).finally(() => setLoading(false)); }} className="inline-flex items-center justify-center gap-2 self-start rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 sm:self-auto">
+          <RefreshCw className="h-4 w-4" /> Refresh account
+        </button>
+      </header>
+
+      {error && <div role="alert" className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />{error}</div>}
+      {notice && <div role="status" className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />{notice}</div>}
+
+      {account && <>
+        <section className="overflow-hidden rounded-2xl bg-slate-950 p-6 text-white shadow-lg md:p-8">
+          <div className="flex flex-col justify-between gap-6 md:flex-row md:items-center">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-400">Tuition account · {account.term}</p>
+              <h2 className="mt-2 text-xl font-black">{account.student.name}</h2>
+              <p className="mt-1 text-xs font-medium text-slate-400">Student ID {account.student.student_id} · Cohort {account.student.cohort}</p>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-white/5 px-5 py-4 md:min-w-64">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Outstanding liability</p>
+              <p className="mt-1 text-3xl font-black text-white">{money(account.amount_due, account.currency)}</p>
+              <p className="mt-1 text-[11px] text-slate-400">{account.amount_due > 0 ? 'Remaining amount due' : 'No outstanding balance'}</p>
+            </div>
+          </div>
+        </section>
+
+        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Account summary">
+          {[
+            { label: 'Total charges', amount: account.total_charges, icon: CreditCard, color: 'text-blue-900 bg-blue-50' },
+            { label: 'Account payments', amount: account.total_paid, icon: ArrowDownLeft, color: 'text-emerald-700 bg-emerald-50' },
+            { label: 'Outstanding liability', amount: account.amount_due, icon: ArrowUpRight, color: 'text-amber-700 bg-amber-50' },
+            { label: 'Account credit', amount: account.account_credit, icon: Wallet, color: 'text-violet-700 bg-violet-50' },
+          ].map((metric) => {
+            const Icon = metric.icon;
+            return <article key={metric.label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{metric.label}</p>
+                <span className={`rounded-lg p-2 ${metric.color}`}><Icon className="h-4 w-4" /></span>
+              </div>
+              <p className="mt-4 text-2xl font-black tracking-tight text-slate-950">{money(metric.amount, account.currency)}</p>
+            </article>;
+          })}
+        </section>
+
+        <section className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+          <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
+            <div className="flex items-start gap-3">
+              <span className="rounded-xl bg-blue-50 p-3 text-blue-900"><CreditCard className="h-5 w-5" /></span>
+              <div>
+                <h2 className="text-base font-black text-slate-950">Make a payment</h2>
+                <p className="mt-1 text-xs leading-5 text-slate-500">Pay all or part of your outstanding student account balance securely with Flutterwave.</p>
+              </div>
+            </div>
+            {account.amount_due <= 0 && !account.tuition_configured ? (
+              <p className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-900">Tuition pricing has not been set for cohort {account.student.cohort}. Please contact the school office to update the fee settings.</p>
+            ) : !account.flutterwave_enabled && account.amount_due > 0 ? (
+              <p className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-900">Flutterwave checkout is not configured on the server yet. Your balance is shown above; please contact the school office until online payments are enabled.</p>
+            ) : account.amount_due <= 0 ? (
+              <p className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-xs leading-5 text-emerald-800">Your account has no outstanding balance to pay at this time.</p>
+            ) : (
+              <form onSubmit={(event) => void startPayment(event)} className="mt-5 space-y-4">
+                <label className="block">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Payment amount ({account.currency})</span>
+                  <div className="mt-1 flex overflow-hidden rounded-xl border border-slate-200 focus-within:border-blue-900">
+                    <span className="flex items-center border-r border-slate-200 bg-slate-50 px-3 text-sm font-bold text-slate-500">{account.currency}</span>
+                    <input type="number" required min="1" max={account.amount_due} step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder={account.amount_due.toFixed(2)} className="w-full px-3 py-3 text-sm font-semibold text-slate-900 outline-none" />
+                  </div>
+                </label>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <button type="button" onClick={() => setAmount(account.amount_due.toFixed(2))} className="text-xs font-bold text-blue-900 hover:underline">Pay full balance</button>
+                  <button type="submit" disabled={paying || verifying} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-900 px-5 py-3 text-xs font-black uppercase tracking-wider text-white shadow-sm transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-60">
+                    {paying || verifying ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
+                    {paying ? 'Connecting to Flutterwave...' : 'Continue to payment'}
+                  </button>
+                </div>
+                <p className="text-[10px] leading-4 text-slate-400">Your account is credited only after the payment provider confirms the transaction.</p>
+              </form>
+            )}
+          </article>
+
+          <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
+            <h2 className="text-base font-black text-slate-950">Account details</h2>
+            <dl className="mt-4 divide-y divide-slate-100 text-xs">
+              <div className="flex justify-between gap-4 py-3"><dt className="text-slate-500">Student</dt><dd className="text-right font-bold text-slate-800">{account.student.name}</dd></div>
+              <div className="flex justify-between gap-4 py-3"><dt className="text-slate-500">Student ID</dt><dd className="font-mono font-bold text-slate-800">{account.student.student_id}</dd></div>
+              <div className="flex justify-between gap-4 py-3"><dt className="text-slate-500">Cohort</dt><dd className="font-bold text-slate-800">{account.student.cohort}</dd></div>
+              <div className="flex justify-between gap-4 py-3"><dt className="text-slate-500">Current fee period</dt><dd className="font-bold text-slate-800">{account.term}</dd></div>
+              <div className="flex justify-between gap-4 py-3"><dt className="text-slate-500">Payment provider</dt><dd className="font-bold text-slate-800">Flutterwave</dd></div>
+            </dl>
+          </article>
+        </section>
+
+        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-col justify-between gap-2 border-b border-slate-100 p-5 sm:flex-row sm:items-center">
+            <div><h2 className="text-base font-black text-slate-950">Account activity</h2><p className="mt-1 text-xs text-slate-500">Your tuition, assessment, attendance-audio and other charges, plus confirmed payments.</p></div>
+            <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-500">{account.transactions.length} records</span>
+          </div>
+          {account.transactions.length ? <div className="overflow-x-auto">
+            <table className="w-full min-w-[790px] text-left">
+              <thead><tr className="bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-400"><th className="px-5 py-3">Description</th><th className="px-5 py-3">Reference</th><th className="px-5 py-3">Date</th><th className="px-5 py-3">Status</th><th className="px-5 py-3 text-right">Amount</th><th className="px-5 py-3 text-right">Receipt</th></tr></thead>
+              <tbody className="divide-y divide-slate-100">{account.transactions.map((transaction) => <tr key={transaction.id} className="text-xs">
+                <td className="px-5 py-4"><p className="font-bold text-slate-800">{transaction.description}</p><p className="mt-1 text-[10px] text-slate-400">{transaction.entry_type === 'charge' ? `${liabilityLabel(transaction)} · ` : ''}{transaction.term}{transaction.gateway ? ` · ${transaction.gateway}` : ''}</p></td>
+                <td className="px-5 py-4 font-mono text-[10px] text-slate-500">{transaction.reference}</td>
+                <td className="px-5 py-4 text-slate-500">{new Date(transaction.created_at).toLocaleDateString()}</td>
+                <td className="px-5 py-4"><span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${transaction.status === 'paid' ? 'bg-emerald-50 text-emerald-700' : transaction.status === 'pending' ? 'bg-amber-50 text-amber-800' : transaction.status === 'failed' ? 'bg-red-50 text-red-700' : 'bg-slate-100 text-slate-500'}`}>{transaction.status}</span></td>
+                <td className={`px-5 py-4 text-right font-black ${transaction.entry_type === 'payment' ? 'text-emerald-700' : 'text-slate-900'}`}>{transaction.entry_type === 'payment' ? '− ' : ''}{money(transaction.amount, transaction.currency)}</td>
+                <td className="px-5 py-4 text-right">{transaction.entry_type === 'payment' && transaction.status === 'paid' && transaction.receipt_token ? <div className="inline-flex gap-1.5">
+                  <button type="button" onClick={() => void handleReceipt(transaction, 'view')} disabled={receiptAction?.id === transaction.id} className="inline-flex items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[10px] font-black text-slate-700 transition hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60" aria-label={`View PDF receipt for ${transaction.reference}`}>{receiptAction?.id === transaction.id && receiptAction.mode === 'view' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Eye className="h-3.5 w-3.5" />} View</button>
+                  <button type="button" onClick={() => void handleReceipt(transaction, 'download')} disabled={receiptAction?.id === transaction.id} className="inline-flex items-center justify-center gap-1 rounded-lg border border-blue-200 bg-white px-2.5 py-2 text-[10px] font-black text-blue-900 transition hover:bg-blue-50 disabled:cursor-wait disabled:opacity-60" aria-label={`Download PDF receipt for ${transaction.reference}`}>{receiptAction?.id === transaction.id && receiptAction.mode === 'download' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />} PDF</button>
+                </div> : transaction.entry_type === 'payment' && transaction.status === 'pending' ? <span className="text-[10px] text-slate-400">After confirmation</span> : null}</td>
+              </tr>)}</tbody>
+            </table>
+          </div> : <div className="p-10 text-center"><Wallet className="mx-auto h-7 w-7 text-slate-300" /><p className="mt-3 text-sm font-bold text-slate-700">No account activity yet</p><p className="mt-1 text-xs text-slate-500">Your charges and confirmed payments will appear here.</p></div>}
+        </section>
+      </>}
+    </main>
+  );
+}
