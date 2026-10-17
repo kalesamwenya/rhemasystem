@@ -17,15 +17,17 @@ import {
   type ManagedPageContent,
   type ManagedPageField,
   type ManagedPageKey,
+  type PublicCourse,
   type TestimonySubmission,
 } from '@/lib/public-site-content';
 
 type ContentResponse = { success: boolean; message?: string; data?: { testimonial_id?: number | null } };
-type ContentTab = 'about' | 'team' | 'faculty' | 'testimonies' | 'submissions' | ManagedPageKey;
+type ContentTab = 'about' | 'team' | 'faculty' | 'testimonies' | 'submissions' | 'public-courses' | ManagedPageKey;
 
 type TeamDraft = Omit<AboutPerson, 'id'>;
 type FacultyDraft = Omit<FacultyMember, 'id'>;
 type TestimonyDraft = Omit<AboutTestimonial, 'id'>;
+type PublicCourseDraft = Omit<PublicCourse, 'id'> & { id?: number };
 
 const inputClass = 'mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-red-400';
 const emptyContent: AboutContent = {
@@ -83,6 +85,14 @@ const emptyContent: AboutContent = {
 const emptyTeam: TeamDraft = { name: '', role: '', bio: '', avatar_url: '', source_type: 'manual', source_id: null, sort_order: 0, is_published: 1 };
 const emptyFaculty: FacultyDraft = { name: '', role: '', bio: '', avatar_url: '', sort_order: 0, is_published: 1 };
 const emptyTestimony: TestimonyDraft = { author_name: '', author_role: '', quote_text: '', avatar_url: '', sort_order: 0, is_published: 1 };
+const emptyPublicCourse: PublicCourseDraft = {
+  course: '',
+  description: '',
+  cohort: 1,
+  cohortName: 'First year',
+  sort_order: 0,
+  is_published: 1,
+};
 const managedPageTabs: { key: ManagedPageKey; label: string }[] = [
   { key: 'admissions', label: 'Admissions' },
   { key: 'contact', label: 'Contact + footer' },
@@ -240,6 +250,8 @@ export default function WebsiteContentPage() {
   const [availablePeople, setAvailablePeople] = useState<AvailableTeamProfile[]>([]);
   const [testimonies, setTestimonies] = useState<AboutTestimonial[]>([]);
   const [submissions, setSubmissions] = useState<TestimonySubmission[]>([]);
+  const [publicCourses, setPublicCourses] = useState<PublicCourse[]>([]);
+  const [publicCourseDraft, setPublicCourseDraft] = useState<PublicCourseDraft>(emptyPublicCourse);
   const [teamDraft, setTeamDraft] = useState<TeamDraft>(emptyTeam);
   const [facultyDraft, setFacultyDraft] = useState<FacultyDraft>(emptyFaculty);
   const [testimonyDraft, setTestimonyDraft] = useState<TestimonyDraft>(emptyTestimony);
@@ -247,6 +259,7 @@ export default function WebsiteContentPage() {
   const [editingTeamId, setEditingTeamId] = useState<number | null>(null);
   const [editingFacultyId, setEditingFacultyId] = useState<number | null>(null);
   const [editingTestimonyId, setEditingTestimonyId] = useState<number | null>(null);
+  const [editingPublicCourseId, setEditingPublicCourseId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -255,10 +268,12 @@ export default function WebsiteContentPage() {
   const [notice, setNotice] = useState('');
 
   const load = useCallback(async (): Promise<AboutPageContent> => {
-    const [data, pages]: [AboutPageContent, Record<ManagedPageKey, ManagedPageContent>] = await Promise.all([
+    const [data, pages, courses]: [AboutPageContent, Record<ManagedPageKey, ManagedPageContent>, { data?: PublicCourse[] }] = await Promise.all([
       loadAboutContent(true),
       loadAllManagedPageContent(),
+      api.courses.adminPublicList(),
     ]);
+    if (!Array.isArray(courses.data)) throw new Error('The public course catalog returned invalid data.');
     if (!data.content) throw new Error('About content is not initialized. Use site-content/createAboutContentTables.sql for a fresh database or site-content/upgradeAboutContentFields.sql for an existing database.');
     setContent({ ...emptyContent, ...data.content });
     setManagedPages(pages);
@@ -267,15 +282,17 @@ export default function WebsiteContentPage() {
     setTestimonies(data.testimonials);
     setAvailablePeople(data.available_people ?? []);
     setSubmissions(data.submissions ?? []);
+    setPublicCourses(courses.data);
     setHasLoaded(true);
     return data;
   }, []);
 
   useEffect(() => {
     let active = true;
-    Promise.all([loadAboutContent(true), loadAllManagedPageContent()])
-      .then(([data, pages]) => {
+    Promise.all([loadAboutContent(true), loadAllManagedPageContent(), api.courses.adminPublicList()])
+      .then(([data, pages, courses]: [AboutPageContent, Record<ManagedPageKey, ManagedPageContent>, { data?: PublicCourse[] }]) => {
         if (!active) return;
+        if (!Array.isArray(courses.data)) throw new Error('The public course catalog returned invalid data.');
         if (!data.content) throw new Error('About content is not initialized. Use site-content/createAboutContentTables.sql for a fresh database or site-content/upgradeAboutContentFields.sql for an existing database.');
         setContent({ ...emptyContent, ...data.content });
         setManagedPages(pages);
@@ -284,6 +301,7 @@ export default function WebsiteContentPage() {
         setTestimonies(data.testimonials);
         setAvailablePeople(data.available_people ?? []);
         setSubmissions(data.submissions ?? []);
+        setPublicCourses(courses.data);
         setHasLoaded(true);
       })
       .catch((loadError: unknown) => {
@@ -334,6 +352,61 @@ export default function WebsiteContentPage() {
       setError(saveError instanceof Error ? saveError.message : `Unable to save ${page} page content.`);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const savePublicCourse = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsSaving(true);
+    setError('');
+    setNotice('');
+    try {
+      const response = await api.courses.savePublicCourse({
+        ...publicCourseDraft,
+        ...(editingPublicCourseId ? { id: editingPublicCourseId } : {}),
+      }) as ContentResponse;
+      if (!response.success) throw new Error(response.message ?? 'Unable to save public course.');
+      await load();
+      setPublicCourseDraft(emptyPublicCourse);
+      setEditingPublicCourseId(null);
+      setNotice(response.message ?? 'Public course saved.');
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Unable to save public course.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const editPublicCourse = (course: PublicCourse) => {
+    setPublicCourseDraft({
+      id: course.id,
+      course: course.course,
+      description: course.description,
+      cohort: course.cohort,
+      cohortName: course.cohortName,
+      sort_order: course.sort_order ?? 0,
+      is_published: course.is_published ?? 1,
+    });
+    setEditingPublicCourseId(course.id);
+    setError('');
+    setNotice('');
+  };
+
+  const deletePublicCourse = async (course: PublicCourse) => {
+    if (!window.confirm(`Remove "${course.course}" from the public course catalog?`)) return;
+    setError('');
+    setNotice('');
+    try {
+      const response = await api.courses.removePublicCourse(course.id) as ContentResponse;
+      if (!response.success) throw new Error(response.message ?? 'Unable to remove public course.');
+      await load();
+      if (editingPublicCourseId === course.id) {
+        setPublicCourseDraft(emptyPublicCourse);
+        setEditingPublicCourseId(null);
+      }
+      setNotice(response.message ?? 'Public course removed.');
+    } catch (removeError) {
+      setError(removeError instanceof Error ? removeError.message : 'Unable to remove public course.');
     }
   };
 
@@ -527,7 +600,7 @@ export default function WebsiteContentPage() {
       <header className="border-b border-slate-200 pb-5">
         <p className="text-[11px] font-black uppercase tracking-[0.22em] text-red-600">Communications & website</p>
         <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-900">Website content</h1>
-        <p className="mt-1 text-sm text-slate-500">Manage public page copy, staff team profiles, faculty profiles, and published testimonies. Courses and events remain managed in their existing academic and event areas.</p>
+        <p className="mt-1 text-sm text-slate-500">Manage public page copy, the public course catalog, staff team profiles, faculty profiles, and published testimonies.</p>
       </header>
 
       {error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">{error}</p>}
@@ -540,6 +613,7 @@ export default function WebsiteContentPage() {
           ['faculty', 'Faculty'],
           ['testimonies', 'Testimonies'],
           ['submissions', `Submissions (${submissions.length})`],
+          ['public-courses', 'Public courses'],
           ...managedPageTabs.map(({ key, label }) => [key, label] as const),
         ] as const).map(([tab, label]) => (
           <button
@@ -552,6 +626,49 @@ export default function WebsiteContentPage() {
           </button>
         ))}
       </nav>
+
+      {activeTab === 'public-courses' && (
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.8fr)]">
+          <section className="space-y-3">
+            <div>
+              <h2 className="text-lg font-black text-slate-900">Public curriculum catalog</h2>
+              <p className="mt-1 text-sm text-slate-500">These entries are stored separately from academic courses and student enrollment. Only published entries appear on the public home and Academics pages.</p>
+            </div>
+            {publicCourses.length === 0 && <p className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-500">No public courses are configured.</p>}
+            {publicCourses.map((course) => (
+              <article key={course.id} className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-5 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h3 className="font-bold text-slate-900">{course.course}</h3>
+                  <p className="text-xs font-semibold text-blue-800">{course.cohortName || `Year ${course.cohort}`} · {course.is_published ? 'Published' : 'Hidden'} · order {course.sort_order ?? 0}</p>
+                  {course.description && <p className="mt-2 whitespace-pre-line text-sm text-slate-600">{course.description}</p>}
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <button type="button" onClick={() => editPublicCourse(course)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700">Edit</button>
+                  <button type="button" onClick={() => void deletePublicCourse(course)} className="rounded-lg border border-red-200 px-3 py-2 text-xs font-bold text-red-700">Remove</button>
+                </div>
+              </article>
+            ))}
+          </section>
+          <form onSubmit={(event) => void savePublicCourse(event)} className="h-fit space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-lg font-black text-slate-900">{editingPublicCourseId ? 'Edit public course' : 'Add public course'}</h2>
+            <Field label="Course name" value={publicCourseDraft.course} onChange={(value) => setPublicCourseDraft((current) => ({ ...current, course: value }))} required />
+            <Field label="Description (optional)" value={publicCourseDraft.description} onChange={(value) => setPublicCourseDraft((current) => ({ ...current, description: value }))} multiline />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Year number" type="number" value={String(publicCourseDraft.cohort)} onChange={(value) => setPublicCourseDraft((current) => ({ ...current, cohort: Number(value) }))} required />
+              <Field label="Year label" value={publicCourseDraft.cohortName} onChange={(value) => setPublicCourseDraft((current) => ({ ...current, cohortName: value }))} />
+              <Field label="Display order within year" type="number" value={String(publicCourseDraft.sort_order ?? 0)} onChange={(value) => setPublicCourseDraft((current) => ({ ...current, sort_order: Number(value) }))} />
+            </div>
+            <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+              <input type="checkbox" checked={publicCourseDraft.is_published === 1} onChange={(event) => setPublicCourseDraft((current) => ({ ...current, is_published: event.target.checked ? 1 : 0 }))} />
+              Published on the public site
+            </label>
+            <div className="flex gap-2">
+              <button disabled={isSaving} type="submit" className="rounded-xl bg-blue-800 px-4 py-2.5 text-sm font-black text-white disabled:opacity-60">{isSaving ? 'Saving...' : editingPublicCourseId ? 'Save changes' : 'Add public course'}</button>
+              {editingPublicCourseId && <button type="button" onClick={() => { setEditingPublicCourseId(null); setPublicCourseDraft(emptyPublicCourse); }} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-600">Cancel</button>}
+            </div>
+          </form>
+        </div>
+      )}
 
       {activeTab === 'about' && (
         <form onSubmit={saveContent} className="space-y-6">

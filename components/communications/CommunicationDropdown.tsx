@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Bell, MessageSquare, RotateCw } from 'lucide-react';
+import { Bell, MessageSquare, RotateCw, Volume2, VolumeX } from 'lucide-react';
 import { isChatNotification, useCommunications } from './CommunicationProvider';
 
 export default function CommunicationDropdown({
@@ -15,7 +15,7 @@ export default function CommunicationDropdown({
   onToggle: () => void;
   rolePath: '/admin' | '/lecturer' | '/student';
 }) {
-  const { snapshot, error, retry, markNotificationRead } = useCommunications();
+  const { snapshot, loading, soundsEnabled, error, retry, markNotificationRead, toggleSounds } = useCommunications();
   const messages = kind === 'messages';
   const notifications = snapshot.notifications.filter((item) => !isChatNotification(item));
   const unread = messages ? snapshot.unread_messages : notifications.filter((item) => !item.read_at).length;
@@ -29,7 +29,13 @@ export default function CommunicationDropdown({
         {unread > 0 && <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-rose-600 px-1 text-[10px] font-bold leading-4 text-white">{unread > 99 ? '99+' : unread}</span>}
       </button>
       {isOpen && <div className="absolute right-0 z-50 mt-2 w-80 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
-        <div className="border-b border-slate-100 px-4 py-3 text-xs font-bold uppercase tracking-wide text-slate-700">{messages ? 'Recent conversations' : 'Recent notifications'}</div>
+        <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
+          <span className="text-xs font-bold uppercase tracking-wide text-slate-700">{messages ? 'Recent conversations' : 'Recent notifications'}</span>
+          <button type="button" onClick={toggleSounds} aria-pressed={soundsEnabled} aria-label={`${soundsEnabled ? 'Mute' : 'Enable'} notification and chat sounds`} title={`${soundsEnabled ? 'Mute' : 'Enable'} sounds`} className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[10px] font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-800">
+            {soundsEnabled ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
+            Sounds {soundsEnabled ? 'on' : 'off'}
+          </button>
+        </div>
         {error && <div role="alert" className="border-b border-red-100 bg-red-50 px-4 py-2 text-xs text-red-700">
           <p>{error}</p>
           <button type="button" onClick={() => void retry()} className="mt-2 inline-flex items-center gap-1.5 font-bold text-red-800 hover:text-red-950">
@@ -56,7 +62,7 @@ export default function CommunicationDropdown({
                 ? <Link key={`${item.source || 'communications'}:${item.id}`} href={notificationHref} onClick={handleOpen} className="block p-4 hover:bg-slate-50">{content}</Link>
                 : <button key={`${item.source || 'communications'}:${item.id}`} type="button" onClick={handleOpen} className="block w-full p-4 text-left hover:bg-slate-50">{content}</button>;
             })())}
-          {!(messages ? snapshot.conversations.length : notifications.length) && <p className="p-5 text-center text-sm text-slate-500">{messages ? 'No conversations yet.' : 'No notifications yet.'}</p>}
+          {!(messages ? snapshot.conversations.length : notifications.length) && <p role={loading ? 'status' : undefined} className="p-5 text-center text-sm text-slate-500">{loading ? 'Loading your updates…' : messages ? 'No conversations yet.' : 'No notifications yet.'}</p>}
         </div>
         <Link href={href} onClick={onToggle} className="block border-t border-slate-100 px-4 py-3 text-center text-xs font-semibold text-indigo-700 hover:bg-slate-50">{messages ? 'Open message center' : 'View all notifications'}</Link>
       </div>}

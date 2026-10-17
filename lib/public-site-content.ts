@@ -1,11 +1,13 @@
 import { api } from '@/lib/api';
 
 export type PublicCourse = {
-  id: string;
+  id: number;
   course: string;
   description: string;
   cohort: number;
   cohortName: string;
+  sort_order?: number;
+  is_published?: number;
 };
 
 export type AboutContent = {

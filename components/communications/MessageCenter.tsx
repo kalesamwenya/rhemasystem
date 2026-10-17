@@ -3,7 +3,7 @@
 import { api } from '@/lib/api';
 import { useCommunications, type CommunicationConversation } from './CommunicationProvider';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Bell, MessageCircle, Mic, Paperclip, RotateCw, Send, Smile, Square } from 'lucide-react';
+import { Bell, CheckCheck, MessageCircle, Mic, Paperclip, RotateCw, Search, Send, Smile, Square } from 'lucide-react';
 import Image from 'next/image';
 import EmojiPicker from 'emoji-picker-react';
 import Link from 'next/link';
@@ -43,6 +43,7 @@ type ChatListItem =
   | { kind: 'contact'; contact: Contact };
 
 type AdminChatTab = 'student' | 'lecturer' | 'admin' | 'global';
+type ChatFilter = 'all' | 'unread';
 
 function isStudentAffairsAdmin(user: CurrentUser) {
   if ((user.role || '').toLowerCase() !== 'admin') return false;
@@ -86,6 +87,7 @@ export default function MessageCenter({ compact = false }: { compact?: boolean }
   const [recording, setRecording] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [search, setSearch] = useState('');
+  const [chatFilter, setChatFilter] = useState<ChatFilter>('all');
   const [activeAdminTab, setActiveAdminTab] = useState<AdminChatTab>(() =>
     isStudentAffairsAdmin(currentUser) ? 'student' : 'admin',
   );
@@ -99,6 +101,8 @@ export default function MessageCenter({ compact = false }: { compact?: boolean }
   const lastMarkedReadMessageId = useRef(0);
   const fileInput = useRef<HTMLInputElement>(null);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
+  const messagePaneRef = useRef<HTMLDivElement>(null);
+  const previousMessageCount = useRef(0);
   const recordedChunks = useRef<Blob[]>([]);
   const loadingAttachments = useRef(new Set<number>());
   const failedAttachments = useRef(new Set<number>());
@@ -130,21 +134,21 @@ export default function MessageCenter({ compact = false }: { compact?: boolean }
       )
       .map((conversation) => [conversation.direct_contact_key, conversation]),
   ), [conversations]);
-  const filteredConversations = useMemo(
-    () => conversations.filter((item) => item.display_title.toLowerCase().includes(search.toLowerCase())),
-    [conversations, search],
-  );
+  const filteredConversations = useMemo(() => conversations.filter((item) => {
+    const matchesSearch = `${item.display_title} ${item.last_message || ''}`.toLowerCase().includes(search.trim().toLowerCase());
+    return matchesSearch && (chatFilter === 'all' || item.unread_count > 0);
+  }), [chatFilter, conversations, search]);
   const uniqueContacts = useMemo(() => {
     const unique = new Map<string, Contact>();
     contacts.forEach((contact) => unique.set(`${contact.role}:${contact.id}`, contact));
     return [...unique.values()];
   }, [contacts]);
   const filteredContacts = useMemo(
-    () => uniqueContacts.filter((contact) =>
+    () => chatFilter === 'unread' ? [] : uniqueContacts.filter((contact) =>
       !conversationByContact.has(`${contact.role}:${contact.id}`)
-      && `${contact.name} ${contact.role} ${contact.email}`.toLowerCase().includes(search.toLowerCase()),
+      && `${contact.name} ${contact.role} ${contact.email}`.toLowerCase().includes(search.trim().toLowerCase()),
     ),
-    [uniqueContacts, conversationByContact, search],
+    [chatFilter, uniqueContacts, conversationByContact, search],
   );
   const visibleConversations = useMemo(() => {
     if (!isAdmin) return filteredConversations;
@@ -166,6 +170,7 @@ export default function MessageCenter({ compact = false }: { compact?: boolean }
     (item) => item.kind === 'conversation' && item.conversation.title === 'Global Admins',
   );
   const currentUserIds = new Set([currentUser.id, currentUser.student_id].filter((id) => id != null).map(String));
+  const latestMessageId = messages[messages.length - 1]?.id;
   const isCurrentUserMessage = (message: Message) => {
     // Compare role case-insensitively and match sender id against known current user ids.
     const messageRole = (message.sender_role || '').toString().toLowerCase();
@@ -218,6 +223,15 @@ export default function MessageCenter({ compact = false }: { compact?: boolean }
   useEffect(() => {
     activeConversationId.current = selectedId;
   }, [selectedId]);
+
+  useEffect(() => {
+    const pane = messagePaneRef.current;
+    if (!pane) return;
+    const wasEmpty = previousMessageCount.current === 0;
+    const isNearBottom = pane.scrollHeight - pane.scrollTop - pane.clientHeight < 120;
+    if (wasEmpty || isNearBottom) pane.scrollTop = pane.scrollHeight;
+    previousMessageCount.current = messages.length;
+  }, [latestMessageId, messages.length, selectedId]);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -446,6 +460,22 @@ export default function MessageCenter({ compact = false }: { compact?: boolean }
             )}
           </div>
           <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search conversations" className="mt-3 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-400" />
+          <div className="mt-3 flex rounded-lg bg-slate-100 p-1" aria-label="Filter conversations">
+            {([
+              ['all', 'All chats', conversations.length],
+              ['unread', 'Unread', conversations.filter((item) => item.unread_count > 0).length],
+            ] as const).map(([filter, label, count]) => (
+              <button
+                key={filter}
+                type="button"
+                aria-pressed={chatFilter === filter}
+                onClick={() => setChatFilter(filter)}
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-semibold transition ${chatFilter === filter ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+              >
+                {label}<span className="text-[10px] opacity-70">{count}</span>
+              </button>
+            ))}
+          </div>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
           {!isAdmin && (
@@ -490,7 +520,7 @@ export default function MessageCenter({ compact = false }: { compact?: boolean }
               </span>
             </button>;
           })}
-          {!chatListItems.length && !(isAdmin && activeAdminTab === 'global') && !contactsLoading && <p className="px-4 py-5 text-center text-xs text-slate-500">No chats or people found.</p>}
+          {!chatListItems.length && !(isAdmin && activeAdminTab === 'global') && !contactsLoading && <p className="px-4 py-5 text-center text-xs text-slate-500">{chatFilter === 'unread' ? 'No unread conversations.' : 'No chats or people found.'}</p>}
           {!chatListItems.length && contactsLoading && <p className="px-4 py-5 text-center text-xs text-slate-500">Loading chats…</p>}
         </div>
         {compact && !selectedConversation && !selectedContact && (pageError || error) && <div role="alert" className="border-t border-red-100 bg-red-50 px-4 py-2 text-xs text-red-700">
@@ -513,11 +543,11 @@ export default function MessageCenter({ compact = false }: { compact?: boolean }
                 <p className="text-xs capitalize text-slate-500">{selectedConversation ? `${selectedConversation.conversation_type} conversation` : 'Student chat'}</p>
               </div>
             </div>
-            <div className="flex-1 space-y-3 overflow-y-auto p-5">
+            <div ref={messagePaneRef} className="flex-1 space-y-3 overflow-y-auto p-5">
               {messages.map((message) => {
                 const isMine = isCurrentUserMessage(message);
                 const attachmentUrl = message.attachment_id ? attachmentUrls[Number(message.attachment_id)] : undefined;
-                return <div key={message.id} className={`flex ${isMine ? 'justify-start' : 'justify-end'}`}>
+                return <div key={message.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
                   <article className={`max-w-[85%] rounded-2xl px-4 py-3 ${isMine ? 'rounded-tl-md bg-indigo-100 text-indigo-950' : 'rounded-tr-md bg-slate-800 text-white'}`}>
                     <div className="mb-1 flex flex-wrap items-center gap-2">
                       <span className={`text-xs font-bold ${isMine ? 'text-indigo-900' : 'text-white'}`}>{message.sender_name}</span>
@@ -599,36 +629,79 @@ export default function MessageCenter({ compact = false }: { compact?: boolean }
 }
 
 export function CommunicationNotifications() {
-  const { snapshot, markNotificationRead, error, retry } = useCommunications();
+  const { snapshot, loading, markNotificationRead, markAllNotificationsRead, error, retry } = useCommunications();
   const pathname = usePathname();
   const rolePath = pathname.startsWith('/admin') ? '/admin' : pathname.startsWith('/lecturer') ? '/lecturer' : '/student';
+  const [filter, setFilter] = useState<'all' | 'unread'>('all');
+  const [search, setSearch] = useState('');
+  const [markingAll, setMarkingAll] = useState(false);
+  const unreadCount = snapshot.notifications.filter((notification) => !notification.read_at).length;
+  const visibleNotifications = snapshot.notifications.filter((notification) => {
+    const matchesFilter = filter === 'all' || !notification.read_at;
+    const matchesSearch = `${notification.title} ${notification.message} ${notification.type || ''}`.toLowerCase().includes(search.trim().toLowerCase());
+    return matchesFilter && matchesSearch;
+  });
+
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="mb-4 flex items-center gap-2">
-        <Bell className="h-5 w-5 text-indigo-600" />
-        <h1 className="text-lg font-bold text-slate-900">Notifications</h1>
-        {snapshot.unread_notifications > 0 && <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-bold text-indigo-700">{snapshot.unread_notifications} unread</span>}
+    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="border-b border-slate-100 p-5 sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Bell className="h-5 w-5 text-indigo-600" />
+            <h1 className="text-lg font-bold text-slate-900">Notifications</h1>
+            <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-bold text-indigo-700">{unreadCount} unread</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setMarkingAll(true);
+              void markAllNotificationsRead().finally(() => setMarkingAll(false));
+            }}
+            disabled={!unreadCount || markingAll}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <CheckCheck className="h-4 w-4" />{markingAll ? 'Marking read…' : 'Mark all read'}
+          </button>
+        </div>
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+          <label className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-slate-200 px-3 text-slate-400 focus-within:border-indigo-400">
+            <Search className="h-4 w-4 shrink-0" />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} aria-label="Search notifications" placeholder="Search notifications" className="min-w-0 flex-1 py-2.5 text-sm text-slate-800 outline-none" />
+          </label>
+          <div className="flex rounded-lg bg-slate-100 p-1" aria-label="Filter notifications">
+            {(['all', 'unread'] as const).map((value) => (
+              <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value)} className={`rounded-md px-3 py-1.5 text-xs font-semibold capitalize transition ${filter === value ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>
+                {value === 'all' ? 'All' : `Unread${unreadCount ? ` (${unreadCount})` : ''}`}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
-      {error && <div role="alert" className="mb-3 flex items-center justify-between gap-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+      {error && <div role="alert" className="m-5 flex items-center justify-between gap-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">
         <p>{error}</p>
         <button type="button" onClick={() => void retry()} className="inline-flex shrink-0 items-center gap-1.5 font-bold text-red-800 hover:text-red-950">
           <RotateCw className="h-3 w-3" /> Retry
         </button>
       </div>}
       <div className="divide-y divide-slate-100">
-        {snapshot.notifications.map((notification) => (
-          <article key={`${notification.source || 'communications'}:${notification.id}`} className={`flex items-start justify-between gap-4 py-4 ${notification.read_at ? '' : 'bg-indigo-50/50'}`}>
-            <div>
-              <h2 className="text-sm font-semibold text-slate-900">{notification.title}</h2>
-              {notification.type && <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">{notification.type}</p>}
-              <p className="mt-1 text-sm text-slate-600">{notification.message}</p>
+        {visibleNotifications.map((notification, index) => (
+          <article key={`${notification.source || 'communications'}:${notification.id}`} style={{ animationDelay: `${Math.min(index, 8) * 35}ms` }} className={`rhema-notification-enter flex items-start gap-3 px-5 py-4 transition-colors sm:px-6 ${notification.read_at ? 'hover:bg-slate-50/70' : 'bg-indigo-50/60 hover:bg-indigo-50'}`}>
+            <span aria-hidden="true" className={`mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full ${notification.read_at ? 'bg-slate-200' : 'bg-indigo-600'}`} />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <h2 className="text-sm font-semibold text-slate-900">{notification.title}</h2>
+                {notification.type && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-slate-500">{notification.type.replace(/[_-]+/g, ' ')}</span>}
+              </div>
+              <p className="mt-1 text-sm leading-6 text-slate-600">{notification.message}</p>
               <time className="mt-2 block text-xs text-slate-400">{formatTime(notification.created_at)}</time>
             </div>
-            {!notification.read_at && <button type="button" onClick={() => void markNotificationRead(notification)} className="shrink-0 text-xs font-semibold text-indigo-700 hover:underline">Mark read</button>}
-            {(notification.action_url || notification.conversation_id) && <Link href={notification.action_url || `${rolePath}/messages?conversation=${notification.conversation_id}`} className="shrink-0 text-xs font-semibold text-indigo-700 hover:underline">Open</Link>}
+            <div className="flex shrink-0 flex-col items-end gap-2">
+              {!notification.read_at && <button type="button" onClick={() => void markNotificationRead(notification)} className="text-xs font-semibold text-indigo-700 hover:underline">Mark read</button>}
+              {(notification.action_url || notification.conversation_id) && <Link href={notification.action_url || `${rolePath}/messages?conversation=${notification.conversation_id}`} onClick={() => { if (!notification.read_at) void markNotificationRead(notification); }} className="text-xs font-semibold text-indigo-700 hover:underline">Open</Link>}
+            </div>
           </article>
         ))}
-        {!snapshot.notifications.length && <p className="py-8 text-center text-sm text-slate-500">You&apos;re all caught up.</p>}
+        {!visibleNotifications.length && <p role={loading ? 'status' : undefined} className="px-5 py-10 text-center text-sm text-slate-500">{loading ? 'Loading your notifications…' : filter === 'unread' && unreadCount === 0 ? 'You’re all caught up.' : 'No notifications match your search.'}</p>}
       </div>
     </section>
   );

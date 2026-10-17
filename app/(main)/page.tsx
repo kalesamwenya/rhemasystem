@@ -6,6 +6,7 @@ import { ArrowRight, BookOpen, GraduationCap, HandHeart, MapPin, Users } from "l
 import { assetUrl } from "@/lib/api";
 import SectionHeading from "@/components/main/SectionHeading";
 import { loadAboutContent, loadPublicCourses, type AboutPageContent, type PublicCourse } from "@/lib/public-site-content";
+import LoadingPlaceholder from "@/components/ui/LoadingPlaceholder";
 
 function initials(name: string): string {
   return name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "?";
@@ -32,7 +33,7 @@ export default function HomePage() {
     return <p role="alert" className="mx-auto my-20 max-w-3xl rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800">{contentError}</p>;
   }
   if (!content) {
-    return <p role="status" className="mx-auto my-20 max-w-3xl text-sm text-slate-600">Loading homepage content...</p>;
+    return <LoadingPlaceholder variant="website" />;
   }
   if (!content.content) {
     return <p role="alert" className="mx-auto my-20 max-w-3xl rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800">Homepage content is not configured in the website database.</p>;

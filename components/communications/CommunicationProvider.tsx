@@ -26,7 +26,7 @@ export interface CommunicationNotification {
   created_at: string;
   read_at: string | null;
   action_url?: string | null;
-  source?: 'communications' | 'student';
+  source?: 'communications' | 'account';
 }
 
 export interface CommunicationSnapshot {
@@ -38,10 +38,14 @@ export interface CommunicationSnapshot {
 
 interface CommunicationContextValue {
   snapshot: CommunicationSnapshot;
+  loading: boolean;
+  soundsEnabled: boolean;
   error: string;
   refresh: () => Promise<void>;
   retry: () => Promise<void>;
   markNotificationRead: (notification: CommunicationNotification) => Promise<void>;
+  markAllNotificationsRead: () => Promise<void>;
+  toggleSounds: () => void;
 }
 
 const emptySnapshot: CommunicationSnapshot = {
@@ -58,81 +62,86 @@ export function isChatNotification(notification: CommunicationNotification) {
 
 const CommunicationContext = createContext<CommunicationContextValue>({
   snapshot: emptySnapshot,
+  loading: false,
+  soundsEnabled: true,
   error: '',
   refresh: async () => {},
   retry: async () => {},
   markNotificationRead: async () => {},
+  markAllNotificationsRead: async () => {},
+  toggleSounds: () => {},
 });
 
 export function CommunicationProvider({ children, enabled = true }: { children: React.ReactNode; enabled?: boolean }) {
   const [snapshot, setSnapshot] = useState(emptySnapshot);
+  const [loading, setLoading] = useState(false);
+  const [soundsEnabled, setSoundsEnabled] = useState(true);
   const [error, setError] = useState('');
   const [retryKey, setRetryKey] = useState(0);
-  const audioContext = useRef<AudioContext | null>(null);
+  const audioPlayers = useRef<Partial<Record<'chat' | 'notification', HTMLAudioElement>>>({});
   const initialized = useRef(false);
   const seenNotificationKeys = useRef(new Set<string>());
   const previousMessages = useRef(new Map<number, number>());
   const refreshing = useRef(false);
   const pollingFailures = useRef(0);
 
-  const playSound = useCallback((kind: 'chat' | 'notification') => {
+  useEffect(() => {
     try {
-      const AudioContextConstructor = window.AudioContext;
-      if (!AudioContextConstructor) return;
-      audioContext.current ??= new AudioContextConstructor();
-      const context = audioContext.current;
-      const playTone = (frequency: number, startAt: number, duration: number) => {
-        const oscillator = context.createOscillator();
-        const gain = context.createGain();
-        oscillator.type = 'sine';
-        oscillator.frequency.setValueAtTime(frequency, startAt);
-        gain.gain.setValueAtTime(0.0001, startAt);
-        gain.gain.exponentialRampToValueAtTime(0.12, startAt + 0.015);
-        gain.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
-        oscillator.connect(gain);
-        gain.connect(context.destination);
-        oscillator.start(startAt);
-        oscillator.stop(startAt + duration);
-      };
-      const play = () => {
-        const startAt = context.currentTime;
-        if (kind === 'chat') {
-          playTone(880, startAt, 0.12);
-          playTone(1174.66, startAt + 0.15, 0.16);
-        } else {
-          playTone(659.25, startAt, 0.22);
-        }
-      };
-      if (context.state === 'suspended') {
-        void context.resume().then(play).catch(() => {});
-      } else {
-        play();
-      }
+      setSoundsEnabled(window.localStorage.getItem('rhema_communication_sounds') !== 'false');
     } catch {
-      // Sound is an enhancement; unsupported or blocked audio must not interrupt messaging.
+      setSoundsEnabled(true);
     }
   }, []);
 
+  const toggleSounds = useCallback(() => {
+    setSoundsEnabled((current) => {
+      const next = !current;
+      try {
+        window.localStorage.setItem('rhema_communication_sounds', String(next));
+      } catch {
+        // Keep the current-page preference even when storage is unavailable.
+      }
+      return next;
+    });
+  }, []);
+
+  const playSound = useCallback((kind: 'chat' | 'notification') => {
+    if (!soundsEnabled) return;
+    try {
+      const audio = audioPlayers.current[kind] ?? new Audio(`/sounds/${kind === 'chat' ? 'chat-message' : 'notification'}.wav`);
+      audioPlayers.current[kind] = audio;
+      audio.currentTime = 0;
+      void audio.play().catch((cause: unknown) => {
+        if (cause instanceof DOMException && cause.name === 'NotAllowedError') return;
+        console.error('Communications sound could not be played.', cause);
+      });
+    } catch (cause) {
+      console.error('Communications sound could not be initialized.', cause);
+    }
+  }, [soundsEnabled]);
+
   useEffect(() => {
     if (!enabled) return;
-    const unlockAudio = () => {
-      if (!window.AudioContext) return;
-      audioContext.current ??= new window.AudioContext();
-      if (audioContext.current.state === 'suspended') {
-        void audioContext.current.resume().catch(() => {});
-      }
+    const preloadAudio = () => {
+      (['chat', 'notification'] as const).forEach((kind) => {
+        if (audioPlayers.current[kind]) return;
+        const audio = new Audio(`/sounds/${kind === 'chat' ? 'chat-message' : 'notification'}.wav`);
+        audio.preload = 'auto';
+        audioPlayers.current[kind] = audio;
+      });
     };
-    window.addEventListener('pointerdown', unlockAudio);
-    window.addEventListener('keydown', unlockAudio);
+    window.addEventListener('pointerdown', preloadAudio, { once: true });
+    window.addEventListener('keydown', preloadAudio, { once: true });
     return () => {
-      window.removeEventListener('pointerdown', unlockAudio);
-      window.removeEventListener('keydown', unlockAudio);
+      window.removeEventListener('pointerdown', preloadAudio);
+      window.removeEventListener('keydown', preloadAudio);
     };
   }, [enabled]);
 
   const refresh = useCallback(async () => {
     if (!enabled || refreshing.current) return;
     refreshing.current = true;
+    if (!initialized.current) setLoading(true);
     try {
       const result: Partial<CommunicationSnapshot> = await api.communications.snapshot();
       pollingFailures.current = 0;
@@ -156,21 +165,21 @@ export function CommunicationProvider({ children, enabled = true }: { children: 
         const key = `communications:${notification.id}`;
         return !notification.read_at && !seenNotificationKeys.current.has(key);
       });
-      let legacyNotifications: CommunicationNotification[] = [];
+      let accountNotifications: CommunicationNotification[] = [];
       let legacyUnread = 0;
       let legacyLoadError = '';
       try {
-        if (currentUser?.role === 'student') {
+        if (currentUser && ['student', 'lecturer', 'admin'].includes(currentUser.role || '')) {
           const legacyResult: { data?: CommunicationNotification[] } = await api.notifications.myList();
           const source = Array.isArray(legacyResult.data) ? legacyResult.data : [];
-          legacyNotifications = source.map((item: CommunicationNotification) => ({ ...item, source: 'student' }));
-          legacyUnread = legacyNotifications.filter((item) => !item.read_at && !isChatNotification(item)).length;
+          accountNotifications = source.map((item: CommunicationNotification) => ({ ...item, source: 'account' }));
+          legacyUnread = accountNotifications.filter((item) => !item.read_at && !isChatNotification(item)).length;
         }
       } catch (cause) {
-        legacyLoadError = cause instanceof Error ? `Communications loaded, but existing notifications failed to load: ${cause.message}` : 'Existing notifications failed to load.';
+        legacyLoadError = cause instanceof Error ? `Communications loaded, but account notifications failed to load: ${cause.message}` : 'Account notifications failed to load.';
       }
       const allNotifications = [
-        ...legacyNotifications,
+        ...accountNotifications,
         ...communicationsNotifications.map((item) => ({ ...item, source: 'communications' as const })),
       ];
       const newUnreadNotification = allNotifications.some((notification) => {
@@ -180,7 +189,7 @@ export function CommunicationProvider({ children, enabled = true }: { children: 
       seenNotificationKeys.current = new Set(allNotifications.map((notification) => `${notification.source || 'communications'}:${notification.id}`));
       if (initialized.current) {
         if (incomingMessage) playSound('chat');
-        if (incomingNotification || newUnreadNotification) playSound('notification');
+        if (!incomingMessage && (incomingNotification || newUnreadNotification)) playSound('notification');
       }
       initialized.current = true;
       previousMessages.current = new Map(conversations.map((conversation) => [
@@ -200,6 +209,7 @@ export function CommunicationProvider({ children, enabled = true }: { children: 
       setError(cause instanceof Error ? cause.message : 'Unable to refresh communications.');
     } finally {
       refreshing.current = false;
+      setLoading(false);
     }
   }, [enabled, playSound]);
 
@@ -210,7 +220,7 @@ export function CommunicationProvider({ children, enabled = true }: { children: 
 
   const markNotificationRead = useCallback(async (notification: CommunicationNotification) => {
     try {
-      if (notification.source === 'student') {
+      if (notification.source === 'account') {
         await api.notifications.markMyRead(notification.id);
       } else {
         await api.communications.markNotificationRead(notification.id);
@@ -220,6 +230,24 @@ export function CommunicationProvider({ children, enabled = true }: { children: 
       setError(cause instanceof Error ? cause.message : 'Unable to mark this notification as read.');
     }
   }, [refresh]);
+
+  const markAllNotificationsRead = useCallback(async () => {
+    const unreadNotifications = snapshot.notifications.filter((notification) => !notification.read_at);
+    if (!unreadNotifications.length) return;
+
+    const accountUnread = unreadNotifications.some((notification) => notification.source === 'account');
+    const communicationsUnread = unreadNotifications.some((notification) => notification.source !== 'account');
+    const operations: Promise<unknown>[] = [];
+    if (accountUnread) operations.push(api.notifications.markMyAllRead());
+    if (communicationsUnread) operations.push(api.communications.markAllNotificationsRead());
+
+    const results = await Promise.allSettled(operations);
+    await refresh();
+    const failed = results.find((result) => result.status === 'rejected');
+    if (failed?.status === 'rejected') {
+      setError(failed.reason instanceof Error ? failed.reason.message : 'Unable to mark all notifications as read.');
+    }
+  }, [refresh, snapshot.notifications]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -257,7 +285,17 @@ export function CommunicationProvider({ children, enabled = true }: { children: 
     }
   }, []);
 
-  const value = useMemo(() => ({ snapshot, error, refresh, retry, markNotificationRead }), [snapshot, error, refresh, retry, markNotificationRead]);
+  const value = useMemo(() => ({
+    snapshot,
+    loading,
+    soundsEnabled,
+    error,
+    refresh,
+    retry,
+    markNotificationRead,
+    markAllNotificationsRead,
+    toggleSounds,
+  }), [snapshot, loading, soundsEnabled, error, refresh, retry, markNotificationRead, markAllNotificationsRead, toggleSounds]);
   return <CommunicationContext.Provider value={value}>{children}</CommunicationContext.Provider>;
 }
 
