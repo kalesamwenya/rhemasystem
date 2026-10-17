@@ -7,6 +7,7 @@ import CustomAlert from "@/components/main/CustomAlert";
 import { api } from "@/lib/api";
 import { getChatbotSessionId } from "@/lib/chatbot";
 import { useManagedPageContent } from "@/lib/use-managed-page-content";
+import MainPageSkeleton from "@/components/main/MainPageSkeleton";
 
 type ContactAlertStatus = {
   type: "success" | "error" | "";
@@ -69,7 +70,7 @@ export default function ContactPage() {
     }
   };
 
-  if (contentLoading) return <p role="status" className="mx-auto max-w-7xl px-4 py-20 text-sm text-slate-600">Loading contact information...</p>;
+  if (contentLoading) return <MainPageSkeleton label="Loading contact information" />;
   if (contentError || !content) return <p role="alert" className="mx-auto max-w-7xl px-4 py-20 text-sm font-medium text-red-800">{contentError || "Contact information is unavailable."}</p>;
 
   return (

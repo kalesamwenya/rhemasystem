@@ -34,7 +34,7 @@ type SettingsState = {
     enabled: boolean;
     currency: string;
     secretKeyConfigured: boolean;
-    redirectUrlConfigured: boolean;
+    publicKeyConfigured: boolean;
     mode: 'test' | 'live';
   };
 };
@@ -77,7 +77,7 @@ const initialState: SettingsState = {
     enabled: true,
     currency: 'ZMW',
     secretKeyConfigured: false,
-    redirectUrlConfigured: false,
+    publicKeyConfigured: false,
     mode: 'test',
   },
 };
@@ -146,7 +146,7 @@ export default function SettingsHub() {
             enabled: data.paymentGateway?.enabled ?? true,
             currency: data.paymentGateway?.currency ?? 'ZMW',
             secretKeyConfigured: data.paymentGateway?.secretKeyConfigured ?? false,
-            redirectUrlConfigured: data.paymentGateway?.redirectUrlConfigured ?? false,
+            publicKeyConfigured: data.paymentGateway?.publicKeyConfigured ?? false,
             mode: data.paymentGateway?.mode ?? 'test',
           },
         });
@@ -359,7 +359,7 @@ export default function SettingsHub() {
 
   const renderPayments = () => {
     const secretReady = settings.paymentGateway.secretKeyConfigured;
-    const redirectReady = settings.paymentGateway.redirectUrlConfigured;
+    const publicKeyReady = settings.paymentGateway.publicKeyConfigured;
     return (
       <div className="space-y-5">
         <section className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
@@ -372,8 +372,8 @@ export default function SettingsHub() {
                 <p className="mt-1 max-w-xl text-sm leading-6 text-slate-600">One gateway and currency for student tuition, assessment fees, audio purchases and admin-initiated payments.</p>
               </div>
             </div>
-            <span className={`rounded-full px-3 py-1.5 text-xs font-bold ${settings.paymentGateway.enabled && secretReady ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
-              {settings.paymentGateway.enabled && secretReady && redirectReady ? 'Gateway enabled' : settings.paymentGateway.enabled ? 'Setup required' : 'Gateway disabled'}
+            <span className={`rounded-full px-3 py-1.5 text-xs font-bold ${settings.paymentGateway.enabled && secretReady && publicKeyReady ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+              {settings.paymentGateway.enabled && secretReady && publicKeyReady ? 'Gateway enabled' : settings.paymentGateway.enabled ? 'Setup required' : 'Gateway disabled'}
             </span>
           </div>
 
@@ -433,10 +433,10 @@ export default function SettingsHub() {
           </div>
           <div className="mt-4 space-y-2 text-sm">
             <p className="flex items-center gap-2 text-slate-700">{secretReady ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <XCircle className="h-4 w-4 text-rose-600" />} Flutterwave secret key {secretReady ? 'configured' : 'missing'}</p>
-            <p className="flex items-center gap-2 text-slate-700">{redirectReady ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <XCircle className="h-4 w-4 text-rose-600" />} Student payment return URL {redirectReady ? 'configured' : 'missing'}</p>
+            <p className="flex items-center gap-2 text-slate-700">{publicKeyReady ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <XCircle className="h-4 w-4 text-rose-600" />} Flutterwave public key {publicKeyReady ? 'configured' : 'missing'}</p>
           </div>
           <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-950">
-            For security, secret keys are never saved in the website or sent to the browser. Configure <code className="font-bold">FLW_SECRET_KEY</code> and <code className="font-bold">FLW_REDIRECT_URL</code> in the PHP hosting environment. Use a Flutterwave test key for test mode and a live key only after successful test payments.
+            Checkout opens securely inside this portal. Configure matching <code className="font-bold">FLW_PUBLIC_KEY</code> and <code className="font-bold">FLW_SECRET_KEY</code> values in the PHP hosting environment. The public key is used only to open Flutterwave Inline Checkout; the secret key stays on the server for transaction verification. No checkout redirect URL is required. Use test keys for test mode and live keys only after successful test payments.
           </div>
           <p className="mt-3 text-[11px] leading-5 text-slate-500">Changing the currency affects new checkouts and newly generated charges. Existing ledger entries retain their original transaction currency.</p>
         </section>

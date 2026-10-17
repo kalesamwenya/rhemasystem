@@ -1,8 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CheckCircle2, CreditCard, ExternalLink, FileText, Headphones, Loader2, LockKeyhole, Search } from 'lucide-react';
+import { CheckCircle2, CreditCard, Download, ExternalLink, FileText, Headphones, Loader2, LockKeyhole, Play, Search } from 'lucide-react';
 import { api, assetUrl } from '@/lib/api';
+import { openFlutterwaveInlineCheckout, type FlutterwaveInlineCheckout } from '@/lib/flutterwave-inline';
+import { useStudentAudio, type AudioSession } from '@/components/students/StudentAudioPlayer';
 
 type CourseResource = {
   id: number;
@@ -103,6 +105,7 @@ function formatDuration(seconds: number): string {
 }
 
 export default function StudentLibraryPage() {
+  const { playAudio, setPlaylist } = useStudentAudio();
   const [resources, setResources] = useState<CourseResource[]>([]);
   const [audioResources, setAudioResources] = useState<SessionAudioResource[]>([]);
   const [query, setQuery] = useState('');
@@ -111,6 +114,7 @@ export default function StudentLibraryPage() {
   const [audioError, setAudioError] = useState('');
   const [audioNotice, setAudioNotice] = useState('');
   const [purchasingAudioId, setPurchasingAudioId] = useState<number | null>(null);
+  const [downloadingAudioId, setDownloadingAudioId] = useState<number | null>(null);
   const handledAudioReturn = useRef(false);
 
   const refreshAudioResources = useCallback(async () => {
@@ -201,15 +205,54 @@ export default function StudentLibraryPage() {
     try {
       const response = await api.audio.initiateStudentPurchase({
         audio_id: audio.id,
-      }) as { data?: { checkout_url?: string } };
-      const checkoutUrl = response.data?.checkout_url;
-      if (!checkoutUrl || !checkoutUrl.startsWith('https://checkout.flutterwave.com/')) {
-        throw new Error('The payment service did not return a valid checkout link.');
-      }
-      window.location.assign(checkoutUrl);
+      }) as { data: FlutterwaveInlineCheckout };
+      await openFlutterwaveInlineCheckout(response.data, async (transaction) => {
+        const transactionId = String(transaction.transaction_id ?? '');
+        if (!/^\d+$/.test(transactionId) || transaction.tx_ref !== response.data.reference) {
+          setAudioError('Flutterwave returned invalid payment details. The payment has not been confirmed.');
+          setPurchasingAudioId(null);
+          return;
+        }
+        setAudioNotice('Confirming your audio payment securely...');
+        try {
+          const verification = await api.audio.verifyStudentPurchase(transactionId, response.data.reference) as { message?: string };
+          setAudioNotice(verification.message || 'Payment confirmed. Your audio is now available.');
+          await refreshAudioResources();
+        } catch (cause) {
+          setAudioNotice('');
+          setAudioError(cause instanceof Error ? cause.message : 'Unable to confirm your audio payment.');
+        } finally {
+          setPurchasingAudioId(null);
+        }
+      }, () => {
+        setPurchasingAudioId(null);
+        setAudioNotice('Checkout closed. No purchase was confirmed.');
+      });
     } catch (cause) {
       setAudioError(cause instanceof Error ? cause.message : 'Unable to start the audio purchase.');
       setPurchasingAudioId(null);
+    }
+  };
+
+  const downloadAudio = async (audio: SessionAudioResource) => {
+    setDownloadingAudioId(audio.id);
+    setAudioError('');
+    try {
+      const file = await api.audio.downloadMyAudio(audio.id) as Blob;
+      const objectUrl = URL.createObjectURL(file);
+      const link = document.createElement('a');
+      const extension = audio.audio_url?.split('?')[0].split('.').pop()?.match(/^[a-z0-9]{1,8}$/i)?.[0] || 'mp3';
+      const filename = `${audio.title.replace(/[^a-z0-9_-]+/gi, '-').replace(/^-|-$/g, '') || 'session-audio'}.${extension}`;
+      link.href = objectUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    } catch (cause) {
+      setAudioError(cause instanceof Error ? cause.message : `Unable to download ${audio.title}.`);
+    } finally {
+      setDownloadingAudioId(null);
     }
   };
 
@@ -226,6 +269,20 @@ export default function StudentLibraryPage() {
       `${resource.title} ${resource.course_name} ${resource.rhema_session_id || ''} ${resource.session_date || ''} ${resource.description || ''}`.toLowerCase().includes(normalizedQuery)
     );
   }, [normalizedQuery, audioResources]);
+  const accessibleAudioTracks = useMemo(() => audioResources
+    .filter((audio) => audio.has_access && audio.audio_url)
+    .map((audio): AudioSession => ({
+      id: audio.id,
+      title: audio.title,
+      url: audio.audio_url!,
+      course: audio.course_name,
+      session: audio.rhema_session_id ? `Session ${audio.rhema_session_id}` : formatSessionTime(audio),
+      duration: audio.duration_seconds,
+    })), [audioResources]);
+
+  useEffect(() => {
+    setPlaylist(accessibleAudioTracks);
+  }, [accessibleAudioTracks, setPlaylist]);
 
   const hasResults = filteredResources.length > 0 || filteredAudioResources.length > 0;
 
@@ -268,6 +325,7 @@ export default function StudentLibraryPage() {
               <div className="grid gap-4 md:grid-cols-2">
                 {filteredAudioResources.map((audio) => {
                   const playableUrl = audio.has_access && audio.audio_url ? assetUrl(audio.audio_url) : '';
+                  const externalAudioUrl = audio.audio_url?.startsWith('https://') ? audio.audio_url : '';
                   const duration = formatDuration(audio.duration_seconds);
                   return (
                     <article key={audio.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -288,7 +346,28 @@ export default function StudentLibraryPage() {
                         {audio.price > 0 ? `${audio.currency} ${audio.price.toFixed(2)}` : 'Free'}
                       </p>
                       {playableUrl ? (
-                        <audio controls controlsList="nodownload" preload="none" src={playableUrl} className="mt-4 w-full" aria-label={`Play ${audio.title}`} />
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const track = accessibleAudioTracks.find((item) => item.id === audio.id);
+                              if (track) playAudio(track);
+                            }}
+                            className="inline-flex items-center gap-2 rounded-lg bg-blue-900 px-3 py-2 text-xs font-bold text-white hover:bg-blue-800"
+                          >
+                            <Play className="h-3.5 w-3.5" /> Play in audio player
+                          </button>
+                          {externalAudioUrl ? (
+                            <a href={externalAudioUrl} download className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
+                              <Download className="h-3.5 w-3.5" /> Download audio
+                            </a>
+                          ) : (
+                            <button type="button" onClick={() => void downloadAudio(audio)} disabled={downloadingAudioId !== null} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60">
+                              {downloadingAudioId === audio.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                              {downloadingAudioId === audio.id ? 'Preparing download…' : 'Download audio'}
+                            </button>
+                          )}
+                        </div>
                       ) : audio.has_access ? (
                         <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">Audio playback is not configured for this resource. Please contact the school administrator.</p>
                       ) : (

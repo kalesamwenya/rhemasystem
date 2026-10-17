@@ -3,10 +3,11 @@
 import PageHero from "@/components/main/PageHero";
 import SectionHeading from "@/components/main/SectionHeading";
 import { useManagedPageContent } from "@/lib/use-managed-page-content";
+import MainPageSkeleton from "@/components/main/MainPageSkeleton";
 
 export default function TermsPage() {
   const { content, error, isLoading } = useManagedPageContent("terms");
-  if (isLoading) return <p role="status" className="mx-auto max-w-7xl px-4 py-20 text-sm text-slate-600">Loading terms of use...</p>;
+  if (isLoading) return <MainPageSkeleton label="Loading terms of use" />;
   if (error || !content) return <p role="alert" className="mx-auto max-w-7xl px-4 py-20 text-sm font-medium text-red-800">{error || "Terms of use are unavailable."}</p>;
 
   const sections = [1, 2, 3, 4]

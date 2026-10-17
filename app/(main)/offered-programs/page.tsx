@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, BookOpen, CalendarDays } from "lucide-react";
 import { loadPublicCourses, type PublicCourse } from "@/lib/public-site-content";
 import { useManagedPageContent } from "@/lib/use-managed-page-content";
+import MainPageSkeleton, { CourseGridSkeleton } from "@/components/main/MainPageSkeleton";
 
 export default function OfferedProgramsPage() {
   const { content, error: contentError, isLoading: contentLoading } = useManagedPageContent("academics");
@@ -41,7 +42,7 @@ export default function OfferedProgramsPage() {
     return Array.from(grouped.entries()).sort(([first], [second]) => first - second);
   }, [courses]);
 
-  if (contentLoading) return <p role="status" className="mx-auto max-w-7xl px-4 py-20 text-sm text-slate-600">Loading academic information...</p>;
+  if (contentLoading) return <MainPageSkeleton variant="curriculum" label="Loading academic information" />;
   if (contentError || !content) return <p role="alert" className="mx-auto max-w-7xl px-4 py-20 text-sm font-medium text-red-800">{contentError || "Academic information is unavailable."}</p>;
 
   return (
@@ -75,7 +76,7 @@ export default function OfferedProgramsPage() {
       </section>
 
       <div id="courses" className="scroll-mt-28">
-      {isLoading && <p role="status" className="mx-auto max-w-7xl px-4 py-6 text-sm text-slate-600 sm:px-6 lg:px-8">Loading curriculum...</p>}
+      {isLoading && <CourseGridSkeleton />}
       {loadError && <p role="alert" className="mx-auto max-w-7xl px-4 py-6 text-sm font-medium text-red-800 sm:px-6 lg:px-8">{loadError}</p>}
       {!isLoading && !loadError && courses.length === 0 && <p className="mx-auto max-w-7xl px-4 py-8 text-sm text-slate-600 sm:px-6 lg:px-8">There are no public courses available at the moment.</p>}
 

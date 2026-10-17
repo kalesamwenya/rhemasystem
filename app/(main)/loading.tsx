@@ -1,5 +1,5 @@
-import LoadingPlaceholder from '@/components/ui/LoadingPlaceholder';
+import MainPageSkeleton from '@/components/main/MainPageSkeleton';
 
 export default function Loading() {
-  return <LoadingPlaceholder variant="website" />;
+  return <MainPageSkeleton />;
 }

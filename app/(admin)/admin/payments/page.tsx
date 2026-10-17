@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { createPaymentReceiptPdf, downloadPaymentReceipt, viewPaymentReceipt, type PaymentReceiptData } from '@/lib/payment-receipt';
+import { openFlutterwaveInlineCheckout, type FlutterwaveInlineCheckout } from '@/lib/flutterwave-inline';
 
 type PaymentLedgerRecord = Omit<PaymentReceiptData, 'receipt_token'> & {
   id: number;
@@ -184,11 +185,11 @@ export default function AdminPaymentsPage() {
         formData.append('status', 'paid');
         formData.append('receipt_token', verifiedPayment.receipt_token);
         formData.append('receipt_file', receiptPdf, `Rhema-Receipt-${verifiedPayment.reference}.pdf`);
-        await api.students.updateAdminPaymentStatus(formData);
+        const updated = await api.students.updateAdminPaymentStatus(formData) as { message: string };
         if (active) {
           const latest = await api.students.adminPaymentLedger() as PaymentLedgerResponse;
           setRecords(latest.data);
-          setNotice('Flutterwave payment verified. The paid amount and receipt are now attached to the student account.');
+          setNotice(updated.message || 'Flutterwave payment verified. The paid amount and receipt are now attached to the student account.');
         }
       } catch (reason) {
         if (active) setError(reason instanceof Error ? reason.message : 'Could not verify the Flutterwave payment. You can update the transaction status after checking the payment.');
@@ -360,6 +361,7 @@ export default function AdminPaymentsPage() {
     setSubmittingPayment(true);
     setError('');
     setNotice('');
+    let inlineCheckoutOpened = false;
     try {
       if (paymentMethod === 'flutterwave') {
         const response = await api.students.initiateAdminPayment({
@@ -368,8 +370,62 @@ export default function AdminPaymentsPage() {
           description,
           payment_purpose: paymentPurpose,
           term: paymentStudent.class || '',
-        }) as { data: { checkout_url: string; reference: string } };
-        window.location.assign(response.data.checkout_url);
+        }) as { data: FlutterwaveInlineCheckout };
+        await openFlutterwaveInlineCheckout(response.data, async (transaction) => {
+          const transactionId = String(transaction.transaction_id ?? '');
+          if (!/^\d+$/.test(transactionId) || transaction.tx_ref !== response.data.reference) {
+            setError('Flutterwave returned invalid payment details. The payment has not been confirmed.');
+            setSubmittingPayment(false);
+            return;
+          }
+
+          setVerifyingFlutterwave(true);
+          try {
+            const verified = await api.students.verifyAdminPayment(transactionId, response.data.reference) as { data: PaymentLedgerRecord };
+            const verifiedPayment = verified.data;
+            if (!verifiedPayment.receipt_token) {
+              throw new Error('Flutterwave verified the payment but did not return a receipt verification token.');
+            }
+            const paymentReceipt: PaymentReceiptData = {
+              student_name: verifiedPayment.student_name,
+              student_id: verifiedPayment.student_id,
+              cohort: verifiedPayment.cohort,
+              paid_for: verifiedPayment.description,
+              term: verifiedPayment.term,
+              amount: verifiedPayment.amount,
+              currency: verifiedPayment.currency,
+              reference: verifiedPayment.reference,
+              gateway: verifiedPayment.gateway,
+              gateway_transaction_id: verifiedPayment.gateway_transaction_id,
+              created_at: verifiedPayment.created_at,
+              receipt_token: verifiedPayment.receipt_token,
+            };
+            const receiptPdf = await createPaymentReceiptPdf(paymentReceipt);
+            const formData = new FormData();
+            formData.append('payment_id', String(verifiedPayment.id));
+            formData.append('status', 'paid');
+            formData.append('receipt_token', verifiedPayment.receipt_token);
+            formData.append('receipt_file', receiptPdf, `Rhema-Receipt-${verifiedPayment.reference}.pdf`);
+            const receiptResult = await api.students.updateAdminPaymentStatus(formData) as { message?: string };
+            const latest = await api.students.adminPaymentLedger() as PaymentLedgerResponse;
+            setRecords(latest.data);
+            setManualPaymentOpen(false);
+            setPaymentStudent(null);
+            setStudentSearch('');
+            setPaymentAmount('');
+            setPaymentDescription('');
+            setNotice(receiptResult.message || 'Flutterwave payment verified and receipt attached to the student account.');
+          } catch (reason) {
+            setError(reason instanceof Error ? reason.message : 'Could not verify the Flutterwave payment.');
+          } finally {
+            setVerifyingFlutterwave(false);
+            setSubmittingPayment(false);
+          }
+        }, () => {
+          setSubmittingPayment(false);
+          setNotice('Checkout closed. No payment was confirmed.');
+        });
+        inlineCheckoutOpened = true;
         return;
       }
 
@@ -402,16 +458,16 @@ export default function AdminPaymentsPage() {
       formData.append('reference', reference);
       formData.append('receipt_token', receiptToken);
       formData.append('receipt_file', pdf, `Rhema-Receipt-${reference}.pdf`);
-      const response = await api.students.createAdminManualPayment(formData) as { data: PaymentLedgerRecord };
+      const response = await api.students.createAdminManualPayment(formData) as { data: PaymentLedgerRecord; message: string };
       setRecords((current) => [response.data, ...current.filter((record) => record.id !== response.data.id)]);
       setManualPaymentOpen(false);
       setPaymentStudent(null);
       setStudentSearch('');
-      setNotice('Manual payment recorded. Its receipt PDF is attached to the transaction.');
+      setNotice(response.message || 'Manual payment recorded. Its receipt PDF is attached to the transaction.');
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to start or record this student payment.');
     } finally {
-      setSubmittingPayment(false);
+      if (!inlineCheckoutOpened) setSubmittingPayment(false);
     }
   };
 
@@ -444,7 +500,7 @@ export default function AdminPaymentsPage() {
         formData.append('receipt_token', receiptToken);
         formData.append('receipt_file', pdf, `Rhema-Receipt-${transaction.reference}.pdf`);
       }
-      const response = await api.students.updateAdminPaymentStatus(formData) as { data: PaymentLedgerRecord };
+      const response = await api.students.updateAdminPaymentStatus(formData) as { data: PaymentLedgerRecord; message: string };
       setRecords((current) => current.map((record) => record.id === response.data.id ? response.data : record));
       setSelectedAccount((current) => {
         if (!current) return current;
@@ -478,7 +534,7 @@ export default function AdminPaymentsPage() {
       } else {
         setPaymentReceipts((current) => current.filter((item) => item.id !== transaction.id));
       }
-      setNotice(`Payment status updated to ${status}.`);
+      setNotice(response.message || `Payment status updated to ${status}.`);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to update the payment status.');
     } finally {

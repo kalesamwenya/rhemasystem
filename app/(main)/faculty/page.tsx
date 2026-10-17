@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { ArrowRight, Users } from "lucide-react";
 import { assetUrl } from "@/lib/api";
 import { loadAboutContent, type FacultyMember } from "@/lib/public-site-content";
+import MainPageSkeleton from "@/components/main/MainPageSkeleton";
 
 function getInitials(name: string): string {
   return name.trim().split(/\s+/).slice(0, 2).map((part) => part.charAt(0)).join("").toUpperCase() || "?";
@@ -25,6 +26,8 @@ export default function FacultyPage() {
       .finally(() => { if (active) setIsLoading(false); });
     return () => { active = false; };
   }, []);
+
+  if (isLoading) return <MainPageSkeleton variant="directory" label="Loading faculty profiles" />;
 
   return (
     <div className="bg-white">
@@ -48,7 +51,6 @@ export default function FacultyPage() {
           </p>
         </div>
 
-        {isLoading && <p role="status" className="py-12 text-center text-sm text-slate-600">Loading faculty profiles...</p>}
         {loadError && <p role="alert" className="mx-auto mt-10 max-w-3xl rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800">{loadError}</p>}
         {!isLoading && !loadError && faculty.length === 0 && (
           <p className="mx-auto mt-10 max-w-2xl rounded-2xl border border-slate-200 bg-slate-50 p-6 text-center text-sm leading-6 text-slate-600">

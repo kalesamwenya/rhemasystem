@@ -31,7 +31,7 @@ type ApplicationRecord = {
   applicant_phone: string;
   program: string;
   status: string;
-  payment_status: 'Pending' | 'Paid' | 'Failed';
+  payment_status: 'Pending' | 'Paid' | 'Failed' | 'Not required';
   application_data: Record<string, unknown>;
   student_id: string | null;
   created_at: string;
@@ -298,7 +298,7 @@ export default function AdmissionsPage() {
             </select>
             <label className="sr-only" htmlFor="admissions-payment-filter">Filter by payment status</label>
             <select id="admissions-payment-filter" value={paymentFilter} onChange={(event) => setFilter(setPaymentFilter, event.target.value)} className="rounded-lg border border-[#dce3de] bg-white px-3 py-2 text-xs font-semibold text-slate-700">
-              <option>All payments</option>{['Pending', 'Paid', 'Failed'].map((status) => <option key={status}>{status}</option>)}
+              <option>All payments</option>{['Pending', 'Paid', 'Failed', 'Not required'].map((status) => <option key={status}>{status}</option>)}
             </select>
             <label className="sr-only" htmlFor="admissions-program-filter">Filter by programme</label>
             <select id="admissions-program-filter" value={programFilter} onChange={(event) => setFilter(setProgramFilter, event.target.value)} className="rounded-lg border border-[#dce3de] bg-white px-3 py-2 text-xs font-semibold text-slate-700">
@@ -320,7 +320,7 @@ export default function AdmissionsPage() {
                   <td className="px-4 py-3 font-semibold text-slate-700">{item.program || 'Programme pending'}</td>
                   <td className="px-4 py-3 text-slate-600">{new Date(item.created_at).toLocaleDateString()}</td>
                   <td className="px-4 py-3"><span className="rounded-full bg-[#eef7f4] px-2.5 py-1 text-[9px] font-black uppercase text-[#0f766e]">{item.status}</span></td>
-                  <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase ${item.payment_status === 'Paid' ? 'bg-emerald-50 text-emerald-700' : item.payment_status === 'Failed' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-800'}`}>{item.payment_status}</span></td>
+                  <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase ${item.payment_status === 'Paid' || item.payment_status === 'Not required' ? 'bg-emerald-50 text-emerald-700' : item.payment_status === 'Failed' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-800'}`}>{item.payment_status}</span></td>
                   <td className="px-4 py-3 text-right"><button type="button" onClick={() => openApplication(item.id)} className="inline-flex items-center gap-1.5 rounded-lg bg-[#0f766e] px-3 py-2 text-[10px] font-black uppercase tracking-wide text-white hover:bg-[#115e59]"><Eye className="h-3.5 w-3.5" /> Read application</button></td>
                 </tr>)}</tbody>
               </table>

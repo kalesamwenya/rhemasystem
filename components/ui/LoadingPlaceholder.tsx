@@ -1,3 +1,5 @@
+import MainPageSkeleton from '@/components/main/MainPageSkeleton';
+
 type LoadingVariant = 'website' | 'student' | 'lecturer' | 'admin';
 
 const variants: Record<LoadingVariant, { label: string; background: string; accent: string }> = {
@@ -12,8 +14,12 @@ function SkeletonBlock({ className, accent }: { className: string; accent: strin
 }
 
 export default function LoadingPlaceholder({ variant }: { variant: LoadingVariant }) {
-  const config = variants[variant];
   const portal = variant !== 'website';
+  if (variant === 'website') {
+    return <MainPageSkeleton label="Loading homepage" />;
+  }
+
+  const config = variants[variant];
 
   return (
     <div

@@ -23,6 +23,7 @@ type Purchase = {
   delivery_address?: string;
   delivery_method: string;
   payment_method: string;
+  gateway_transaction_id?: string | null;
   subtotal: number | string;
   total_amount: number | string;
   currency: string;
@@ -38,6 +39,7 @@ export default function StorePurchasesPage() {
   const [selectedReference, setSelectedReference] = useState('');
   const [search, setSearch] = useState('');
   const [error, setError] = useState('');
+  const [updatingPayment, setUpdatingPayment] = useState(false);
 
   useEffect(() => {
     api.purchases.list()
@@ -57,8 +59,24 @@ export default function StorePurchasesPage() {
   const selected = purchases.find((purchase) => purchase.purchase_reference === selectedReference) ?? filteredPurchases[0];
 
   const printReceipt = () => window.print();
+  const updateOfflinePayment = async (status: 'paid' | 'failed') => {
+    if (!selected || updatingPayment) return;
+    setUpdatingPayment(true);
+    setError('');
+    try {
+      await api.purchases.updatePaymentStatus(selected.purchase_reference, status);
+      setPurchases((current) => current.map((purchase) => purchase.purchase_reference === selected.purchase_reference
+        ? { ...purchase, payment_status: status }
+        : purchase));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to update this store payment.');
+    } finally {
+      setUpdatingPayment(false);
+    }
+  };
+
   const downloadReceipt = () => {
-    if (!selected) return;
+    if (!selected || selected.payment_status !== 'paid') return;
     const itemRows = selected.items.map((item) => `<tr><td>${item.product_name}${item.variant_label ? ` (${item.variant_label})` : ''}</td><td>${item.quantity}</td><td>${money(item.unit_price, selected.currency)}</td><td>${money(item.line_total, selected.currency)}</td></tr>`).join('');
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>${selected.purchase_reference} - Rhema receipt</title><style>body{font-family:Arial,sans-serif;color:#14213d;padding:40px}header{border-bottom:4px solid #d9272e;padding-bottom:18px}h1{margin:0;font-size:26px}p{color:#526079}table{width:100%;border-collapse:collapse;margin-top:30px}th,td{text-align:left;border-bottom:1px solid #dce2eb;padding:12px 8px}th{color:#d9272e;text-transform:uppercase;font-size:11px}.total{text-align:right;font-size:20px;font-weight:bold;margin-top:24px}</style></head><body><header><h1>RHEMA CLASS REGISTER</h1><p>Official Store Receipt</p></header><p><strong>Receipt:</strong> ${selected.purchase_reference}<br><strong>Customer:</strong> ${selected.customer_name}<br><strong>Phone:</strong> ${selected.customer_phone}<br><strong>Date:</strong> ${new Date(selected.created_at).toLocaleString()}</p><table><thead><tr><th>Item</th><th>Qty</th><th>Unit</th><th>Total</th></tr></thead><tbody>${itemRows}</tbody></table><p class="total">Total: ${money(selected.total_amount, selected.currency)}</p><p>Payment: ${selected.payment_method}<br>Delivery: ${selected.delivery_method}</p></body></html>`;
     const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
@@ -78,7 +96,16 @@ export default function StorePurchasesPage() {
           <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-900">Store receipts</h1>
           <p className="mt-1 text-sm text-slate-500">Review, print, and download customer purchase records.</p>
         </div>
-        {selected && <div className="flex gap-2"><button onClick={printReceipt} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-black text-slate-700"><Printer size={15} /> Print</button><button onClick={downloadReceipt} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-black text-white"><Download size={15} /> Download</button></div>}
+        {selected && <div className="flex flex-wrap gap-2">
+          {selected.payment_method !== 'Flutterwave' && selected.payment_status === 'pending' && <>
+            <button type="button" disabled={updatingPayment} onClick={() => void updateOfflinePayment('paid')} className="rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-black text-white disabled:opacity-50">{updatingPayment ? 'Saving...' : 'Mark payment received'}</button>
+            <button type="button" disabled={updatingPayment} onClick={() => void updateOfflinePayment('failed')} className="rounded-xl border border-red-200 bg-white px-4 py-2.5 text-xs font-black text-red-700 disabled:opacity-50">Cancel unpaid order</button>
+          </>}
+          {selected.payment_status === 'paid' && <>
+            <button type="button" onClick={printReceipt} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-black text-slate-700"><Printer size={15} /> Print</button>
+            <button type="button" onClick={downloadReceipt} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-black text-white"><Download size={15} /> Download</button>
+          </>}
+        </div>}
       </header>
 
       {error && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-semibold text-red-700">{error}</div>}

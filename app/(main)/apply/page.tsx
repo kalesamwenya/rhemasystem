@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { ArrowRight, Check, FileText, IdCard, UserRound } from "lucide-react";
 import { useManagedPageContent } from "@/lib/use-managed-page-content";
+import MainPageSkeleton from "@/components/main/MainPageSkeleton";
 
 export default function ApplyPage() {
   const { content, error, isLoading } = useManagedPageContent("admissions");
   const requirementIcons = [IdCard, FileText, UserRound];
 
-  if (isLoading) return <p role="status" className="mx-auto max-w-7xl px-4 py-20 text-sm text-slate-600">Loading admissions information...</p>;
+  if (isLoading) return <MainPageSkeleton label="Loading admissions information" />;
   if (error || !content) return <p role="alert" className="mx-auto max-w-7xl px-4 py-20 text-sm font-medium text-red-800">{error || "Admissions information is unavailable."}</p>;
 
   const steps = [1, 2, 3, 4].map((number) => ({

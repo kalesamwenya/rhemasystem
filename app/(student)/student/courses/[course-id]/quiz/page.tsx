@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Clock, CreditCard, HelpCircle, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { openFlutterwaveInlineCheckout, type FlutterwaveInlineCheckout } from '@/lib/flutterwave-inline';
 
 type QuizQuestion = {
   id: number;
@@ -200,17 +201,59 @@ export default function CourseQuizPage() {
     if (!quiz || paying) return;
     setPaying(true);
     setError('');
+    let paymentReference = '';
     try {
-      const returnUrl = new URL(`${window.location.pathname}?assessment_id=${encodeURIComponent(quizId)}`, window.location.origin).toString();
       const response = await api.students.initiateAssessmentPayment({
         course_id: courseId,
         assessment_id: quiz.quiz.id,
         assessment_type: quiz.quiz.assessment_type,
-        return_url: returnUrl,
-      }) as { data?: { checkout_url?: string } };
-      if (!response.data?.checkout_url) throw new Error('The payment provider did not return a checkout link.');
-      window.location.assign(response.data.checkout_url);
+      }) as { data: FlutterwaveInlineCheckout };
+      paymentReference = response.data.reference;
+      await openFlutterwaveInlineCheckout(response.data, async (transaction) => {
+        if (transaction.status !== 'successful') {
+          try {
+            await api.students.cancelAssessmentPayment(paymentReference);
+            setNotice('Payment was not completed. You can try again when ready.');
+          } catch (cause) {
+            setError(cause instanceof Error ? cause.message : 'Payment was not completed, but the pending payment could not be cancelled.');
+          } finally {
+            setPaying(false);
+          }
+          return;
+        }
+        const transactionId = String(transaction.transaction_id ?? '');
+        if (!/^\d+$/.test(transactionId) || transaction.tx_ref !== response.data.reference) {
+          setError('Flutterwave returned invalid payment details. The payment has not been confirmed.');
+          setPaying(false);
+          return;
+        }
+        setVerifyingPayment(true);
+        try {
+          const verification = await api.students.verifyMyPayment(transactionId, response.data.reference) as { message?: string };
+          setNotice(verification.message || 'Payment verified. Your assessment access is ready.');
+          await loadQuiz();
+        } catch (cause) {
+          setError(cause instanceof Error ? cause.message : 'Payment could not be verified. Assessment access has not been granted.');
+        } finally {
+          setVerifyingPayment(false);
+          setPaying(false);
+        }
+      }, () => {
+        void api.students.cancelAssessmentPayment(paymentReference)
+          .then(() => setNotice('Checkout closed. No payment was confirmed; you can try again when ready.'))
+          .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : 'Checkout closed, but the pending payment could not be cancelled.'))
+          .finally(() => setPaying(false));
+      });
     } catch (cause) {
+      if (paymentReference) {
+        try {
+          await api.students.cancelAssessmentPayment(paymentReference);
+        } catch (cancelCause) {
+          setError(cancelCause instanceof Error ? cancelCause.message : 'Unable to cancel the pending assessment payment.');
+          setPaying(false);
+          return;
+        }
+      }
       setError(cause instanceof Error ? cause.message : 'Unable to start assessment payment.');
       setPaying(false);
     }

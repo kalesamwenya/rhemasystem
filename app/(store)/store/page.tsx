@@ -22,15 +22,18 @@ import { consumeInventory, useInventory } from "@/lib/store-inventory";
 import { useStorePromotions } from "@/lib/store-promotions";
 import { api } from "@/lib/api";
 import { assetUrl } from "@/lib/api";
+import { openFlutterwaveInlineCheckout, type FlutterwaveInlineCheckout } from "@/lib/flutterwave-inline";
 
 const deliveryOptions = ["School pickup", "Home delivery within city", "Regional delivery", "Courier dispatch"];
 const paymentMethods = [
-  { name: "Airtel Money", mark: "A", className: "bg-red-600 text-white" },
-  { name: "MTN Mobile Money", mark: "MTN", className: "bg-yellow-400 text-slate-950" },
-  { name: "Zamtel", mark: "Z", className: "bg-emerald-600 text-white" },
-  { name: "Visa", mark: "VISA", className: "bg-blue-900 text-white" },
+  { name: "Card payment", mark: "CARD", className: "bg-blue-900 text-white" },
+  { name: "Mobile money", mark: "MOMO", className: "bg-emerald-600 text-white" },
 ];
-const paymentOptions = ["Mobile money", "Card payment", "Bank transfer", "Cash on delivery"];
+const paymentOptions = [
+  { value: "Flutterwave", label: "Flutterwave · card or mobile money" },
+  { value: "Bank transfer", label: "Bank transfer · manual confirmation" },
+  { value: "Cash on delivery", label: "Cash on delivery" },
+];
 
 function StorePageContent() {
   const searchParams = useSearchParams();
@@ -43,6 +46,7 @@ function StorePageContent() {
   const [selectedSize, setSelectedSize] = useState<string>("");
   const [detailSlide, setDetailSlide] = useState(0);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [checkoutSubmitting, setCheckoutSubmitting] = useState(false);
   const [checkoutComplete, setCheckoutComplete] = useState(false);
   const [checkoutError, setCheckoutError] = useState("");
   const [purchaseReference, setPurchaseReference] = useState("");
@@ -54,7 +58,7 @@ function StorePageContent() {
     email: "",
     address: "",
     delivery: "School pickup",
-    payment: "Mobile money",
+    payment: "Flutterwave",
   });
   const products: StoreProduct[] = inventory.map((product) => ({
     ...product,
@@ -156,10 +160,12 @@ function StorePageContent() {
 
   const handleCheckout = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!itemsConfirmed || !cart.length) return;
+    if (!itemsConfirmed || !cart.length || checkoutSubmitting) return;
+    setCheckoutSubmitting(true);
     setCheckoutError("");
+    let pendingOnlineReference = "";
     try {
-      const result: { data?: { purchase_reference?: string } } = await api.purchases.create({
+      const result: { data?: FlutterwaveInlineCheckout & { purchase_reference: string } } = await api.purchases.create({
         customer: {
           name: formData.fullName,
           phone: formData.phone,
@@ -170,13 +176,80 @@ function StorePageContent() {
         },
         items: cart.map((item) => ({ product_id: item.id, variant_id: item.inventoryVariantId, quantity: item.quantity })),
       });
-      setInventory((current) => consumeInventory(current, cart.map((item) => ({ productId: item.id, color: item.selectedColor, size: item.selectedSize, quantity: item.quantity }))));
-      setPurchaseReference(result.data?.purchase_reference ?? "");
-      clearCart();
-      setCheckoutComplete(true);
-      setCheckoutOpen(false);
+      if (!result.data?.purchase_reference) throw new Error("The store did not return a valid purchase reference.");
+      const purchaseReference = result.data.purchase_reference;
+      const completeOrder = () => {
+        setInventory((current) => consumeInventory(current, cart.map((item) => ({ productId: item.id, color: item.selectedColor, size: item.selectedSize, quantity: item.quantity }))));
+        setPurchaseReference(purchaseReference);
+        clearCart();
+        setCheckoutComplete(true);
+        setCheckoutOpen(false);
+        setCheckoutSubmitting(false);
+      };
+
+      if (formData.payment !== "Flutterwave") {
+        completeOrder();
+        return;
+      }
+      pendingOnlineReference = purchaseReference;
+      if (!Number.isFinite(result.data.amount) || result.data.amount <= 0) {
+        throw new Error("The online purchase total must be greater than zero.");
+      }
+
+      await openFlutterwaveInlineCheckout(result.data, async (transaction) => {
+        if (transaction.status !== "successful") {
+          try {
+            await api.purchases.cancelPending(purchaseReference);
+          } catch {
+            setCheckoutError(`Payment was not completed. Your order ${purchaseReference} may still be pending; contact the school office if stock remains reserved.`);
+            setCheckoutSubmitting(false);
+            return;
+          }
+          setCheckoutError("Payment was not completed. No payment was taken and the reserved items have been released.");
+          setCheckoutSubmitting(false);
+          return;
+        }
+        const transactionId = String(transaction.transaction_id ?? "");
+        if (!/^\d+$/.test(transactionId) || transaction.tx_ref !== purchaseReference) {
+          setCheckoutError(`Flutterwave returned invalid payment details. Keep reference ${purchaseReference} and contact the school office; the order has not been marked paid.`);
+          setCheckoutSubmitting(false);
+          return;
+        }
+        try {
+          await api.purchases.verifyPayment(transactionId, purchaseReference);
+          completeOrder();
+        } catch (error) {
+          setCheckoutError(error instanceof Error
+            ? `${error.message} Keep your purchase reference ${purchaseReference}; do not pay again until the order status is checked.`
+            : `We could not confirm payment. Keep reference ${purchaseReference} and contact the school office before retrying.`);
+          setCheckoutSubmitting(false);
+        }
+      }, async () => {
+        try {
+          await api.purchases.cancelPending(purchaseReference);
+          setCheckoutError("Checkout closed. No payment was confirmed and reserved items have been released.");
+          setCheckoutSubmitting(false);
+        } catch (error) {
+          setCheckoutError(error instanceof Error
+            ? `Checkout closed, but the order could not be cancelled: ${error.message} Contact the school office with reference ${purchaseReference}.`
+            : `Checkout closed, but the order may still be pending. Contact the school office with reference ${purchaseReference}.`);
+          setCheckoutSubmitting(false);
+        }
+      });
     } catch (error) {
+      if (pendingOnlineReference) {
+        try {
+          await api.purchases.cancelPending(pendingOnlineReference);
+        } catch (cancellationError) {
+          setCheckoutError(cancellationError instanceof Error
+            ? `Unable to open Flutterwave checkout. The pending order could not be cancelled: ${cancellationError.message} Contact the school office with reference ${pendingOnlineReference}.`
+            : `Unable to open Flutterwave checkout. Contact the school office with reference ${pendingOnlineReference}.`);
+          setCheckoutSubmitting(false);
+          return;
+        }
+      }
       setCheckoutError(error instanceof Error ? error.message : "Unable to place this order.");
+      setCheckoutSubmitting(false);
     }
   };
 
@@ -185,13 +258,14 @@ function StorePageContent() {
     setCheckoutError("");
     setPurchaseReference("");
     setItemsConfirmed(false);
+    setCheckoutSubmitting(false);
     setFormData({
       fullName: "",
       phone: "",
       email: "",
       address: "",
       delivery: "School pickup",
-      payment: "Mobile money",
+      payment: "Flutterwave",
     });
   };
 
@@ -484,7 +558,7 @@ function StorePageContent() {
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-red-400 focus:bg-white"
                 >
                   {paymentOptions.map((option) => (
-                    <option key={option} value={option}>{option}</option>
+                    <option key={option.value} value={option.value}>{option.label}</option>
                   ))}
                 </select>
               </div>
@@ -518,10 +592,10 @@ function StorePageContent() {
               {checkoutError && <p className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{checkoutError}</p>}
               <button
                 type="submit"
-                disabled={!itemsConfirmed}
+                disabled={!itemsConfirmed || checkoutSubmitting}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-red-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
-                Place order
+                {checkoutSubmitting ? "Opening secure checkout..." : formData.payment === "Flutterwave" ? "Pay securely with Flutterwave" : "Place order"}
                 <ChevronRight size={16} />
               </button>
             </form>

@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { ArrowRight, CircleDollarSign } from "lucide-react";
 import { useManagedPageContent } from "@/lib/use-managed-page-content";
+import MainPageSkeleton from "@/components/main/MainPageSkeleton";
 
 export default function FeeStructurePage() {
   const { content, error, isLoading } = useManagedPageContent("fees");
 
-  if (isLoading) return <p role="status" className="mx-auto max-w-7xl px-4 py-20 text-sm text-slate-600">Loading fee information...</p>;
+  if (isLoading) return <MainPageSkeleton label="Loading fee information" />;
   if (error || !content) return <p role="alert" className="mx-auto max-w-7xl px-4 py-20 text-sm font-medium text-red-800">{error || "Fee information is unavailable."}</p>;
 
   return (

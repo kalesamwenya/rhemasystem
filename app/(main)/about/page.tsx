@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import Link from "next/link";
 import { Compass, Eye, Quote, Users } from "lucide-react";
 import SectionHeading from "@/components/main/SectionHeading";
+import MainPageSkeleton from "@/components/main/MainPageSkeleton";
 import { assetUrl } from "@/lib/api";
 import { loadAboutContent, type AboutPageContent } from "@/lib/public-site-content";
 
@@ -29,7 +30,7 @@ export default function AboutPage() {
   }
 
   if (!pageContent?.content) {
-    return <p role="status" className="mx-auto my-20 max-w-3xl text-sm text-slate-600">Loading school information...</p>;
+    return <MainPageSkeleton label="Loading school information" />;
   }
 
   const { content, team, testimonials } = pageContent;

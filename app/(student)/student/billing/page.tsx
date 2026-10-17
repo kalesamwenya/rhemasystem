@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { AlertCircle, ArrowDownLeft, ArrowUpRight, CheckCircle2, CreditCard, Download, Eye, Loader2, RefreshCw, Wallet } from 'lucide-react';
 import { api } from '@/lib/api';
+import { openFlutterwaveInlineCheckout, type FlutterwaveInlineCheckout } from '@/lib/flutterwave-inline';
 import { downloadPaymentReceipt, viewPaymentReceipt } from '@/lib/payment-receipt';
 
 type BillingTransaction = {
@@ -136,8 +137,31 @@ export default function StudentBillingPage() {
     setPaying(true);
     setError('');
     try {
-      const response = await api.students.initiateMyPayment(paymentAmount) as { data: { checkout_url: string } };
-      window.location.assign(response.data.checkout_url);
+      const response = await api.students.initiateMyPayment(paymentAmount) as { data: FlutterwaveInlineCheckout };
+      await openFlutterwaveInlineCheckout(response.data, async (transaction) => {
+        const transactionId = String(transaction.transaction_id ?? '');
+        if (!/^\d+$/.test(transactionId) || transaction.tx_ref !== response.data.reference) {
+          setError('Flutterwave returned invalid payment details. The payment has not been confirmed.');
+          setPaying(false);
+          return;
+        }
+        setVerifying(true);
+        setNotice('Confirming your Flutterwave payment securely...');
+        try {
+          const verification = await api.students.verifyMyPayment(transactionId, response.data.reference) as { message?: string };
+          setNotice(verification.message || 'Payment confirmed. Your account has been updated.');
+          await loadBilling();
+        } catch (reason) {
+          setNotice('');
+          setError(reason instanceof Error ? reason.message : 'We could not confirm this payment. Your account has not been credited.');
+        } finally {
+          setVerifying(false);
+          setPaying(false);
+        }
+      }, () => {
+        setPaying(false);
+        setNotice('Checkout closed. No payment was confirmed.');
+      });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to start your payment. Please try again.');
       setPaying(false);

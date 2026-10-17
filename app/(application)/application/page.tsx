@@ -15,7 +15,6 @@ import {
   Upload,
   UserRound,
   Users,
-  CreditCard,
   Mail,
   MessageCircle,
   Smartphone,
@@ -91,7 +90,7 @@ type ApplicationRecord = {
   id: string;
   submittedAt: string;
   status: "Submitted" | "Recommendations pending" | "Payment pending" | "Under review" | "Interview scheduled" | "Approved";
-  paymentStatus: "Pending" | "Paid";
+  paymentStatus: "Pending" | "Paid" | "Not required";
   recommendations: { pastoral: "Pending" | "Sent" | "Failed" | "Submitted"; personal: "Pending" | "Sent" | "Failed" | "Submitted" };
   recommendationTokens?: { pastoral: string; personal: string };
   recommendationChannels?: { pastoral: string | null; personal: string | null };
@@ -237,7 +236,7 @@ export default function ApplicationPage() {
       id: responseData.id!,
       submittedAt: new Date().toISOString(),
       status: "Recommendations pending",
-      paymentStatus: "Pending",
+      paymentStatus: "Not required",
       recommendations: { pastoral: "Pending", personal: "Pending" },
       recommendationTokens: {
         pastoral: responseData.recommendation_tokens!.pastoral!,
@@ -300,25 +299,6 @@ export default function ApplicationPage() {
       : `sms:${phoneNumber}?body=${encodeURIComponent(text)}`;
     void sendRecommendationInvite(kind, channel);
     window.open(destination, "_blank", "noopener,noreferrer");
-  };
-
-  const completePayment = async () => {
-    if (!application) return;
-    try {
-      await api.admissions.markPayment({ application_id: application.id, amount: 0, currency: "ZMW", status: "Paid" });
-    } catch (cause) {
-      setStatus({
-        type: "error",
-        title: "Payment could not be recorded",
-        message: cause instanceof Error ? cause.message : "The admissions service could not record this payment.",
-      });
-      return;
-    }
-    const updated = { ...application, paymentStatus: "Paid" as const, status: "Under review" as const };
-    const records = JSON.parse(window.localStorage.getItem(applicationsStorageKey) || "[]") as ApplicationRecord[];
-    window.localStorage.setItem(applicationsStorageKey, JSON.stringify(records.map((item) => item.id === updated.id ? updated : item)));
-    setApplication(updated);
-    setStatus({ type: "success", title: "Payment confirmed", message: "Your application fee is recorded. Admissions can now review your application." });
   };
 
   const renderInput = <K extends keyof FormDataState>(
@@ -600,11 +580,9 @@ export default function ApplicationPage() {
                 })}
               </div>
               <div className="flex flex-wrap gap-2">
-                {application.paymentStatus !== "Paid" ? (
-                  <button type="button" onClick={completePayment} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white">
-                    <CreditCard size={14} /> Pay application fee
-                  </button>
-                ) : <span className="inline-flex items-center rounded-xl bg-emerald-700 px-3 py-2 text-xs font-bold text-white">Payment successful</span>}
+                <span className="inline-flex items-center rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800">
+                  No application fee
+                </span>
               </div>
             </div>
             <p className="mt-3 text-xs text-emerald-900">Fee: {application.paymentStatus}. Invitation statuses refresh automatically while this page is open.</p>

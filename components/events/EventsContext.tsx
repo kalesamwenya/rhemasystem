@@ -1,8 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { api } from "@/lib/api";
-import { assetUrl } from "@/lib/api";
+import { api, assetUrl } from "@/lib/api";
 
 export type EventSpeaker = { name: string; role: string; bio: string; avatar?: string };
 export type EventRegistration = {
@@ -29,6 +28,7 @@ export type AcademyEvent = {
   endDate: string;
   location: string;
   price: number;
+  currency?: string;
   image: string;
   status: "Published" | "Draft";
   speakers: EventSpeaker[];
@@ -99,14 +99,14 @@ export function EventsProvider({ children }: { children: ReactNode }) {
   const [events, setEvents] = useState<AcademyEvent[]>([]);
   const [eventsLoaded, setEventsLoaded] = useState(false);
   useEffect(() => {
-    api.events.list().then(async (body: { data?: Array<{ id: number; title: string; theme: string; brief: string; description: string; starts_at: string; ends_at?: string; location: string; image?: string; fee?: number; status: string; speakers?: Array<{ id: number; name: string; role: string; bio?: string; avatar?: string }> }> }) => {
+    api.events.list().then(async (body: { data?: Array<{ id: number; title: string; theme: string; brief: string; description: string; starts_at: string; ends_at?: string; location: string; image?: string; fee?: number; currency?: string; status: string; speakers?: Array<{ id: number; name: string; role: string; bio?: string; avatar?: string }> }> }) => {
       const loaded = await Promise.all((body.data || []).map(async (event) => {
         const registrationsBody = window.location.pathname.startsWith('/admin')
           ? await api.registrations.list(event.id).catch(() => ({ data: [] }))
           : { data: [] };
-        const registrations = ((registrationsBody as { data?: Array<{ id: number; guest_name?: string; guest_email?: string; guest_phone?: string; payment_method?: string; payment_status?: string; attendance_status?: EventRegistration['attendanceStatus']; created_at?: string }> }).data || []).map((registration) => ({ id: String(registration.id), name: registration.guest_name || 'Student', email: registration.guest_email || '', phone: registration.guest_phone || '', diet: 'Standard', payment: registration.payment_method || '', paid: registration.payment_status === 'paid', registeredAt: registration.created_at || '', attendanceStatus: registration.attendance_status || 'not_marked' }));
+        const registrations = ((registrationsBody as { data?: Array<{ id: number; guest_name?: string; guest_email?: string; guest_phone?: string; payment_method?: string; payment_status?: string; dietary_preference?: string | null; attendance_status?: EventRegistration['attendanceStatus']; created_at?: string }> }).data || []).map((registration) => ({ id: String(registration.id), name: registration.guest_name || 'Student', email: registration.guest_email || '', phone: registration.guest_phone || '', diet: registration.dietary_preference || 'Standard', payment: registration.payment_method || '', paid: registration.payment_status === 'paid', registeredAt: registration.created_at || '', attendanceStatus: registration.attendance_status || 'not_marked' }));
         const speakers = (event.speakers || []).map((speaker) => ({ name: speaker.name, role: speaker.role, bio: speaker.bio || '', avatar: assetUrl(speaker.avatar || '') }));
-        return { id: String(event.id), title: event.title, theme: event.theme, brief: event.brief, description: event.description, date: event.starts_at, endDate: event.ends_at || '', location: event.location, price: Number(event.fee || 0), image: assetUrl(event.image || ''), status: event.status === 'published' ? 'Published' as const : 'Draft' as const, speakers, diets: [], registrations };
+        return { id: String(event.id), title: event.title, theme: event.theme, brief: event.brief, description: event.description, date: event.starts_at, endDate: event.ends_at || '', location: event.location, price: Number(event.fee || 0), currency: event.currency || 'GHS', image: assetUrl(event.image || ''), status: event.status === 'published' ? 'Published' as const : 'Draft' as const, speakers, diets: [], registrations };
       }));
       setEvents(loaded);
     }).catch(() => setEvents([])).finally(() => setEventsLoaded(true));
@@ -121,8 +121,7 @@ export function EventsProvider({ children }: { children: ReactNode }) {
       : event));
   };
   const registerForEvent = async (id: string, registration: Omit<EventRegistration, "id" | "registeredAt">) => {
-    const response = await api.registrations.save({ event_id: Number(id), guest_name: registration.name, guest_email: registration.email, guest_phone: registration.phone, payment_method: registration.payment, payment_status: registration.paid ? 'paid' : 'pending', registration_status: 'confirmed' }) as { data?: { id?: number | string } };
-    const registrationId = String(response.data?.id || Date.now());
+    const registrationId = `local-${Date.now()}`;
     setEvents((current) => current.map((event) => event.id === id ? { ...event, registrations: [...event.registrations, { ...registration, id: registrationId, registeredAt: new Date().toISOString().slice(0, 10), attendanceStatus: 'not_marked' }] } : event));
   };
   const value = { events, eventsLoaded, createEvent, updateEvent, deleteEvent, updateRegistrationAttendance, registerForEvent };

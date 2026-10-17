@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { useManagedPageContent } from "@/lib/use-managed-page-content";
+import MainPageSkeleton from "@/components/main/MainPageSkeleton";
 
 export default function CommunityPage() {
   const { content, error, isLoading } = useManagedPageContent("community");
 
-  if (isLoading) return <p role="status" className="mx-auto max-w-7xl px-4 py-20 text-sm text-slate-600">Loading community information...</p>;
+  if (isLoading) return <MainPageSkeleton label="Loading community information" />;
   if (error || !content) return <p role="alert" className="mx-auto max-w-7xl px-4 py-20 text-sm font-medium text-red-800">{error || "Community information is unavailable."}</p>;
 
   return (
