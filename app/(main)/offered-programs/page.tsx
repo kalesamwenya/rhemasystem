@@ -23,7 +23,21 @@ export default function OfferedProgramsPage() {
 
   const cohorts = useMemo(() => {
     const grouped = new Map<number, PublicCourse[]>();
-    courses.forEach((course) => grouped.set(course.cohort, [...(grouped.get(course.cohort) ?? []), course]));
+    courses.forEach((course) => {
+      const cohortLabel = course.cohortName.trim();
+      const normalizedLabel = cohortLabel.toUpperCase();
+      const cohort = /\bFYM\b|\bFYE\b/.test(normalizedLabel)
+        ? 1
+        : /\bSYM\b|\bSYE\b/.test(normalizedLabel)
+          ? 2
+          : course.cohort;
+      const cohortName = cohort === 1 && /\bFYM\b|\bFYE\b/.test(normalizedLabel)
+        ? 'First Year (FYM + FYE)'
+        : cohort === 2 && /\bSYM\b|\bSYE\b/.test(normalizedLabel)
+          ? 'Second Year (SYM + SYE)'
+          : cohortLabel;
+      grouped.set(cohort, [...(grouped.get(cohort) ?? []), { ...course, cohort, cohortName }]);
+    });
     return Array.from(grouped.entries()).sort(([first], [second]) => first - second);
   }, [courses]);
 
