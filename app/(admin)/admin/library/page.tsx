@@ -73,7 +73,7 @@ type ApiList<T> = { data?: T[] };
 const typeStyles: Record<ResourceType, string> = { Document: 'bg-sky-100 text-sky-700', Link: 'bg-violet-100 text-violet-700', Audio: 'bg-amber-100 text-amber-700' };
 const typeIcons: Record<ResourceType, typeof FileText> = { Document: FileText, Link: Link2, Audio: Headphones };
 
-function newDraft(type: ResourceType = 'Document'): ResourceDraft {
+function newDraft(type: ResourceType = 'Document', audioDefaultPrice = '0', currency = 'ZMW'): ResourceDraft {
   return {
     key: crypto.randomUUID(),
     resource_type: type,
@@ -85,8 +85,8 @@ function newDraft(type: ResourceType = 'Document'): ResourceDraft {
     url: '',
     filePath: '',
     file: null,
-    price: '0',
-    currency: 'ZMW',
+    price: type === 'Audio' ? audioDefaultPrice : '0',
+    currency,
     durationSeconds: '0',
     requiredForAbsence: type === 'Audio',
     status: 'Draft',
@@ -151,6 +151,8 @@ export default function LibraryList() {
   const [statusFilter, setStatusFilter] = useState('All');
   const [currentPage, setCurrentPage] = useState(1);
   const [drafts, setDrafts] = useState<ResourceDraft[] | null>(null);
+  const [audioDefaultPrice, setAudioDefaultPrice] = useState('20');
+  const [paymentCurrency, setPaymentCurrency] = useState('ZMW');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState('');
@@ -174,11 +176,12 @@ export default function LibraryList() {
   const loadResources = async () => {
     setLoading(true);
     try {
-      const [coursesResult, mappingsResult, libraryResult, audioResult] = await Promise.allSettled([
+      const [coursesResult, mappingsResult, libraryResult, audioResult, configResult] = await Promise.allSettled([
         api.courses.list() as Promise<ApiList<CourseResponse>>,
         api.library.resourceOptions() as Promise<ApiList<MoodleMappingResponse>>,
         api.library.list() as Promise<ApiList<LibraryResource>>,
         api.audio.resources() as Promise<ApiList<Record<string, unknown>>>,
+        api.config.get() as Promise<{ data?: { assessmentPricing?: { audioRecording?: number }; paymentGateway?: { currency?: string } } }>,
       ]);
       const courseRows = coursesResult.status === 'fulfilled' ? coursesResult.value.data ?? [] : [];
       const mappings = mappingsResult.status === 'fulfilled' ? mappingsResult.value.data ?? [] : [];
@@ -196,6 +199,10 @@ export default function LibraryList() {
         })),
       }));
       setCourses(courseOptions);
+      if (configResult.status === 'fulfilled' && configResult.value.data) {
+        setAudioDefaultPrice(String(configResult.value.data.assessmentPricing?.audioRecording ?? 20));
+        setPaymentCurrency(configResult.value.data.paymentGateway?.currency ?? 'ZMW');
+      }
       const materials = libraryResult.status === 'fulfilled' ? libraryResult.value.data ?? [] : [];
       const audioResources: LibraryResource[] = (audioResult.status === 'fulfilled' ? audioResult.value.data ?? [] : []).map((audio) => {
         const audioId = Number(audio.id);
@@ -259,7 +266,7 @@ export default function LibraryList() {
 
   const openCreate = () => {
     setNotice('');
-    setDrafts([newDraft()]);
+    setDrafts([newDraft('Document', audioDefaultPrice, paymentCurrency)]);
   };
 
   const openEdit = (resource: LibraryResource) => {
@@ -267,7 +274,7 @@ export default function LibraryList() {
       ?? courses.find((item) => item.name === (resource.course_title ?? resource.course));
     setNotice('');
     setDrafts([{
-      ...newDraft(resource.resource_type),
+      ...newDraft(resource.resource_type, audioDefaultPrice, paymentCurrency),
       key: String(resource.id),
       resourceId: resource.audio_id ? undefined : resource.id,
       audioId: resource.audio_id,
@@ -301,7 +308,7 @@ export default function LibraryList() {
     if (!selectedFiles.length) return;
     setDrafts((current) => [
       ...(current ?? []),
-      ...selectedFiles.map((file) => ({ ...newDraft(type), title: fileTitle(file), file })),
+      ...selectedFiles.map((file) => ({ ...newDraft(type, audioDefaultPrice, paymentCurrency), title: fileTitle(file), file })),
     ]);
     if (type === 'Audio') {
       void Promise.all(selectedFiles.map(async (file) => ({ file, durationSeconds: await getAudioDuration(file) })))
@@ -416,7 +423,7 @@ export default function LibraryList() {
         <div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-black uppercase tracking-[0.2em] text-red-600">Resource editor</p><h2 className="mt-1 text-2xl font-black text-slate-900">{drafts[0]?.audioId ? 'Edit resource' : 'Add multiple resources'}</h2><p className="mt-1 text-sm text-slate-500">Choose the course and exact session for every item before attaching its file or link.</p></div><button type="button" onClick={() => setDrafts(null)} className="rounded-full bg-slate-100 p-2 text-slate-500" aria-label="Close editor"><X className="h-4 w-4" /></button></div>
         {!courses.length && <div role="alert" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-800">Courses and sessions are not available. <button type="button" onClick={() => void loadResources()} className="ml-1 underline">Fetch again</button></div>}
         <div className="mt-5 flex flex-wrap gap-2">
-          {(['Document', 'Link', 'Audio'] as ResourceType[]).map((type) => <button key={type} type="button" onClick={() => setDrafts((current) => [...(current ?? []), newDraft(type)])} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"><Plus className="h-3.5 w-3.5" /> Add {type.toLowerCase()}</button>)}
+          {(['Document', 'Link', 'Audio'] as ResourceType[]).map((type) => <button key={type} type="button" onClick={() => setDrafts((current) => [...(current ?? []), newDraft(type, audioDefaultPrice, paymentCurrency)])} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"><Plus className="h-3.5 w-3.5" /> Add {type.toLowerCase()}</button>)}
           <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"><UploadCloud className="h-3.5 w-3.5" /> Add multiple documents<input type="file" multiple accept=".pdf,.doc,.docx,.ppt,.pptx,.txt" onChange={(event) => { addSelectedFiles(event.target.files, 'Document'); event.currentTarget.value = ''; }} className="sr-only" /></label>
           <div
             onDragEnter={(event) => { event.preventDefault(); setAudioDragActive(true); }}
@@ -434,7 +441,7 @@ export default function LibraryList() {
             return <section key={draft.key} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <div className="mb-3 flex items-center justify-between"><h3 className="text-sm font-black text-slate-800">{draft.resource_type} {index + 1}</h3>{drafts.length > 1 && <button type="button" onClick={() => setDrafts((current) => current?.filter((item) => item.key !== draft.key) ?? null)} className="rounded-lg p-1.5 text-red-600 hover:bg-red-50" aria-label={`Remove ${draft.resource_type.toLowerCase()} ${index + 1}`}><X className="h-4 w-4" /></button>}</div>
               <div className="grid gap-3 sm:grid-cols-2">
-                <label className="text-xs font-bold text-slate-600">Type<select value={draft.resource_type} onChange={(event) => updateDraft(draft.key, { resource_type: event.target.value as ResourceType, file: null, requiredForAbsence: event.target.value === 'Audio' })} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm">{(['Document', 'Link', 'Audio'] as ResourceType[]).map((type) => <option key={type}>{type}</option>)}</select></label>
+                <label className="text-xs font-bold text-slate-600">Type<select value={draft.resource_type} onChange={(event) => updateDraft(draft.key, { resource_type: event.target.value as ResourceType, file: null, requiredForAbsence: event.target.value === 'Audio', ...(event.target.value === 'Audio' ? { price: audioDefaultPrice, currency: paymentCurrency } : {}) })} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm">{(['Document', 'Link', 'Audio'] as ResourceType[]).map((type) => <option key={type}>{type}</option>)}</select></label>
                 <label className="text-xs font-bold text-slate-600">Status<select value={draft.status} onChange={(event) => updateDraft(draft.key, { status: event.target.value as ResourceStatus })} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm">{(['Draft', 'Published', 'Live'] as ResourceStatus[]).map((status) => <option key={status}>{status}</option>)}</select></label>
                 <label className="text-xs font-bold text-slate-600">Course<select required value={draft.courseId} onChange={(event) => updateDraft(draft.key, { courseId: event.target.value, sessionId: '' })} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm"><option value="">Select a course</option>{courses.map((course) => <option key={course.id} value={course.id}>{course.name} · {course.cohort}</option>)}</select></label>
                 <label className="text-xs font-bold text-slate-600">Session<select required value={draft.sessionId} onChange={(event) => updateDraft(draft.key, { sessionId: event.target.value })} disabled={!selectedCourse} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm disabled:bg-slate-100"><option value="">Select a session</option>{selectedCourse?.sessions.map((session) => <option key={session.id} value={session.id}>{sessionLabel(session)}</option>)}</select>{selectedCourse && !selectedCourse.sessions.length && <span className="mt-1 block text-[11px] font-medium text-amber-700">This course has no scheduled sessions.</span>}</label>
@@ -452,7 +459,7 @@ export default function LibraryList() {
                   {draft.filePath && !draft.file && <p className="text-[11px] text-slate-500 sm:col-span-2">Current file: {draft.filePath}</p>}
                 </>}
                 {draft.resource_type === 'Audio' && <>
-                  <label className="text-xs font-bold text-slate-600">Price<input required type="number" min="0" step="0.01" value={draft.price} onChange={(event) => updateDraft(draft.key, { price: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" /></label>
+                  <label className="text-xs font-bold text-slate-600">Price (global default {paymentCurrency} {audioDefaultPrice})<input required type="number" min="0" step="0.01" value={draft.price} onChange={(event) => updateDraft(draft.key, { price: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" /></label>
                   <label className="text-xs font-bold text-slate-600">Currency<input required maxLength={3} value={draft.currency} onChange={(event) => updateDraft(draft.key, { currency: event.target.value.toUpperCase() })} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" /></label>
                   <label className="flex items-center gap-2 text-xs font-bold text-slate-700 sm:col-span-2"><input type="checkbox" checked={draft.requiredForAbsence} onChange={(event) => updateDraft(draft.key, { requiredForAbsence: event.target.checked })} /> Required for an absence</label>
                   {!selectedCourse?.moodle_course_id && <p className="text-xs text-amber-800 sm:col-span-2">This course needs a Moodle course mapping before session audio can be added.</p>}

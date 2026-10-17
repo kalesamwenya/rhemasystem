@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Bell, CalendarRange, Database, GraduationCap, Save, ShieldCheck, Wallet } from 'lucide-react';
+import { Bell, CalendarRange, CheckCircle2, CreditCard, Database, GraduationCap, Save, ShieldCheck, Wallet, XCircle } from 'lucide-react';
 import { api } from '@/lib/api';
 
 type TermDates = {
@@ -28,6 +28,14 @@ type SettingsState = {
     missedQuiz: number;
     missedAssignment: number;
     audioRecording: number;
+  };
+  paymentGateway: {
+    provider: 'flutterwave';
+    enabled: boolean;
+    currency: string;
+    secretKeyConfigured: boolean;
+    redirectUrlConfigured: boolean;
+    mode: 'test' | 'live';
   };
 };
 
@@ -64,6 +72,14 @@ const initialState: SettingsState = {
   terms: defaultTerms,
   cohortPricing: defaultPricing,
   assessmentPricing: defaultAssessmentPricing,
+  paymentGateway: {
+    provider: 'flutterwave',
+    enabled: true,
+    currency: 'ZMW',
+    secretKeyConfigured: false,
+    redirectUrlConfigured: false,
+    mode: 'test',
+  },
 };
 
 function normalizeTerms(input: Record<string, Partial<TermDates>> | undefined): Record<string, TermDates> {
@@ -105,6 +121,7 @@ export default function SettingsHub() {
   const navItems = [
     { name: 'Academic', icon: GraduationCap },
     { name: 'Finance', icon: Wallet },
+    { name: 'Payments', icon: CreditCard },
     { name: 'Alerts', icon: Bell },
     { name: 'System', icon: Database },
   ];
@@ -124,9 +141,17 @@ export default function SettingsHub() {
             missedAssignment: Number(data.assessmentPricing?.missedAssignment ?? defaultAssessmentPricing.missedAssignment),
             audioRecording: Number(data.assessmentPricing?.audioRecording ?? defaultAssessmentPricing.audioRecording),
           },
+          paymentGateway: {
+            provider: 'flutterwave',
+            enabled: data.paymentGateway?.enabled ?? true,
+            currency: data.paymentGateway?.currency ?? 'ZMW',
+            secretKeyConfigured: data.paymentGateway?.secretKeyConfigured ?? false,
+            redirectUrlConfigured: data.paymentGateway?.redirectUrlConfigured ?? false,
+            mode: data.paymentGateway?.mode ?? 'test',
+          },
         });
-      } catch {
-        setMessage('Using the default school terms and pricing matrix.');
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : 'Unable to load school settings.');
       } finally {
         setIsLoading(false);
       }
@@ -159,11 +184,25 @@ export default function SettingsHub() {
   };
 
   const setAssessmentFee = (field: keyof SettingsState['assessmentPricing'], value: string) => {
+    const amount = Number(value || 0);
+    const cohortField: keyof CohortFeePlan = field === 'missedExam'
+      ? 'missedExam'
+      : field === 'missedQuiz'
+        ? 'missedQuiz'
+        : field === 'missedAssignment'
+          ? 'missedAssignment'
+          : 'audioRecording';
     setSettings((current) => ({
       ...current,
+      cohortPricing: Object.fromEntries(Object.entries(current.cohortPricing).map(([cohort, pricing]) => [
+        cohort,
+        Number(pricing[cohortField]) === current.assessmentPricing[field]
+          ? { ...pricing, [cohortField]: amount }
+          : pricing,
+      ])),
       assessmentPricing: {
         ...current.assessmentPricing,
-        [field]: Number(value || 0),
+        [field]: amount,
       },
     }));
   };
@@ -178,8 +217,13 @@ export default function SettingsHub() {
           terms: settings.terms,
           cohortPricing: settings.cohortPricing,
           assessmentPricing: settings.assessmentPricing,
+          paymentGateway: {
+            provider: 'flutterwave',
+            enabled: settings.paymentGateway.enabled,
+            currency: settings.paymentGateway.currency,
+          },
       });
-      setMessage('School terms and cohort pricing were saved successfully.');
+      setMessage('School pricing and payment settings were saved successfully.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to save configurations.');
     } finally {
@@ -261,7 +305,7 @@ export default function SettingsHub() {
         <div className="mb-4 flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700"><Wallet className="h-5 w-5" /></div>
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Pricing matrix</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Cohort pricing overrides</p>
             <h3 className="text-lg font-black text-slate-900">Cohort fee structure</h3>
           </div>
         </div>
@@ -298,19 +342,107 @@ export default function SettingsHub() {
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-100 text-violet-700"><Database className="h-5 w-5" /></div>
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Default fees</p>
-            <h3 className="text-lg font-black text-slate-900">Missed assessment charges</h3>
+            <h3 className="text-lg font-black text-slate-900">Default quiz, assignment, exam and audio prices</h3>
           </div>
         </div>
 
+        <p className="mb-4 text-sm leading-6 text-slate-600">These are the standard fallback prices for paid quiz retakes, assignment resubmissions, exam retakes and required audio. A cohort-specific price above takes precedence.</p>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <InputField label="Missed exam" value={String(settings.assessmentPricing.missedExam)} onChange={(value) => setAssessmentFee('missedExam', value)} />
-          <InputField label="Missed quiz" value={String(settings.assessmentPricing.missedQuiz)} onChange={(value) => setAssessmentFee('missedQuiz', value)} />
-          <InputField label="Missed assignment" value={String(settings.assessmentPricing.missedAssignment)} onChange={(value) => setAssessmentFee('missedAssignment', value)} />
-          <InputField label="Audio recording" value={String(settings.assessmentPricing.audioRecording)} onChange={(value) => setAssessmentFee('audioRecording', value)} />
+          <InputField label="Exam retake" value={String(settings.assessmentPricing.missedExam)} onChange={(value) => setAssessmentFee('missedExam', value)} />
+          <InputField label="Quiz retake" value={String(settings.assessmentPricing.missedQuiz)} onChange={(value) => setAssessmentFee('missedQuiz', value)} />
+          <InputField label="Assignment resubmission" value={String(settings.assessmentPricing.missedAssignment)} onChange={(value) => setAssessmentFee('missedAssignment', value)} />
+          <InputField label="Required audio recording" value={String(settings.assessmentPricing.audioRecording)} onChange={(value) => setAssessmentFee('audioRecording', value)} />
         </div>
       </div>
     </div>
   );
+
+  const renderPayments = () => {
+    const secretReady = settings.paymentGateway.secretKeyConfigured;
+    const redirectReady = settings.paymentGateway.redirectUrlConfigured;
+    return (
+      <div className="space-y-5">
+        <section className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-100 text-orange-700"><CreditCard className="h-5 w-5" /></div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Global payment provider</p>
+                <h3 className="text-lg font-black text-slate-900">Flutterwave checkout</h3>
+                <p className="mt-1 max-w-xl text-sm leading-6 text-slate-600">One gateway and currency for student tuition, assessment fees, audio purchases and admin-initiated payments.</p>
+              </div>
+            </div>
+            <span className={`rounded-full px-3 py-1.5 text-xs font-bold ${settings.paymentGateway.enabled && secretReady ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+              {settings.paymentGateway.enabled && secretReady && redirectReady ? 'Gateway enabled' : settings.paymentGateway.enabled ? 'Setup required' : 'Gateway disabled'}
+            </span>
+          </div>
+
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500">
+              Payment currency
+              <select
+                value={settings.paymentGateway.currency}
+                onChange={(event) => setSettings((current) => ({
+                  ...current,
+                  paymentGateway: { ...current.paymentGateway, currency: event.target.value },
+                }))}
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-slate-400"
+              >
+                {[
+                  ['ZMW', 'ZMW · Zambian Kwacha'],
+                  ['USD', 'USD · US Dollar'],
+                  ['ZAR', 'ZAR · South African Rand'],
+                  ['GBP', 'GBP · British Pound'],
+                  ['KES', 'KES · Kenyan Shilling'],
+                  ['NGN', 'NGN · Nigerian Naira'],
+                  ['GHS', 'GHS · Ghanaian Cedi'],
+                ].map(([currency, label]) => <option key={currency} value={currency}>{label}</option>)}
+              </select>
+            </label>
+
+            <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white px-4 py-3">
+              <div>
+                <p className="text-xs font-bold text-slate-800">Accept online payments</p>
+                <p className="mt-1 text-[11px] text-slate-500">Turn off to pause all new Flutterwave checkouts.</p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={settings.paymentGateway.enabled}
+                onClick={() => setSettings((current) => ({
+                  ...current,
+                  paymentGateway: { ...current.paymentGateway, enabled: !current.paymentGateway.enabled },
+                }))}
+                className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${settings.paymentGateway.enabled ? 'bg-emerald-600' : 'bg-slate-300'}`}
+              >
+                <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${settings.paymentGateway.enabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-5">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Server credentials</p>
+              <h3 className="mt-1 text-base font-black text-slate-900">Secure Flutterwave connection</h3>
+            </div>
+            <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${settings.paymentGateway.mode === 'live' ? 'bg-rose-100 text-rose-700' : 'bg-sky-100 text-sky-700'}`}>
+              {settings.paymentGateway.mode} mode
+            </span>
+          </div>
+          <div className="mt-4 space-y-2 text-sm">
+            <p className="flex items-center gap-2 text-slate-700">{secretReady ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <XCircle className="h-4 w-4 text-rose-600" />} Flutterwave secret key {secretReady ? 'configured' : 'missing'}</p>
+            <p className="flex items-center gap-2 text-slate-700">{redirectReady ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <XCircle className="h-4 w-4 text-rose-600" />} Student payment return URL {redirectReady ? 'configured' : 'missing'}</p>
+          </div>
+          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-950">
+            For security, secret keys are never saved in the website or sent to the browser. Configure <code className="font-bold">FLW_SECRET_KEY</code> and <code className="font-bold">FLW_REDIRECT_URL</code> in the PHP hosting environment. Use a Flutterwave test key for test mode and a live key only after successful test payments.
+          </div>
+          <p className="mt-3 text-[11px] leading-5 text-slate-500">Changing the currency affects new checkouts and newly generated charges. Existing ledger entries retain their original transaction currency.</p>
+        </section>
+      </div>
+    );
+  };
 
   const renderAlerts = () => (
     <div className="space-y-4">
@@ -377,6 +509,7 @@ export default function SettingsHub() {
             <>
               {activeTab === 'Academic' && renderAcademic()}
               {activeTab === 'Finance' && renderFinance()}
+              {activeTab === 'Payments' && renderPayments()}
               {activeTab === 'Alerts' && renderAlerts()}
               {activeTab === 'System' && renderSystem()}
             </>
@@ -400,6 +533,7 @@ function InputField({ label, value, onChange }: { label: string; value: string; 
       <input
         type="number"
         min="0"
+        step="0.01"
         value={value}
         onChange={(event) => onChange(event.target.value)}
         className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-400"

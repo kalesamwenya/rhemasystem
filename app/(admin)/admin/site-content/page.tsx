@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ImagePlus, LoaderCircle, X } from 'lucide-react';
 import { api, assetUrl } from '@/lib/api';
 import {
@@ -145,6 +145,7 @@ function ImageField({
 }) {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const upload = async (file?: File) => {
     if (!file) return;
@@ -197,20 +198,27 @@ function ImageField({
         </div>
       )}
       <div className="flex flex-wrap items-center gap-2">
-        <label className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 ${disabled || isUploading ? 'pointer-events-none opacity-50' : ''}`}>
+        <button
+          type="button"
+          disabled={disabled || isUploading}
+          onClick={() => fileInputRef.current?.click()}
+          className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+        >
           {isUploading ? <LoaderCircle size={15} className="animate-spin" /> : <ImagePlus size={15} />}
           {isUploading ? 'Uploading image...' : value ? 'Replace image' : 'Upload image'}
-          <input
-            type="file"
-            accept="image/jpeg,image/png,image/webp,image/gif"
-            disabled={disabled || isUploading}
-            className="sr-only"
-            onChange={(event) => {
-              void upload(event.currentTarget.files?.[0]);
-              event.currentTarget.value = '';
-            }}
-          />
-        </label>
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/gif"
+          disabled={disabled || isUploading}
+          className="sr-only"
+          onChange={(event) => {
+            const file = event.currentTarget.files?.[0];
+            event.currentTarget.value = '';
+            void upload(file);
+          }}
+        />
         <span className="text-xs text-slate-500">JPG, PNG, WEBP, or GIF · up to 8 MB</span>
       </div>
       {uploadError && <p role="alert" className="text-xs font-semibold text-red-700">{uploadError}</p>}
@@ -583,6 +591,15 @@ export default function WebsiteContentPage() {
   const currentManagedPage = Object.prototype.hasOwnProperty.call(MANAGED_PAGE_FIELDS, activeTab)
     ? activeTab as ManagedPageKey
     : null;
+  const contentTabs: [ContentTab, string][] = [
+    ['about', 'Home + About pages'],
+    ['team', 'Staff team'],
+    ['faculty', 'Faculty'],
+    ['testimonies', 'Testimonies'],
+    ['submissions', `Submissions (${submissions.length})`],
+    ['public-courses', 'Public courses'],
+    ...managedPageTabs.map(({ key, label }) => [key, label] as [ContentTab, string]),
+  ];
 
   if (isLoading) return <p role="status" className="py-10 text-sm text-slate-600">Loading website content...</p>;
   if (!hasLoaded) {
@@ -606,26 +623,24 @@ export default function WebsiteContentPage() {
       {error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">{error}</p>}
       {notice && <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">{notice}</p>}
 
-      <nav className="flex flex-wrap gap-2" aria-label="Website content sections">
-        {([
-          ['about', 'Home + About pages'],
-          ['team', 'Staff team'],
-          ['faculty', 'Faculty'],
-          ['testimonies', 'Testimonies'],
-          ['submissions', `Submissions (${submissions.length})`],
-          ['public-courses', 'Public courses'],
-          ...managedPageTabs.map(({ key, label }) => [key, label] as const),
-        ] as const).map(([tab, label]) => (
-          <button
-            key={tab}
-            type="button"
-            onClick={() => { setActiveTab(tab); setError(''); setNotice(''); }}
-            className={`rounded-xl px-4 py-2.5 text-sm font-bold ${activeTab === tab ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
-          >
-            {label}
-          </button>
-        ))}
-      </nav>
+      <div>
+        <label htmlFor="website-content-section" className="text-xs font-bold text-slate-600">Section</label>
+        <select
+          id="website-content-section"
+          value={activeTab}
+          onChange={(event) => {
+            const tab = contentTabs.find(([key]) => key === event.target.value)?.[0];
+            if (tab) {
+              setActiveTab(tab);
+              setError('');
+              setNotice('');
+            }
+          }}
+          className="mt-1 w-full max-w-md rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 outline-none focus:border-red-400"
+        >
+          {contentTabs.map(([tab, label]) => <option key={tab} value={tab}>{label}</option>)}
+        </select>
+      </div>
 
       {activeTab === 'public-courses' && (
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.8fr)]">

@@ -27,14 +27,11 @@ export type TeamMember = {
 };
 
 export const navLinks: NavLink[] = [
-  { href: "/", label: "Home" },
   { href: "/about", label: "About" },
-  { href: "/faculty", label: "Faculty" },
-  { href: "/offered-programs", label: "Academics" },
-  { href: "/apply", label: "Admissions" },
-  { href: "/community", label: "Community" },
-  { href: "/events", label: "Events" },
+  { href: "/offered-programs", label: "Programs" },
+  { href: "/fee-structure", label: "Fees" },
   { href: "/contact", label: "Contact" },
+  { href: "/events", label: "Events" },
 ];
 
 export const quickStats = [

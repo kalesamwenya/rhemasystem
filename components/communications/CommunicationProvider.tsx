@@ -75,7 +75,14 @@ const CommunicationContext = createContext<CommunicationContextValue>({
 export function CommunicationProvider({ children, enabled = true }: { children: React.ReactNode; enabled?: boolean }) {
   const [snapshot, setSnapshot] = useState(emptySnapshot);
   const [loading, setLoading] = useState(false);
-  const [soundsEnabled, setSoundsEnabled] = useState(true);
+  const [soundsEnabled, setSoundsEnabled] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    try {
+      return window.localStorage.getItem('rhema_communication_sounds') !== 'false';
+    } catch {
+      return true;
+    }
+  });
   const [error, setError] = useState('');
   const [retryKey, setRetryKey] = useState(0);
   const audioPlayers = useRef<Partial<Record<'chat' | 'notification', HTMLAudioElement>>>({});
@@ -84,14 +91,6 @@ export function CommunicationProvider({ children, enabled = true }: { children: 
   const previousMessages = useRef(new Map<number, number>());
   const refreshing = useRef(false);
   const pollingFailures = useRef(0);
-
-  useEffect(() => {
-    try {
-      setSoundsEnabled(window.localStorage.getItem('rhema_communication_sounds') !== 'false');
-    } catch {
-      setSoundsEnabled(true);
-    }
-  }, []);
 
   const toggleSounds = useCallback(() => {
     setSoundsEnabled((current) => {
@@ -280,9 +279,10 @@ export function CommunicationProvider({ children, enabled = true }: { children: 
   }, [enabled, refresh, retryKey]);
 
   useEffect(() => () => {
-    if (audioContext.current && audioContext.current.state !== 'closed') {
-      void audioContext.current.close();
-    }
+    Object.values(audioPlayers.current).forEach((audio) => {
+      audio?.pause();
+      if (audio) audio.src = '';
+    });
   }, []);
 
   const value = useMemo(() => ({
