@@ -13,6 +13,19 @@ export type PaymentReceiptData = {
   receipt_token: string;
 };
 
+export type OrderPaymentReceiptData = {
+  payer_name: string;
+  payer_email: string;
+  paid_for: string;
+  amount: number;
+  currency: string;
+  reference: string;
+  gateway: string;
+  gateway_transaction_id?: string | null;
+  created_at: string;
+  items?: Array<{ description: string; quantity?: number; amount?: number }>;
+};
+
 const escapeHtml = (value: string) =>
   value.replace(/[&<>"']/g, (character) => ({
     '&': '&amp;',
@@ -131,6 +144,69 @@ export async function downloadPaymentReceipt(payment: PaymentReceiptData): Promi
   const safeReference = payment.reference.replace(/[^a-z0-9_-]/gi, '-');
   link.href = url;
   link.download = `Rhema-Receipt-${safeReference}.pdf`;
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+export async function createOrderPaymentReceiptPdf(payment: OrderPaymentReceiptData): Promise<Blob> {
+  const { default: html2pdf } = await import('html2pdf.js');
+  const rows = (payment.items || []).map((item) => `
+    <tr>
+      <td>${escapeHtml(item.description)}</td>
+      <td style="text-align:right">${item.quantity ? String(item.quantity) : ''}</td>
+      <td style="text-align:right">${item.amount === undefined ? '' : escapeHtml(money(item.amount, payment.currency))}</td>
+    </tr>`).join('');
+  const receipt = document.createElement('div');
+  receipt.style.cssText = 'position:fixed;left:-10000px;top:0;width:760px;background:#fff;color:#0f172a;font-family:Arial,sans-serif;';
+  receipt.innerHTML = `
+    <article style="position:relative;min-height:1000px;overflow:hidden;padding:48px 52px;border:1px solid #dbe3ef">
+      <div style="position:absolute;top:40%;left:10%;z-index:0;color:rgba(30,58,138,.05);font-size:112px;font-weight:900;letter-spacing:12px;transform:rotate(-28deg)">PAID</div>
+      <div style="position:relative;z-index:1">
+        <header style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:4px solid #1e3a8a;padding-bottom:20px">
+          <div><p style="margin:0;color:#1e3a8a;font-size:13px;font-weight:900;letter-spacing:2px">RHEMA BIBLE SCHOOL</p><h1 style="margin:10px 0 0;font-size:27px">Official payment receipt</h1><p style="margin:6px 0 0;color:#64748b;font-size:12px">${escapeHtml(payment.paid_for)}</p></div>
+          <span style="padding:9px 13px;border-radius:20px;background:#dcfce7;color:#166534;font-size:10px;font-weight:900;letter-spacing:1px">PAID &amp; VERIFIED</span>
+        </header>
+        <section style="display:grid;grid-template-columns:1fr 1fr;gap:28px;padding:24px 0">
+          <div><p style="margin:0 0 8px;color:#64748b;font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase">Received from</p><strong style="font-size:16px">${escapeHtml(payment.payer_name)}</strong><p style="margin:5px 0;color:#475569;font-size:11px">${escapeHtml(payment.payer_email)}</p></div>
+          <div><p style="margin:0 0 8px;color:#64748b;font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase">Receipt details</p><p style="margin:0;color:#64748b;font-size:11px">Reference</p><strong style="font-family:monospace;font-size:11px;overflow-wrap:anywhere">${escapeHtml(payment.reference)}</strong><p style="margin:8px 0 0;color:#64748b;font-size:11px">Date received</p><strong style="font-size:11px">${escapeHtml(new Date(payment.created_at).toLocaleString())}</strong></div>
+        </section>
+        ${rows ? `<table style="width:100%;border-collapse:collapse;margin-top:10px"><thead><tr style="background:#1e3a8a;color:white;text-align:left;font-size:10px"><th style="padding:12px">Description</th><th style="padding:12px;text-align:right">Qty</th><th style="padding:12px;text-align:right">Amount</th></tr></thead><tbody>${rows}</tbody></table>` : ''}
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:22px;padding:18px 20px;background:#f8fafc;border-radius:10px"><strong style="font-size:11px;color:#475569">TOTAL RECEIVED</strong><strong style="font-size:23px;color:#1e3a8a">${escapeHtml(money(payment.amount, payment.currency))}</strong></div>
+        <section style="margin-top:28px;padding-top:20px;border-top:1px solid #e2e8f0"><p style="margin:0;font-size:11px;font-weight:800">Payment method: ${escapeHtml(payment.gateway || 'Rhema Bible School')}</p><p style="margin:6px 0 0;color:#64748b;font-size:10px">Provider transaction: ${escapeHtml(payment.gateway_transaction_id || 'Not supplied')}</p><p style="margin:22px 0 0;color:#64748b;font-size:10px;line-height:1.6">This receipt confirms payment received by Rhema Bible School for the item described above. Keep the reference for any payment enquiries.</p></section>
+      </div>
+      <footer style="position:absolute;bottom:20px;left:52px;right:52px;padding-top:12px;border-top:1px solid #e2e8f0;text-align:center;color:#94a3b8;font-size:9px">Rhema Bible School · This is a computer-generated receipt.</footer>
+    </article>`;
+
+  document.body.appendChild(receipt);
+  try {
+    const pdf = await html2pdf().set({
+      margin: 8,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+    }).from(receipt).outputPdf('blob');
+    if (!(pdf instanceof Blob)) throw new Error('The receipt PDF generator returned an invalid document.');
+    return pdf;
+  } finally {
+    receipt.remove();
+  }
+}
+
+export function openPaymentReceiptBlob(pdf: Blob, mode: 'view' | 'download', reference: string): void {
+  const url = URL.createObjectURL(pdf);
+  if (mode === 'view') {
+    const preview = window.open(url, '_blank');
+    if (!preview) {
+      URL.revokeObjectURL(url);
+      throw new Error('Allow pop-ups to open the receipt PDF.');
+    }
+    window.setTimeout(() => URL.revokeObjectURL(url), 10 * 60 * 1000);
+    return;
+  }
+
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `Rhema-Receipt-${reference.replace(/[^a-z0-9_-]/gi, '-')}.pdf`;
   link.click();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

@@ -24,6 +24,12 @@ The portal reads local Next.js settings from `.env.local`; start with `.env.exam
 
 The PHP API reads its settings from the PHP hosting environment, not from a `.env` file. Use `../php-api/.env.example` as the variable checklist and configure values in PHP-FPM, Apache, or the deployment platform. Do not commit production credentials.
 
+## Chat and account notifications
+
+The portal's role-scoped message center supports admin-to-admin, admin-to-lecturer, and Student Affairs admin-to-student conversations. It stores messages and unread state in `communications_*`; server-side participant checks apply to every request. In-app account notifications use the existing `rhema_notifications` table and link to relevant course, assessment, attendance, and event pages. Assignment submission and grading, quiz results, enrolment, published assessments, class schedule changes, attendance follow-ups, lecturer account changes, and registered event updates generate relevant notifications.
+
+The PHP database initializer creates the required tables automatically. If the PHP host is configured not to run the application initializer, import `../php-api/communications/createTables.sql` into the same database before deploying communications endpoints. Email delivery uses PHP outbound `mail()` and is enabled unless `NOTIFICATION_EMAIL_ENABLED=false`; configure `NOTIFICATION_EMAIL_FROM` (or reuse `PAYMENT_RECEIPT_FROM`) with a valid sender address and set `PORTAL_BASE_URL` for action links. Email delivery is best effort: a mail transport failure is logged and does not undo the in-app notification or the underlying operation.
+
 ## Attendance absence follow-ups
 
 Before enabling missed-session notifications, import `../php-api/attendance/createFollowupsTable.sql` into the school database. The PHP API stores sick-note attachments in the repository-level `private/attendance-notes` directory and serves them only through its authenticated admin download endpoint; keep that directory outside any public upload/static-file mapping.
@@ -39,6 +45,10 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 ## Course assessment reopen access
 
 The admin course assessment pages use `course_activity_overrides` to grant individual students an additional quiz, exam, or assignment attempt through a selected deadline. The PHP database initializer creates this table automatically; for manual schema deployments, import `../php-api/courses/createActivityOverrides.sql`.
+
+## Lecturer assignment marking
+
+Lecturers can select submission text to add saved highlights and comments, run local spelling/grammar/punctuation and Arial 14 pt format checks, and request an advisory AI review. The review includes a heuristic AI-likeness signal and confidence indicator; it cannot verify AI use or originality and must not be used alone to make academic-integrity decisions. The AI review sends the assignment brief, rubric, and selected student submission to OpenAI only when the lecturer presses the review button. It does not assign or save a grade. Configure `OPENAI_API_KEY` and, optionally, `OPENAI_MODEL` in the PHP server environment; never put the key in a `NEXT_PUBLIC_` variable or commit it. New assignment submissions default to Arial 14 pt, and students can choose a typeface and size in the editor.
 
 ## Social media and content calendar
 

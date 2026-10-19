@@ -26,6 +26,7 @@ type QuizData = {
     assessment_type: 'quiz' | 'exam';
     attempts: number;
     attempts_used: number;
+    best_score: number | null;
     pass_threshold_percent: number;
     passed: boolean;
     payment_required: boolean;
@@ -151,7 +152,7 @@ export default function CourseQuizPage() {
   const pageStartIndex = currentPageIndex * pageSize;
   const pageQuestions = quiz?.questions.slice(pageStartIndex, pageStartIndex + pageSize) ?? [];
   const canAttempt = Boolean(quiz?.quiz.attempt_started && quiz.questions.length > 0
-    && !quiz.quiz.payment_required && !quiz.quiz.passed && quiz.quiz.attempts_used < 3);
+    && !quiz.quiz.payment_required && !quiz.quiz.passed && quiz.quiz.attempts_used < quiz.quiz.attempts);
   const renderQuestionNavigation = () => (
     <div className="grid grid-cols-5 gap-2" aria-label="Question navigation">
       {quiz?.questions.map((question, index) => {
@@ -336,10 +337,13 @@ export default function CourseQuizPage() {
     </div>;
   }
 
-  if (quiz.quiz.passed || quiz.quiz.attempts_used >= 3) {
+  if (quiz.quiz.passed || quiz.quiz.attempts_used >= quiz.quiz.attempts) {
     return <div className="mx-auto max-w-2xl space-y-4 py-10">
-      <div role="status" className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 text-center text-sm text-emerald-900">
-        {quiz.quiz.passed ? 'You have passed this assessment. No further attempts are required.' : 'You have used all three attempts allowed for this assessment.'}
+      <div role={quiz.quiz.passed ? 'status' : 'alert'} className={`rounded-2xl border p-6 text-center ${quiz.quiz.passed ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>
+        {quiz.quiz.passed ? <CheckCircle2 className="mx-auto mb-3 h-8 w-8 text-emerald-700" /> : <AlertCircle className="mx-auto mb-3 h-8 w-8 text-amber-700" />}
+        <p className="text-sm font-bold">{quiz.quiz.passed ? 'You have passed this assessment.' : `You have used all ${quiz.quiz.attempts} attempts allowed for this assessment.`}</p>
+        {quiz.quiz.best_score !== null && <p className="mt-2 text-sm font-semibold">Best mark: {quiz.quiz.best_score} / {quiz.quiz.grade} · Pass mark: {quiz.quiz.pass_threshold_percent}%</p>}
+        {quiz.quiz.passed && <p className="mt-1 text-xs">No further attempts are required.</p>}
       </div>
     </div>;
   }
@@ -352,7 +356,8 @@ export default function CourseQuizPage() {
         <CreditCard className="mx-auto h-9 w-9 text-amber-700" />
         <div><h1 className="text-lg font-black text-slate-950">Payment required for access</h1>
           <p className="mt-2 text-sm leading-6 text-amber-950">{quiz.quiz.deadline_passed && quiz.quiz.attempts_used === 0 ? 'The deadline has passed; a payment is required before you can start this assessment.' : 'A retake fee is required before this assessment attempt can be opened.'}</p>
-          <p className="mt-2 text-xs font-bold text-amber-900">{quiz.quiz.attempts_used} of 3 attempts used · 60% pass mark</p>
+          <p className="mt-2 text-xs font-bold text-amber-900">{quiz.quiz.attempts_used} of {quiz.quiz.attempts} attempts used · {quiz.quiz.pass_threshold_percent}% pass mark</p>
+          {quiz.quiz.best_score !== null && <p className="mt-1 text-xs font-semibold text-amber-900">Best mark so far: {quiz.quiz.best_score} / {quiz.quiz.grade}</p>}
         </div>
         <p className="text-2xl font-black text-slate-950">{new Intl.NumberFormat('en-ZM', { style: 'currency', currency: quiz.quiz.payment_currency }).format(quiz.quiz.payment_amount)}</p>
         {quiz.quiz.payment_amount > 0 ? <button type="button" onClick={() => void payForAttempt()} disabled={paying || verifyingPayment} className="inline-flex items-center gap-2 rounded-xl bg-blue-900 px-5 py-3 text-xs font-black uppercase tracking-wider text-white disabled:opacity-50">
@@ -372,7 +377,7 @@ export default function CourseQuizPage() {
         <div>
           <h1 className="text-lg font-black text-slate-950">{quiz.quiz.name}</h1>
           <p className="mt-2 text-sm leading-6 text-slate-600">{quiz.quiz.intro.replace(/<[^>]*>/g, ' ')}</p>
-          <p className="mt-2 text-xs font-semibold text-slate-500">{quiz.quiz.timelimit > 0 ? `${quiz.quiz.timelimit} minutes` : 'No time limit'} · {quiz.quiz.attempts_used} of 3 attempts used</p>
+          <p className="mt-2 text-xs font-semibold text-slate-500">{quiz.quiz.timelimit > 0 ? `${quiz.quiz.timelimit} minutes` : 'No time limit'} · {quiz.quiz.attempts_used} of {quiz.quiz.attempts} attempts used · Pass mark {quiz.quiz.pass_threshold_percent}%</p>
         </div>
         <button type="button" onClick={() => void startAttempt()} disabled={startingAttempt} className="inline-flex items-center gap-2 rounded-xl bg-blue-900 px-5 py-3 text-xs font-black uppercase tracking-wider text-white disabled:opacity-50">
           {startingAttempt ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}

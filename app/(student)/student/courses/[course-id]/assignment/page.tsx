@@ -5,16 +5,28 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { AlertCircle, CheckCircle, Clock, CreditCard, FileText, Loader2, Send } from 'lucide-react';
 import { api } from '@/lib/api';
+import { assignmentTextParagraphs, splitAnnotatedText, type AssignmentAnnotation } from '@/lib/assignment-annotations';
 import { openFlutterwaveInlineCheckout, type FlutterwaveInlineCheckout } from '@/lib/flutterwave-inline';
 import 'react-quill-new/dist/quill.snow.css';
 
-const ReactQuill = dynamic(() => import('react-quill-new'), {
+const ReactQuill = dynamic(async () => {
+  const quillModule = await import('react-quill-new');
+  const fontFormat = quillModule.Quill.import('attributors/style/font') as { whitelist?: string[] };
+  fontFormat.whitelist = ['Arial', 'Times New Roman', 'Calibri'];
+  quillModule.Quill.register('attributors/style/font', fontFormat, true);
+  const sizeFormat = quillModule.Quill.import('attributors/style/size') as { whitelist?: string[] };
+  sizeFormat.whitelist = ['12pt', '14pt', '16pt'];
+  quillModule.Quill.register('attributors/style/size', sizeFormat, true);
+  return quillModule.default;
+}, {
   ssr: false,
   loading: () => <div className="flex min-h-64 items-center justify-center text-sm text-slate-500">Loading text editor...</div>,
 });
 
 const editorModules = {
   toolbar: [
+    [{ font: ['Arial', 'Times New Roman', 'Calibri'] }],
+    [{ size: ['12pt', '14pt', '16pt'] }],
     [{ header: [1, 2, 3, false] }],
     ['bold', 'italic', 'underline', 'blockquote'],
     [{ list: 'ordered' }, { list: 'bullet' }],
@@ -22,7 +34,7 @@ const editorModules = {
   ],
 };
 
-const editorFormats = ['header', 'bold', 'italic', 'underline', 'blockquote', 'list', 'bullet', 'link'];
+const editorFormats = ['font', 'size', 'header', 'bold', 'italic', 'underline', 'blockquote', 'list', 'bullet', 'link'];
 
 type AssignmentRecord = {
   id: number;
@@ -40,6 +52,12 @@ type AssignmentRecord = {
   submitted_at: string | null;
   submission_count: number;
   grading_rubric: { name: string; description: string; points: number }[];
+  student_grade: number | null;
+  lecturer_feedback: string;
+  lecturer_annotations: AssignmentAnnotation[];
+  graded_at: string | null;
+  passed: boolean;
+  can_resubmit: boolean;
   payment_required: boolean;
   payment_amount: number;
   payment_currency: string;
@@ -66,6 +84,7 @@ export default function AssignmentSubmissionPage() {
   const [notice, setNotice] = useState('');
   const [saved, setSaved] = useState(false);
   const handledReturn = useRef(false);
+  const submittedParagraphs = assignmentTextParagraphs(assignment?.submission_text);
 
   const loadAssignment = useCallback(async () => {
     if (!courseId || !assignmentId) return;
@@ -127,7 +146,7 @@ export default function AssignmentSubmissionPage() {
   }, [assignmentId, loadAssignment, searchParams]);
 
   const payForSubmission = async () => {
-    if (!assignment || paying) return;
+    if (!assignment || paying || !assignment.payment_required) return;
     setPaying(true);
     setError('');
     let paymentReference = '';
@@ -207,6 +226,12 @@ export default function AssignmentSubmissionPage() {
         submission_text: textSubmission,
         submitted_at: new Date().toISOString(),
         submission_count: current.submission_count + 1,
+        student_grade: null,
+        lecturer_feedback: '',
+        lecturer_annotations: [],
+        graded_at: null,
+        passed: false,
+        can_resubmit: false,
         payment_required: false,
         paid_access: false,
       } : current);
@@ -237,6 +262,55 @@ export default function AssignmentSubmissionPage() {
     {notice && <div role="status" className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-800"><CheckCircle className="h-4 w-4" />{notice}</div>}
     {saved && <div role="status" className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-800"><CheckCircle className="h-4 w-4" />Submission saved to your student record.</div>}
     {assignment.submitted_at && <p className="text-xs font-medium text-slate-500">Last submitted: {new Date(assignment.submitted_at).toLocaleString()}</p>}
+    {assignment.submission_text && <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div>
+        <h2 className="text-sm font-black text-slate-900">Your submission</h2>
+        <p className="mt-1 text-xs text-slate-500">Submitted {assignment.submitted_at ? new Date(assignment.submitted_at).toLocaleString() : '—'}</p>
+      </div>
+      <div className="whitespace-pre-wrap break-words rounded-xl bg-slate-50 p-4 text-sm leading-6 text-slate-700">
+        {submittedParagraphs.map((paragraph, paragraphIndex) => (
+          <p key={paragraphIndex} className="mb-3 last:mb-0">
+            {splitAnnotatedText(paragraph, paragraphIndex, assignment.lecturer_annotations).map((segment, segmentIndex) => {
+              if (!segment.annotations.length) return <span key={`${segmentIndex}-${segment.text}`}>{segment.text}</span>;
+              const comment = segment.annotations.find((annotation) => annotation.kind === 'comment' && annotation.comment);
+              return <mark
+                key={`${segmentIndex}-${segment.text}`}
+                title={comment?.comment || 'Lecturer highlight'}
+                className={`rounded px-0.5 ${comment ? 'bg-sky-200 text-slate-950 underline decoration-blue-700 decoration-2 underline-offset-2' : 'bg-yellow-200 text-slate-950'}`}
+                data-annotation-ids={segment.annotations.map((annotation) => annotation.id).join(' ')}
+              >{segment.text}</mark>;
+            })}
+          </p>
+        ))}
+      </div>
+    </section>}
+    {assignment.submission_count > 0 && <section className={`space-y-3 rounded-2xl border p-5 shadow-sm ${assignment.passed ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-white'}`}>
+      <div className="flex items-start gap-3">
+        {assignment.passed && <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-emerald-700" />}
+        <div>
+          <h2 className="text-sm font-black text-slate-900">{assignment.student_grade === null ? 'Awaiting lecturer marking' : assignment.passed ? 'Assignment passed' : 'Resubmission required'}</h2>
+          {assignment.student_grade !== null && <p className="mt-1 text-sm font-bold text-slate-800">Your mark: {assignment.student_grade} / {assignment.grade} · Pass mark: 60%</p>}
+          {assignment.graded_at && <p className="mt-1 text-xs text-slate-500">Marked {new Date(assignment.graded_at).toLocaleString()}</p>}
+        </div>
+      </div>
+      {assignment.lecturer_feedback && <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <h3 className="text-xs font-black uppercase tracking-wide text-slate-600">Lecturer feedback</h3>
+        <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{assignment.lecturer_feedback}</p>
+      </div>}
+      {assignment.lecturer_annotations.filter((annotation) => annotation.kind === 'comment' && annotation.comment).map((annotation) => (
+        <blockquote key={annotation.id} className="rounded-xl border-l-4 border-blue-500 bg-white p-4 text-sm text-slate-700">
+          {annotation.quote && <p className="font-semibold">“{annotation.quote}”</p>}
+          <p className={annotation.quote ? 'mt-2' : ''}>{annotation.comment}</p>
+          <button
+            type="button"
+            onClick={() => Array.from(document.querySelectorAll<HTMLElement>('[data-annotation-ids]'))
+              .find((element) => element.dataset.annotationIds?.split(' ').includes(annotation.id))
+              ?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+            className="mt-2 text-xs font-bold text-blue-700 underline underline-offset-2"
+          >View highlighted passage</button>
+        </blockquote>
+      ))}
+    </section>}
     {assignment.grading_rubric.length > 0 && (
       <section className="space-y-3 rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between gap-3">
@@ -268,10 +342,10 @@ export default function AssignmentSubmissionPage() {
           {verifyingPayment ? 'Verifying payment...' : paying ? 'Connecting to payment...' : 'Pay and unlock submission'}
         </button> : <p className="text-xs font-semibold text-red-800">The school has not set an assignment fee. Contact the school office.</p>}
       </section>
-    ) : (
+    ) : assignment.can_resubmit ? (
       <form onSubmit={(event) => void submit(event)} className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-        <div><label className="block text-xs font-bold uppercase tracking-wider text-slate-600">Assignment response</label><p className="mt-1 text-xs text-slate-500">Use the editor to format your answer. Changes are saved when you submit.</p></div>
-        <div className="overflow-hidden rounded-xl border border-slate-200 [&_.ql-container]:min-h-[280px] [&_.ql-editor]:text-sm [&_.ql-toolbar]:border-0 [&_.ql-toolbar]:border-b [&_.ql-toolbar]:border-slate-200 [&_.ql-toolbar]:bg-slate-50 [&_.ql-container]:border-0">
+        <div><label className="block text-xs font-bold uppercase tracking-wider text-slate-600">Assignment response</label><p className="mt-1 text-xs text-slate-500">Use the editor to format your answer. The default is Arial, 14 pt. Changes are saved when you submit.</p></div>
+        <div className="overflow-hidden rounded-xl border border-slate-200 [&_.ql-container]:min-h-[280px] [&_.ql-editor]:[font-family:Arial] [&_.ql-editor]:text-[14pt] [&_.ql-toolbar]:border-0 [&_.ql-toolbar]:border-b [&_.ql-toolbar]:border-slate-200 [&_.ql-toolbar]:bg-slate-50 [&_.ql-container]:border-0">
           <ReactQuill theme="snow" value={textSubmission} onChange={setTextSubmission} modules={editorModules} formats={editorFormats} readOnly={saving} placeholder="Write your assignment response..." />
         </div>
         {assignment.closed && <p className="text-xs font-semibold text-amber-800">This is a late submission. A paid late-submission authorization has unlocked the editor.</p>}
@@ -283,6 +357,10 @@ export default function AssignmentSubmissionPage() {
           </button>
         </div>
       </form>
-    )}
+    ) : assignment.submission_count > 0 && assignment.student_grade === null ? (
+      <p className="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-600">Your submitted work is locked while your lecturer reviews it.</p>
+    ) : assignment.passed ? (
+      <p className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-sm font-semibold text-emerald-900">You have passed this assignment. No resubmission is needed.</p>
+    ) : null}
   </div>;
 }

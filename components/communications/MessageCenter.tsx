@@ -246,7 +246,7 @@ export default function MessageCenter({ compact = false }: { compact?: boolean }
       }
       const delay = messagePollingFailures.current
         ? Math.min(10000 * (2 ** Math.min(messagePollingFailures.current - 1, 5)), 300000)
-        : 5000;
+        : 15000;
       timer = window.setTimeout(() => void poll(), delay);
     };
     const onVisibilityChange = () => {
@@ -540,7 +540,7 @@ export default function MessageCenter({ compact = false }: { compact?: boolean }
               <button type="button" onClick={() => compact ? showCompactList() : setSidebarOpen((open) => !open)} aria-label={compact || !sidebarOpen ? 'Show chats' : 'Hide chats sidebar'} className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">{compact ? 'People' : sidebarOpen ? 'Hide chats' : 'Chats'}</button>
               <div className="min-w-0">
                 <h2 className="truncate font-bold text-slate-900">{selectedConversation?.display_title || selectedContact?.name}</h2>
-                <p className="text-xs capitalize text-slate-500">{selectedConversation ? `${selectedConversation.conversation_type} conversation` : 'Student chat'}</p>
+                <p className="text-xs capitalize text-slate-500">{selectedConversation ? `${selectedConversation.conversation_type} conversation` : `${selectedContact?.role || 'direct'} conversation`}</p>
               </div>
             </div>
             <div ref={messagePaneRef} className="flex-1 space-y-3 overflow-y-auto p-5">

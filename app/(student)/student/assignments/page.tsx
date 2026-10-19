@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { AlertCircle, Clock, FileText, Loader2 } from 'lucide-react';
+import { AlertCircle, CheckCircle, Clock, FileText, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
 
 type Assignment = {
@@ -16,6 +16,9 @@ type Assignment = {
   maximum_grade: number;
   submission_type: string;
   submitted_at: string | null;
+  grade: number | null;
+  feedback: string;
+  passed: boolean;
 };
 
 type AssignmentsResponse = { data: Assignment[] };
@@ -60,6 +63,12 @@ export default function StudentAssignmentsPage() {
                       <span>Maximum grade: {assignment.maximum_grade}</span>
                       {assignment.submitted_at && <span>Submitted {new Date(assignment.submitted_at).toLocaleString()}</span>}
                     </div>
+                    {assignment.grade !== null && <p className={`mt-2 inline-flex items-center gap-1 text-xs font-bold ${assignment.passed ? 'text-emerald-700' : 'text-amber-800'}`}>
+                      {assignment.passed && <CheckCircle className="h-3.5 w-3.5" />}
+                      Mark: {assignment.grade} / {assignment.maximum_grade}{assignment.passed ? ' · Passed' : ' · Resubmission required'}
+                    </p>}
+                    {assignment.submitted_at && assignment.grade === null && <p className="mt-2 text-xs font-semibold text-slate-500">Awaiting lecturer marking</p>}
+                    {assignment.feedback && <p className="mt-2 text-xs leading-5 text-slate-600"><span className="font-bold text-slate-700">Lecturer feedback: </span>{assignment.feedback}</p>}
                     {assignment.deadline_passed && !assignment.submitted_at && <p className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-amber-700"><AlertCircle className="h-3.5 w-3.5" />Deadline passed</p>}
                   </div>
                 </div>

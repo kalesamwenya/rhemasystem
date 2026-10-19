@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { ArrowLeft, BookOpenCheck } from 'lucide-react';
-import AssignmentReader, { type SubmissionAnnotation } from '@/components/lecturer/AssignmentReader';
+import AssignmentReader, { type AssignmentAiReview, type SubmissionAnnotation } from '@/components/lecturer/AssignmentReader';
 import { api } from '@/lib/api';
 
 type Submission = {
@@ -67,6 +67,17 @@ export default function LecturerAssignmentSubmissionsPage() {
     setSelected(null);
   };
 
+  const reviewWithAi = async (): Promise<AssignmentAiReview> => {
+    if (!selected) throw new Error('Select a student submission before running the AI check.');
+    const response = await api.courses.checkAssignmentWithAI({
+      course_id: courseId,
+      assignment_id: assignmentId,
+      student_id: selected.student_id,
+    }) as { success?: boolean; message?: string; data?: AssignmentAiReview };
+    if (!response.success || !response.data) throw new Error(response.message || 'Unable to review this assignment with AI.');
+    return response.data;
+  };
+
   return (
     <div className="space-y-5">
       <header className="border-b border-slate-100 pb-5">
@@ -108,6 +119,7 @@ export default function LecturerAssignmentSubmissionsPage() {
         initialFeedback={selected.feedback ?? ''}
         initialAnnotations={selected.annotations}
         onSaveFeedback={saveMark}
+        onAiCheck={reviewWithAi}
       />}
     </div>
   );

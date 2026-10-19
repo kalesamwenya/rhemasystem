@@ -90,7 +90,8 @@ export function CommunicationProvider({ children, enabled = true }: { children: 
   const seenNotificationKeys = useRef(new Set<string>());
   const previousMessages = useRef(new Map<number, number>());
   const refreshing = useRef(false);
-  const pollingFailures = useRef(0);
+  const communicationsFailures = useRef(0);
+  const notificationFailures = useRef(0);
 
   const toggleSounds = useCallback(() => {
     setSoundsEnabled((current) => {
@@ -141,18 +142,40 @@ export function CommunicationProvider({ children, enabled = true }: { children: 
     if (!enabled || refreshing.current) return;
     refreshing.current = true;
     if (!initialized.current) setLoading(true);
+    let currentUser: { role?: string; id?: string | number } | null = null;
+    let currentUserError = '';
     try {
-      const result: Partial<CommunicationSnapshot> = await api.communications.snapshot();
-      pollingFailures.current = 0;
+      currentUser = JSON.parse(window.localStorage.getItem('rhema_user') || 'null');
+    } catch {
+      currentUserError = 'Your saved account information is unreadable. Sign out and sign in again to restore communications.';
+    }
+
+    const shouldLoadAccountNotifications = Boolean(currentUser && ['student', 'lecturer', 'admin'].includes(currentUser.role || ''));
+    try {
+      const [communicationsResult, accountResult] = await Promise.allSettled([
+        api.communications.snapshot() as Promise<Partial<CommunicationSnapshot>>,
+        shouldLoadAccountNotifications
+          ? Promise.resolve().then(() => api.notifications.myList()) as Promise<{ data?: CommunicationNotification[] }>
+          : Promise.resolve({ data: [] as CommunicationNotification[] }),
+      ]);
+      const communicationsSucceeded = communicationsResult.status === 'fulfilled';
+      communicationsFailures.current = communicationsSucceeded ? 0 : communicationsFailures.current + 1;
+      notificationFailures.current = accountResult.status === 'rejected'
+        ? notificationFailures.current + 1
+        : 0;
+
+      const result = communicationsSucceeded ? communicationsResult.value : {};
       const conversations = Array.isArray(result.conversations) ? result.conversations : [];
       const communicationsNotifications = Array.isArray(result.notifications) ? result.notifications : [];
-      let currentUser: { role?: string; id?: string | number } | null = null;
-      let currentUserError = '';
-      try {
-        currentUser = JSON.parse(window.localStorage.getItem('rhema_user') || 'null');
-      } catch {
-        currentUserError = 'Your saved account information is unreadable. Sign out and sign in again to restore communications.';
-      }
+      const accountNotifications = accountResult.status === 'fulfilled' && Array.isArray(accountResult.value.data)
+        ? accountResult.value.data.map((item) => ({ ...item, source: 'account' as const }))
+        : [];
+      const legacyUnread = accountNotifications.filter((item) => !item.read_at && !isChatNotification(item)).length;
+      const legacyLoadError = accountResult.status === 'rejected'
+        ? accountResult.reason instanceof Error
+          ? `Account notifications failed to load: ${accountResult.reason.message}`
+          : 'Account notifications failed to load.'
+        : '';
       const incomingMessage = conversations.some((conversation) => {
         const messageId = Number(conversation.last_message_id) || 0;
         const previousMessageId = previousMessages.current.get(conversation.id) || 0;
@@ -164,19 +187,6 @@ export function CommunicationProvider({ children, enabled = true }: { children: 
         const key = `communications:${notification.id}`;
         return !notification.read_at && !seenNotificationKeys.current.has(key);
       });
-      let accountNotifications: CommunicationNotification[] = [];
-      let legacyUnread = 0;
-      let legacyLoadError = '';
-      try {
-        if (currentUser && ['student', 'lecturer', 'admin'].includes(currentUser.role || '')) {
-          const legacyResult: { data?: CommunicationNotification[] } = await api.notifications.myList();
-          const source = Array.isArray(legacyResult.data) ? legacyResult.data : [];
-          accountNotifications = source.map((item: CommunicationNotification) => ({ ...item, source: 'account' }));
-          legacyUnread = accountNotifications.filter((item) => !item.read_at && !isChatNotification(item)).length;
-        }
-      } catch (cause) {
-        legacyLoadError = cause instanceof Error ? `Communications loaded, but account notifications failed to load: ${cause.message}` : 'Account notifications failed to load.';
-      }
       const allNotifications = [
         ...accountNotifications,
         ...communicationsNotifications.map((item) => ({ ...item, source: 'communications' as const })),
@@ -202,9 +212,15 @@ export function CommunicationProvider({ children, enabled = true }: { children: 
         unread_messages: Number(result.unread_messages) || 0,
         unread_notifications: (Number(result.unread_notifications) || 0) + legacyUnread,
       });
-      setError(currentUserError || legacyLoadError);
+      const communicationsError = communicationsResult.status === 'rejected'
+        ? communicationsResult.reason instanceof Error
+          ? `Messages failed to load: ${communicationsResult.reason.message}`
+          : 'Messages failed to load.'
+        : '';
+      setError(currentUserError || communicationsError || legacyLoadError);
     } catch (cause) {
-      pollingFailures.current += 1;
+      communicationsFailures.current += 1;
+      if (shouldLoadAccountNotifications) notificationFailures.current += 1;
       setError(cause instanceof Error ? cause.message : 'Unable to refresh communications.');
     } finally {
       refreshing.current = false;
@@ -213,7 +229,8 @@ export function CommunicationProvider({ children, enabled = true }: { children: 
   }, [enabled, playSound]);
 
   const retry = useCallback(async () => {
-    pollingFailures.current = 0;
+    communicationsFailures.current = 0;
+    notificationFailures.current = 0;
     setRetryKey((current) => current + 1);
   }, []);
 
@@ -254,18 +271,20 @@ export function CommunicationProvider({ children, enabled = true }: { children: 
     let active = true;
     const poll = async () => {
       if (!active) return;
-      if (pollingFailures.current >= 3) return;
+      if (communicationsFailures.current >= 3 && notificationFailures.current >= 3) return;
       if (document.visibilityState === 'visible') {
         await refresh();
       }
-      if (pollingFailures.current >= 3) return;
-      const delay = pollingFailures.current
-        ? Math.min(10000 * (2 ** Math.min(pollingFailures.current - 1, 5)), 300000)
-        : 5000;
+      if (communicationsFailures.current >= 3 && notificationFailures.current >= 3) return;
+      const failures = Math.max(communicationsFailures.current, notificationFailures.current);
+      const delay = failures
+        ? Math.min(10000 * (2 ** Math.min(failures - 1, 5)), 300000)
+        : 30000;
       timer = window.setTimeout(() => void poll(), delay);
     };
     const onVisibilityChange = () => {
-      if (document.visibilityState !== 'visible' || !active || pollingFailures.current >= 3) return;
+      if (document.visibilityState !== 'visible' || !active
+        || (communicationsFailures.current >= 3 && notificationFailures.current >= 3)) return;
       window.clearTimeout(timer);
       timer = window.setTimeout(() => void poll(), 0);
     };
