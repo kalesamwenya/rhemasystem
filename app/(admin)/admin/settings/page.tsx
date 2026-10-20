@@ -35,7 +35,8 @@ type SettingsState = {
     currency: string;
     secretKeyConfigured: boolean;
     publicKeyConfigured: boolean;
-    mode: 'test' | 'live';
+    credentialsMatch: boolean;
+    mode: 'test' | 'live' | 'unconfigured' | 'mismatched';
   };
 };
 
@@ -78,7 +79,8 @@ const initialState: SettingsState = {
     currency: 'ZMW',
     secretKeyConfigured: false,
     publicKeyConfigured: false,
-    mode: 'test',
+    credentialsMatch: false,
+    mode: 'unconfigured',
   },
 };
 
@@ -147,7 +149,8 @@ export default function SettingsHub() {
             currency: data.paymentGateway?.currency ?? 'ZMW',
             secretKeyConfigured: data.paymentGateway?.secretKeyConfigured ?? false,
             publicKeyConfigured: data.paymentGateway?.publicKeyConfigured ?? false,
-            mode: data.paymentGateway?.mode ?? 'test',
+            credentialsMatch: data.paymentGateway?.credentialsMatch ?? false,
+            mode: data.paymentGateway?.mode ?? 'unconfigured',
           },
         });
       } catch (error) {
@@ -360,6 +363,7 @@ export default function SettingsHub() {
   const renderPayments = () => {
     const secretReady = settings.paymentGateway.secretKeyConfigured;
     const publicKeyReady = settings.paymentGateway.publicKeyConfigured;
+    const credentialsMatch = settings.paymentGateway.credentialsMatch;
     return (
       <div className="space-y-5">
         <section className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
@@ -373,7 +377,7 @@ export default function SettingsHub() {
               </div>
             </div>
             <span className={`rounded-full px-3 py-1.5 text-xs font-bold ${settings.paymentGateway.enabled && secretReady && publicKeyReady ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
-              {settings.paymentGateway.enabled && secretReady && publicKeyReady ? 'Gateway enabled' : settings.paymentGateway.enabled ? 'Setup required' : 'Gateway disabled'}
+              {settings.paymentGateway.enabled && credentialsMatch ? 'Gateway enabled' : settings.paymentGateway.enabled ? 'Setup required' : 'Gateway disabled'}
             </span>
           </div>
 
@@ -427,13 +431,14 @@ export default function SettingsHub() {
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Server credentials</p>
               <h3 className="mt-1 text-base font-black text-slate-900">Secure Flutterwave connection</h3>
             </div>
-            <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${settings.paymentGateway.mode === 'live' ? 'bg-rose-100 text-rose-700' : 'bg-sky-100 text-sky-700'}`}>
-              {settings.paymentGateway.mode} mode
+            <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${settings.paymentGateway.mode === 'live' ? 'bg-rose-100 text-rose-700' : settings.paymentGateway.mode === 'test' ? 'bg-sky-100 text-sky-700' : 'bg-amber-100 text-amber-700'}`}>
+              {settings.paymentGateway.mode === 'unconfigured' ? 'keys missing' : settings.paymentGateway.mode === 'mismatched' ? 'keys mismatch' : `${settings.paymentGateway.mode} mode`}
             </span>
           </div>
           <div className="mt-4 space-y-2 text-sm">
             <p className="flex items-center gap-2 text-slate-700">{secretReady ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <XCircle className="h-4 w-4 text-rose-600" />} Flutterwave secret key {secretReady ? 'configured' : 'missing'}</p>
             <p className="flex items-center gap-2 text-slate-700">{publicKeyReady ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <XCircle className="h-4 w-4 text-rose-600" />} Flutterwave public key {publicKeyReady ? 'configured' : 'missing'}</p>
+            {settings.paymentGateway.mode === 'mismatched' && <p className="text-xs font-semibold text-rose-700">Use matching test keys or matching live keys. Checkout remains disabled until both key modes match.</p>}
           </div>
           <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-950">
             Checkout opens securely inside this portal. Configure matching <code className="font-bold">FLW_PUBLIC_KEY</code> and <code className="font-bold">FLW_SECRET_KEY</code> values in the PHP hosting environment. The public key is used only to open Flutterwave Inline Checkout; the secret key stays on the server for transaction verification. No checkout redirect URL is required. Use test keys for test mode and live keys only after successful test payments.

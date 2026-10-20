@@ -11,12 +11,11 @@ import SharedReportNotifications from './SharedReportNotifications';
 
 interface AdminHeaderProps {
   onMenuOpenClick: () => void;
-  sidebarWidth: number;
   admin: { name: string; email: string; admin_role: string; department: string };
   onSignOut: () => Promise<void>;
 }
 
-export default function AdminHeader({ onMenuOpenClick, sidebarWidth, admin, onSignOut }: AdminHeaderProps) {
+export default function AdminHeader({ onMenuOpenClick, admin, onSignOut }: AdminHeaderProps) {
   const [activeDropdown, setActiveDropdown] = useState<'notifications' | 'messages' | 'user' | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const canViewCommunications = canAccessAdminModule(admin.admin_role, admin.department, 'communications');
@@ -40,8 +39,7 @@ export default function AdminHeader({ onMenuOpenClick, sidebarWidth, admin, onSi
   return (
     <header
       ref={containerRef}
-      style={{ width: `calc(100% - ${sidebarWidth}px)` }}
-      className="fixed left-0 top-0 z-50 flex h-16 items-center justify-between gap-4 border-b border-[#dce3de] bg-[#ffffff]/95 px-4 md:left-[var(--sidebar-width)] md:w-[calc(100%-var(--sidebar-width))] md:px-7"
+      className="fixed left-0 top-0 z-50 flex h-16 w-full items-center justify-between gap-4 border-b border-[#dce3de] bg-white/95 px-4 backdrop-blur md:left-[var(--sidebar-width)] md:w-[calc(100%-var(--sidebar-width))] md:px-7"
     >
       
       <div className="flex items-center gap-3">
@@ -53,8 +51,8 @@ export default function AdminHeader({ onMenuOpenClick, sidebarWidth, admin, onSi
           <Menu className="h-4 w-4" />
         </button>
 
-        {canViewGlobalSearch && <div className="hidden h-9 w-64 items-center gap-2 border-b border-[#cbd6d0] bg-transparent px-1 md:flex md:w-96">
-          <Search className="h-4 w-4 text-[#68746e]" />
+        {canViewGlobalSearch && <div className="hidden h-10 w-64 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 transition focus-within:border-[#9ab2a6] focus-within:bg-white md:flex md:w-96">
+          <Search className="h-4 w-4 text-[#31584c]" />
           <input type="text" placeholder="Search people, courses, records" className="w-full bg-transparent text-sm text-[#17201d] outline-none placeholder:text-[#8a9690]" />
         </div>}
       </div>

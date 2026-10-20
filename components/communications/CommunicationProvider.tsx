@@ -168,7 +168,7 @@ export function CommunicationProvider({ children, enabled = true }: { children: 
       seenNotificationKeys.current = new Set(allNotifications.map((notification) => `${notification.source || 'communications'}:${notification.id}`));
       if (initialized.current) {
         if (incomingMessage) playSound('chat');
-        if (!incomingMessage && (incomingNotification || newUnreadNotification)) playSound('notification');
+        if (!incomingMessage && newUnreadNotification) playSound('notification');
       }
       initialized.current = true;
       previousMessages.current = new Map(conversations.map((conversation) => [

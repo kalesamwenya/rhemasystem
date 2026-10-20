@@ -162,7 +162,6 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         {/* Separated Header Node */}
         <AdminHeader
           onMenuOpenClick={() => setIsMobileOpen(true)}
-          sidebarWidth={sidebarWidth}
           admin={adminProfile}
           onSignOut={signOut}
         />
