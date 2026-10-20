@@ -1,5 +1,6 @@
 'use client';
 
+import { confirmWithApp } from '@/components/ui/app-dialogs';
 import Image from 'next/image';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ImagePlus, LoaderCircle, X } from 'lucide-react';
@@ -401,7 +402,7 @@ export default function WebsiteContentPage() {
   };
 
   const deletePublicCourse = async (course: PublicCourse) => {
-    if (!window.confirm(`Remove "${course.course}" from the public course catalog?`)) return;
+    if (!(await confirmWithApp(`Remove "${course.course}" from the public course catalog?`, { title: 'Remove public course?', confirmText: 'Remove', tone: 'danger' }))) return;
     setError('');
     setNotice('');
     try {
@@ -455,7 +456,7 @@ export default function WebsiteContentPage() {
 
   const deletePerson = async (kind: 'team' | 'faculty' | 'testimonial', id: number) => {
     const label = kind === 'team' ? 'team member' : kind === 'faculty' ? 'faculty profile' : 'testimony';
-    if (!window.confirm(`Delete this ${label}?`)) return;
+    if (!(await confirmWithApp(`Delete this ${label}?`, { title: `Delete ${label}?`, confirmText: 'Delete', tone: 'danger' }))) return;
     setError('');
     setNotice('');
     try {
@@ -487,7 +488,7 @@ export default function WebsiteContentPage() {
 
   const reviewSubmission = async (submission: TestimonySubmission, action: 'add' | 'dismiss') => {
     const actionText = action === 'add' ? 'add this submission as an unpublished draft' : 'dismiss this submission';
-    if (!window.confirm(`Are you sure you want to ${actionText}?`)) return;
+    if (!(await confirmWithApp(`Are you sure you want to ${actionText}?`, { title: 'Review testimony submission', confirmText: action === 'add' ? 'Add draft' : 'Dismiss', tone: action === 'dismiss' ? 'danger' : 'default' }))) return;
     setIsSaving(true);
     setError('');
     setNotice('');

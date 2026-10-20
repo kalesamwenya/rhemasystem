@@ -91,7 +91,6 @@ export function CommunicationProvider({ children, enabled = true }: { children: 
   const previousMessages = useRef(new Map<number, number>());
   const refreshing = useRef(false);
   const communicationsFailures = useRef(0);
-  const notificationFailures = useRef(0);
 
   const toggleSounds = useCallback(() => {
     setSoundsEnabled((current) => {
@@ -150,32 +149,11 @@ export function CommunicationProvider({ children, enabled = true }: { children: 
       currentUserError = 'Your saved account information is unreadable. Sign out and sign in again to restore communications.';
     }
 
-    const shouldLoadAccountNotifications = Boolean(currentUser && ['student', 'lecturer', 'admin'].includes(currentUser.role || ''));
     try {
-      const [communicationsResult, accountResult] = await Promise.allSettled([
-        api.communications.snapshot() as Promise<Partial<CommunicationSnapshot>>,
-        shouldLoadAccountNotifications
-          ? Promise.resolve().then(() => api.notifications.myList()) as Promise<{ data?: CommunicationNotification[] }>
-          : Promise.resolve({ data: [] as CommunicationNotification[] }),
-      ]);
-      const communicationsSucceeded = communicationsResult.status === 'fulfilled';
-      communicationsFailures.current = communicationsSucceeded ? 0 : communicationsFailures.current + 1;
-      notificationFailures.current = accountResult.status === 'rejected'
-        ? notificationFailures.current + 1
-        : 0;
-
-      const result = communicationsSucceeded ? communicationsResult.value : {};
+      const result = await api.communications.snapshot() as Partial<CommunicationSnapshot>;
+      communicationsFailures.current = 0;
       const conversations = Array.isArray(result.conversations) ? result.conversations : [];
-      const communicationsNotifications = Array.isArray(result.notifications) ? result.notifications : [];
-      const accountNotifications = accountResult.status === 'fulfilled' && Array.isArray(accountResult.value.data)
-        ? accountResult.value.data.map((item) => ({ ...item, source: 'account' as const }))
-        : [];
-      const legacyUnread = accountNotifications.filter((item) => !item.read_at && !isChatNotification(item)).length;
-      const legacyLoadError = accountResult.status === 'rejected'
-        ? accountResult.reason instanceof Error
-          ? `Account notifications failed to load: ${accountResult.reason.message}`
-          : 'Account notifications failed to load.'
-        : '';
+      const allNotifications = Array.isArray(result.notifications) ? result.notifications : [];
       const incomingMessage = conversations.some((conversation) => {
         const messageId = Number(conversation.last_message_id) || 0;
         const previousMessageId = previousMessages.current.get(conversation.id) || 0;
@@ -183,14 +161,6 @@ export function CommunicationProvider({ children, enabled = true }: { children: 
           && (conversation.last_message_sender_role !== currentUser?.role
             || String(conversation.last_message_sender_id) !== String(currentUser?.id));
       });
-      const incomingNotification = communicationsNotifications.some((notification) => {
-        const key = `communications:${notification.id}`;
-        return !notification.read_at && !seenNotificationKeys.current.has(key);
-      });
-      const allNotifications = [
-        ...accountNotifications,
-        ...communicationsNotifications.map((item) => ({ ...item, source: 'communications' as const })),
-      ];
       const newUnreadNotification = allNotifications.some((notification) => {
         const key = `${notification.source || 'communications'}:${notification.id}`;
         return !notification.read_at && !seenNotificationKeys.current.has(key);
@@ -210,17 +180,11 @@ export function CommunicationProvider({ children, enabled = true }: { children: 
         conversations,
         notifications: visibleNotifications,
         unread_messages: Number(result.unread_messages) || 0,
-        unread_notifications: (Number(result.unread_notifications) || 0) + legacyUnread,
+        unread_notifications: Number(result.unread_notifications) || 0,
       });
-      const communicationsError = communicationsResult.status === 'rejected'
-        ? communicationsResult.reason instanceof Error
-          ? `Messages failed to load: ${communicationsResult.reason.message}`
-          : 'Messages failed to load.'
-        : '';
-      setError(currentUserError || communicationsError || legacyLoadError);
+      setError(currentUserError);
     } catch (cause) {
       communicationsFailures.current += 1;
-      if (shouldLoadAccountNotifications) notificationFailures.current += 1;
       setError(cause instanceof Error ? cause.message : 'Unable to refresh communications.');
     } finally {
       refreshing.current = false;
@@ -230,17 +194,12 @@ export function CommunicationProvider({ children, enabled = true }: { children: 
 
   const retry = useCallback(async () => {
     communicationsFailures.current = 0;
-    notificationFailures.current = 0;
     setRetryKey((current) => current + 1);
   }, []);
 
   const markNotificationRead = useCallback(async (notification: CommunicationNotification) => {
     try {
-      if (notification.source === 'account') {
-        await api.notifications.markMyRead(notification.id);
-      } else {
-        await api.communications.markNotificationRead(notification.id);
-      }
+      await api.communications.markNotificationRead(notification.id, notification.source || 'communications');
       await refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to mark this notification as read.');
@@ -251,17 +210,11 @@ export function CommunicationProvider({ children, enabled = true }: { children: 
     const unreadNotifications = snapshot.notifications.filter((notification) => !notification.read_at);
     if (!unreadNotifications.length) return;
 
-    const accountUnread = unreadNotifications.some((notification) => notification.source === 'account');
-    const communicationsUnread = unreadNotifications.some((notification) => notification.source !== 'account');
-    const operations: Promise<unknown>[] = [];
-    if (accountUnread) operations.push(api.notifications.markMyAllRead());
-    if (communicationsUnread) operations.push(api.communications.markAllNotificationsRead());
-
-    const results = await Promise.allSettled(operations);
-    await refresh();
-    const failed = results.find((result) => result.status === 'rejected');
-    if (failed?.status === 'rejected') {
-      setError(failed.reason instanceof Error ? failed.reason.message : 'Unable to mark all notifications as read.');
+    try {
+      await api.communications.markAllNotificationsRead();
+      await refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to mark all notifications as read.');
     }
   }, [refresh, snapshot.notifications]);
 
@@ -271,12 +224,12 @@ export function CommunicationProvider({ children, enabled = true }: { children: 
     let active = true;
     const poll = async () => {
       if (!active) return;
-      if (communicationsFailures.current >= 3 && notificationFailures.current >= 3) return;
+      if (communicationsFailures.current >= 3) return;
       if (document.visibilityState === 'visible') {
         await refresh();
       }
-      if (communicationsFailures.current >= 3 && notificationFailures.current >= 3) return;
-      const failures = Math.max(communicationsFailures.current, notificationFailures.current);
+      if (communicationsFailures.current >= 3) return;
+      const failures = communicationsFailures.current;
       const delay = failures
         ? Math.min(10000 * (2 ** Math.min(failures - 1, 5)), 300000)
         : 30000;
@@ -284,7 +237,7 @@ export function CommunicationProvider({ children, enabled = true }: { children: 
     };
     const onVisibilityChange = () => {
       if (document.visibilityState !== 'visible' || !active
-        || (communicationsFailures.current >= 3 && notificationFailures.current >= 3)) return;
+        || communicationsFailures.current >= 3) return;
       window.clearTimeout(timer);
       timer = window.setTimeout(() => void poll(), 0);
     };

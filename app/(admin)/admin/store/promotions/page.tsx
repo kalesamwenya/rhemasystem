@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { ArrowLeft, CalendarClock, Image as ImageIcon, Pencil, Plus, Tag, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 import { api } from '@/lib/api';
+import { confirmWithApp } from '@/components/ui/app-dialogs';
 import { useInventory } from '@/lib/store-inventory';
 import { StorePromotion, useStorePromotions } from '@/lib/store-promotions';
 
@@ -53,7 +54,7 @@ export default function StorePromotionsPage() {
   };
 
   const remove = async (id: number) => {
-    if (!window.confirm('Delete this promotion?')) return;
+    if (!(await confirmWithApp('Delete this promotion?', { title: 'Delete promotion?', confirmText: 'Delete', tone: 'danger' }))) return;
     try {
       await api.promotions.remove(id);
       await refresh();

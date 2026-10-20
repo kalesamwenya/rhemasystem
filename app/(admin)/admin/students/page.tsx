@@ -11,6 +11,7 @@ import {
 import { api, assetUrl } from '@/lib/api';
 import { exportBrandedPdf } from '@/lib/branded-pdf';
 import type { PaymentReceiptData } from '@/lib/payment-receipt';
+import { confirmWithApp } from '@/components/ui/app-dialogs';
 
 // --- INITIAL DATASET ---
 type AdminStudent = { id: string; name: string; email: string; avatar?: string; department: string; gpa: string; status: string; paymentStatus?: string; registrationDate: string };
@@ -319,7 +320,7 @@ export default function StudentManagementPage() {
   };
 
   const handleDeleteRecord = async (id: string) => {
-    if (!confirm('Are you absolutely sure you want to purge this record from administrative ledgers?')) return;
+    if (!(await confirmWithApp('Are you absolutely sure you want to purge this record from administrative ledgers?', { title: 'Delete student record?', confirmText: 'Delete', tone: 'danger' }))) return;
     try {
       await api.students.remove(id);
       setStudents(students.filter(s => s.id !== id));

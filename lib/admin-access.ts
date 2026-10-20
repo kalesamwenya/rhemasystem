@@ -1,6 +1,7 @@
-export type AdminRole = 'owner' | 'administrator' | 'finance' | 'academic' | 'registrar' | 'support';
+export type AdminRole = 'owner' | 'administrator' | 'finance' | 'academic' | 'registrar' | 'support' | 'operations';
 export type AdminModule =
   | 'dashboard'
+  | 'reports'
   | 'admissions'
   | 'students'
   | 'people'
@@ -24,7 +25,7 @@ export type AdminModule =
   | 'tasks';
 
 const allModules: AdminModule[] = [
-  'dashboard', 'admissions', 'students', 'people', 'student-affairs', 'academics',
+  'dashboard', 'reports', 'admissions', 'students', 'people', 'student-affairs', 'academics',
   'communications', 'contact-messages', 'chatbot', 'social-media', 'events', 'store', 'help-desk', 'tasks',
   'statistics', 'analysis', 'performance', 'finance', 'schedule', 'library', 'profile', 'settings',
 ];
@@ -32,17 +33,19 @@ const allModules: AdminModule[] = [
 const roleModules: Record<AdminRole, AdminModule[]> = {
   owner: allModules,
   administrator: allModules,
-  finance: ['dashboard', 'finance', 'store', 'statistics', 'communications', 'profile', 'tasks'],
-  academic: ['academics', 'student-affairs', 'schedule', 'library', 'communications', 'profile', 'tasks'],
-  registrar: ['admissions', 'students', 'people', 'events', 'communications', 'profile', 'tasks'],
-  support: ['communications', 'contact-messages', 'chatbot', 'social-media', 'help-desk', 'profile', 'tasks'],
+  finance: ['dashboard', 'reports', 'finance', 'store', 'communications', 'profile', 'tasks'],
+  academic: ['dashboard', 'reports', 'academics', 'student-affairs', 'schedule', 'library', 'communications', 'profile', 'tasks'],
+  registrar: ['dashboard', 'reports', 'admissions', 'students', 'people', 'events', 'student-affairs', 'communications', 'profile', 'tasks'],
+  support: ['dashboard', 'reports', 'communications', 'contact-messages', 'chatbot', 'social-media', 'help-desk', 'profile', 'tasks'],
+  operations: ['dashboard', 'reports', 'events', 'schedule', 'tasks', 'profile'],
 };
 
 const departmentAliases: Record<Exclude<AdminRole, 'owner' | 'administrator'>, string[]> = {
   finance: ['finance', 'financial', 'account', 'accounts', 'bursar', 'payments'],
-  academic: ['academic', 'academics', 'education', 'lecturer', 'faculty', 'student affairs', 'student services'],
-  registrar: ['registrar', 'admissions', 'admission', 'records', 'enrollment', 'enrolment'],
-  support: ['support', 'communications', 'communication', 'marketing', 'information technology', 'it', 'help desk'],
+  academic: ['academic', 'academics', 'education', 'lecturer', 'faculty', 'dean'],
+  registrar: ['registrar', 'admissions', 'admission', 'records', 'enrollment', 'enrolment', 'student affairs', 'student services'],
+  support: ['support', 'communications', 'communication', 'marketing', 'media', 'information technology', 'it', 'help desk'],
+  operations: ['operations', 'operation', 'facilities'],
 };
 
 function departmentMatchesRole(department: string, role: AdminRole): boolean {
@@ -67,6 +70,7 @@ export function canAccessAdminModule(roleValue: string, department: string, modu
 
 export function getAdminModuleForPath(pathname: string): AdminModule {
   if (pathname === '/admin') return 'dashboard';
+  if (pathname.startsWith('/admin/reports')) return 'reports';
   if (pathname.startsWith('/admin/admissions')) return 'admissions';
   if (pathname.startsWith('/admin/students')) return 'students';
   if (pathname.startsWith('/admin/people')) return 'people';
@@ -95,10 +99,11 @@ export function getAdminModuleForPath(pathname: string): AdminModule {
 
 export function getAdminLandingPath(roleValue: string): string {
   switch (normalizeAdminRole(roleValue)) {
-    case 'finance': return '/admin/payments';
-    case 'academic': return '/admin/courses';
-    case 'registrar': return '/admin/admissions';
-    case 'support': return '/admin/communications';
+    case 'finance':
+    case 'academic':
+    case 'registrar':
+    case 'support':
+    case 'operations': return '/admin';
     default: return '/admin';
   }
 }

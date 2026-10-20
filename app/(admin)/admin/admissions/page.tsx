@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowDown, ArrowLeft, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardCheck, Copy, CreditCard, Eye, Filter, Search, ShieldCheck } from 'lucide-react';
+import { ArrowDown, ArrowLeft, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardCheck, Copy, CreditCard, Eye, Filter, RefreshCw, Search, ShieldCheck } from 'lucide-react';
 import { api, assetUrl } from '@/lib/api';
 
 type Recommendation = {
@@ -136,8 +136,8 @@ export default function AdmissionsPage() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
-  const loadApplications = useCallback(async () => {
-    setLoading(true);
+  const loadApplications = useCallback(async (quiet = false) => {
+    if (!quiet) setLoading(true);
     try {
       const response = await api.admissions.list() as ApiResponse<ApplicationRecord[]>;
       if (!response.success || !response.data) throw new Error(response.message ?? 'Unable to load admissions applications.');
@@ -155,6 +155,14 @@ export default function AdmissionsPage() {
     const timer = window.setTimeout(() => { void loadApplications(); }, 0);
     return () => window.clearTimeout(timer);
   }, [loadApplications]);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    const timer = window.setInterval(() => {
+      if (!document.hidden) void loadApplications(true);
+    }, 30000);
+    return () => window.clearInterval(timer);
+  }, [loadApplications, selectedId]);
 
   const programs = useMemo(() => Array.from(new Set(applications.map((item) => item.program).filter(Boolean))).sort(), [applications]);
   const filtered = useMemo(() => applications
@@ -266,7 +274,10 @@ export default function AdmissionsPage() {
     <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
       <div><p className="admin-kicker">Admissions control</p><h1 className="mt-2 text-3xl font-black">{selected ? 'Application details' : 'Application review'}</h1><p className="mt-1 text-sm text-[#68746e]">{selected ? 'Review the complete application, recommendations, and admission decision.' : 'Search, filter, sort and open submitted applications for a full review.'}</p></div>
       {selected
-        ? <button type="button" onClick={returnToApplications} className="inline-flex items-center gap-2 self-start rounded-xl border border-[#dce3de] bg-white px-4 py-2.5 text-xs font-black uppercase tracking-wide text-slate-700 hover:bg-slate-50"><ArrowLeft className="h-4 w-4" /> All applications</button>
+        ? <div className="flex flex-wrap gap-2 self-start">
+          <button type="button" onClick={() => void loadApplications()} className="inline-flex items-center gap-2 rounded-xl border border-[#dce3de] bg-white px-4 py-2.5 text-xs font-black uppercase tracking-wide text-slate-700 hover:bg-slate-50"><RefreshCw className="h-4 w-4" /> Refresh application</button>
+          <button type="button" onClick={returnToApplications} className="inline-flex items-center gap-2 rounded-xl border border-[#dce3de] bg-white px-4 py-2.5 text-xs font-black uppercase tracking-wide text-slate-700 hover:bg-slate-50"><ArrowLeft className="h-4 w-4" /> All applications</button>
+        </div>
         : <div className="flex items-center gap-2 rounded-xl border border-[#dce3de] bg-white px-3 py-2"><Search className="h-4 w-4 text-[#68746e]" /><input value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Search name, email, ID, or details" className="w-64 bg-transparent text-sm outline-none" /></div>}
     </div>
 

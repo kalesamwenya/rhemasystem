@@ -1,5 +1,6 @@
 'use client';
 
+import { confirmWithApp } from '@/components/ui/app-dialogs';
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
@@ -180,7 +181,7 @@ export default function StoreManagementPage() {
   };
 
   const removeProduct = async (id: string) => {
-    if (!window.confirm('Delete this product and its variants?')) return;
+    if (!(await confirmWithApp('Delete this product and its variants?', { title: 'Delete product?', confirmText: 'Delete', tone: 'danger' }))) return;
     try {
       await api.store.remove(id);
       setInventory((current) => current.filter((product) => product.id !== id));

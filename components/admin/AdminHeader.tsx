@@ -7,6 +7,7 @@ import { Menu, Search } from 'lucide-react';
 import AdminUserDropdown from './AdminUserDropdown';
 import { canAccessAdminModule } from '@/lib/admin-access';
 import CommunicationDropdown from '@/components/communications/CommunicationDropdown';
+import SharedReportNotifications from './SharedReportNotifications';
 
 interface AdminHeaderProps {
   onMenuOpenClick: () => void;
@@ -19,6 +20,7 @@ export default function AdminHeader({ onMenuOpenClick, sidebarWidth, admin, onSi
   const [activeDropdown, setActiveDropdown] = useState<'notifications' | 'messages' | 'user' | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const canViewCommunications = canAccessAdminModule(admin.admin_role, admin.department, 'communications');
+  const canViewReportNotifications = canAccessAdminModule(admin.admin_role, admin.department, 'reports');
   const canViewGlobalSearch = ['owner', 'administrator'].includes(admin.admin_role.toLowerCase());
 
   useEffect(() => {
@@ -58,6 +60,7 @@ export default function AdminHeader({ onMenuOpenClick, sidebarWidth, admin, onSi
       </div>
 
       <div className="flex items-center gap-2">
+        {canViewReportNotifications && !canViewCommunications && <SharedReportNotifications />}
         {canViewCommunications && <>
           <CommunicationDropdown
             kind="notifications"

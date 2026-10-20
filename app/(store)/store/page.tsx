@@ -7,6 +7,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Check,
+  Download,
   Minus,
   Plus,
   Search,
@@ -21,8 +22,9 @@ import { useStore, type StoreProduct } from "@/components/store/StoreContext";
 import { consumeInventory, useInventory } from "@/lib/store-inventory";
 import { useStorePromotions } from "@/lib/store-promotions";
 import { api } from "@/lib/api";
-import { assetUrl } from "@/lib/api";
+import { assetUrl, uploadPdfDocument } from "@/lib/api";
 import { openFlutterwaveInlineCheckout, type FlutterwaveInlineCheckout } from "@/lib/flutterwave-inline";
+import { createOrderPaymentReceiptPdf, openPaymentReceiptBlob } from "@/lib/payment-receipt";
 
 const deliveryOptions = ["School pickup", "Home delivery within city", "Regional delivery", "Courier dispatch"];
 const paymentMethods = [
@@ -50,6 +52,8 @@ function StorePageContent() {
   const [checkoutComplete, setCheckoutComplete] = useState(false);
   const [checkoutError, setCheckoutError] = useState("");
   const [purchaseReference, setPurchaseReference] = useState("");
+  const [receiptPdf, setReceiptPdf] = useState<Blob | null>(null);
+  const [receiptUploadError, setReceiptUploadError] = useState("");
   const [cartOpen, setCartOpen] = useState(true);
   const [itemsConfirmed, setItemsConfirmed] = useState(false);
   const [formData, setFormData] = useState({
@@ -165,7 +169,7 @@ function StorePageContent() {
     setCheckoutError("");
     let pendingOnlineReference = "";
     try {
-      const result: { data?: FlutterwaveInlineCheckout & { purchase_reference: string } } = await api.purchases.create({
+      const result: { data?: FlutterwaveInlineCheckout & { purchase_reference: string; discount_amount?: number } } = await api.purchases.create({
         customer: {
           name: formData.fullName,
           phone: formData.phone,
@@ -176,11 +180,13 @@ function StorePageContent() {
         },
         items: cart.map((item) => ({ product_id: item.id, variant_id: item.inventoryVariantId, quantity: item.quantity })),
       });
-      if (!result.data?.purchase_reference) throw new Error("The store did not return a valid purchase reference.");
-      const purchaseReference = result.data.purchase_reference;
-      const completeOrder = () => {
+      const checkout = result.data;
+      if (!checkout?.purchase_reference) throw new Error("The store did not return a valid purchase reference.");
+      const purchaseReference = checkout.purchase_reference;
+      const completeOrder = (receipt?: Blob | null) => {
         setInventory((current) => consumeInventory(current, cart.map((item) => ({ productId: item.id, color: item.selectedColor, size: item.selectedSize, quantity: item.quantity }))));
         setPurchaseReference(purchaseReference);
+        setReceiptPdf(receipt || null);
         clearCart();
         setCheckoutComplete(true);
         setCheckoutOpen(false);
@@ -192,11 +198,11 @@ function StorePageContent() {
         return;
       }
       pendingOnlineReference = purchaseReference;
-      if (!Number.isFinite(result.data.amount) || result.data.amount <= 0) {
+      if (!Number.isFinite(checkout.amount) || checkout.amount <= 0) {
         throw new Error("The online purchase total must be greater than zero.");
       }
 
-      await openFlutterwaveInlineCheckout(result.data, async (transaction) => {
+      await openFlutterwaveInlineCheckout(checkout, async (transaction) => {
         if (transaction.status !== "successful") {
           try {
             await api.purchases.cancelPending(purchaseReference);
@@ -217,7 +223,45 @@ function StorePageContent() {
         }
         try {
           await api.purchases.verifyPayment(transactionId, purchaseReference);
-          completeOrder();
+          let receipt: Blob | null = null;
+          try {
+            receipt = await createOrderPaymentReceiptPdf({
+              category: "Store purchase",
+              payer_name: formData.fullName,
+              payer_email: formData.email,
+              payer_phone: formData.phone,
+              paid_for: "School store order",
+              amount: Number(checkout.amount),
+              currency: checkout.currency || "GHS",
+              reference: purchaseReference,
+              gateway: "Flutterwave",
+              gateway_transaction_id: transactionId,
+              created_at: new Date().toISOString(),
+              items: [
+                ...cart.map((item) => ({
+                  description: `${item.name}${item.selectedColor || item.selectedSize ? ` (${[item.selectedColor, item.selectedSize].filter(Boolean).join(" / ")})` : ""}`,
+                  quantity: item.quantity,
+                  amount: item.priceValue * item.quantity,
+                })),
+                ...(Number(checkout.discount_amount || 0) > 0
+                  ? [{ description: "Promotion discount", amount: -Number(checkout.discount_amount) }]
+                  : []),
+              ],
+            });
+            setReceiptUploadError("");
+            await uploadPdfDocument(
+              receipt,
+              "receipts",
+              `Rhema-Store-Receipt-${purchaseReference}.pdf`,
+              purchaseReference,
+              "receipt",
+              transactionId,
+              "store",
+            );
+          } catch (receiptError) {
+            setReceiptUploadError(`Payment was confirmed, but the receipt could not be saved: ${receiptError instanceof Error ? receiptError.message : "Please contact the school office."}`);
+          }
+          completeOrder(receipt);
         } catch (error) {
           setCheckoutError(error instanceof Error
             ? `${error.message} Keep your purchase reference ${purchaseReference}; do not pay again until the order status is checked.`
@@ -256,6 +300,8 @@ function StorePageContent() {
   const resetCheckout = () => {
     setCheckoutComplete(false);
     setCheckoutError("");
+    setReceiptUploadError("");
+    setReceiptPdf(null);
     setPurchaseReference("");
     setItemsConfirmed(false);
     setCheckoutSubmitting(false);
@@ -614,6 +660,12 @@ function StorePageContent() {
               Thank you, {formData.fullName || "student"}. Your Godfrey Academy merchandise order has been confirmed and will be processed shortly.
             </p>
             {purchaseReference && <p className="mt-4 font-mono text-xs font-bold uppercase tracking-wider text-slate-500">Receipt {purchaseReference}</p>}
+            {receiptUploadError && <p role="alert" className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-left text-xs leading-5 text-amber-800">{receiptUploadError}</p>}
+            {receiptPdf && purchaseReference && <button
+              type="button"
+              onClick={() => openPaymentReceiptBlob(receiptPdf, "download", purchaseReference)}
+              className="mt-4 inline-flex items-center justify-center gap-2 rounded-full border border-red-200 px-5 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-50"
+            ><Download size={16} /> Download branded receipt</button>}
             <button
               type="button"
               onClick={() => {

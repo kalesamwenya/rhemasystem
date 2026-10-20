@@ -1,3 +1,5 @@
+import { api, uploadPdfDocument } from '@/lib/api';
+
 export type PaymentReceiptData = {
   student_name: string;
   student_id: string;
@@ -14,8 +16,10 @@ export type PaymentReceiptData = {
 };
 
 export type OrderPaymentReceiptData = {
+  category?: string;
   payer_name: string;
   payer_email: string;
+  payer_phone?: string;
   paid_for: string;
   amount: number;
   currency: string;
@@ -123,6 +127,62 @@ export async function createPaymentReceiptPdf(payment: PaymentReceiptData): Prom
   }
 }
 
+export async function uploadVerifiedStudentPaymentReceipt(reference: string, transactionId: string): Promise<Blob> {
+  const response = await api.students.myBilling() as {
+    data: {
+      student: { student_id: string; name: string; cohort: string };
+      transactions: Array<{
+        entry_type: string;
+        status: string;
+        description: string;
+        term: string;
+        amount: number;
+        currency: string;
+        reference: string;
+        gateway: string;
+        gateway_transaction_id?: string | null;
+        receipt_token?: string | null;
+        receipt_path?: string | null;
+        created_at: string;
+      }>;
+    };
+  };
+  const transaction = response.data.transactions.find((item) =>
+    item.reference === reference && item.entry_type === 'payment' && item.status === 'paid'
+  );
+  if (!transaction?.receipt_token) {
+    throw new Error('The confirmed payment does not have verified receipt details yet.');
+  }
+
+  const payment: PaymentReceiptData = {
+    student_name: response.data.student.name,
+    student_id: response.data.student.student_id,
+    cohort: response.data.student.cohort,
+    paid_for: transaction.description,
+    term: transaction.term,
+    amount: transaction.amount,
+    currency: transaction.currency,
+    reference: transaction.reference,
+    gateway: transaction.gateway,
+    gateway_transaction_id: transaction.gateway_transaction_id || null,
+    created_at: transaction.created_at,
+    receipt_token: transaction.receipt_token,
+  };
+  const pdf = await createPaymentReceiptPdf(payment);
+  if (!transaction.receipt_path) {
+    await uploadPdfDocument(
+      pdf,
+      'receipts',
+      `Rhema-Receipt-${reference.replace(/[^a-z0-9_-]/gi, '-')}.pdf`,
+      reference,
+      'receipt',
+      transaction.gateway_transaction_id || transactionId,
+      'student',
+    );
+  }
+  return pdf;
+}
+
 export async function viewPaymentReceipt(payment: PaymentReceiptData): Promise<void> {
   const preview = window.open('about:blank', '_blank');
   if (!preview) throw new Error('Allow pop-ups to open the receipt preview.');
@@ -167,9 +227,10 @@ export async function createOrderPaymentReceiptPdf(payment: OrderPaymentReceiptD
           <span style="padding:9px 13px;border-radius:20px;background:#dcfce7;color:#166534;font-size:10px;font-weight:900;letter-spacing:1px">PAID &amp; VERIFIED</span>
         </header>
         <section style="display:grid;grid-template-columns:1fr 1fr;gap:28px;padding:24px 0">
-          <div><p style="margin:0 0 8px;color:#64748b;font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase">Received from</p><strong style="font-size:16px">${escapeHtml(payment.payer_name)}</strong><p style="margin:5px 0;color:#475569;font-size:11px">${escapeHtml(payment.payer_email)}</p></div>
-          <div><p style="margin:0 0 8px;color:#64748b;font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase">Receipt details</p><p style="margin:0;color:#64748b;font-size:11px">Reference</p><strong style="font-family:monospace;font-size:11px;overflow-wrap:anywhere">${escapeHtml(payment.reference)}</strong><p style="margin:8px 0 0;color:#64748b;font-size:11px">Date received</p><strong style="font-size:11px">${escapeHtml(new Date(payment.created_at).toLocaleString())}</strong></div>
+          <div><p style="margin:0 0 8px;color:#64748b;font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase">Received from</p><strong style="font-size:16px">${escapeHtml(payment.payer_name)}</strong><p style="margin:5px 0;color:#475569;font-size:11px">${escapeHtml(payment.payer_email)}</p>${payment.payer_phone ? `<p style="margin:5px 0;color:#475569;font-size:11px">${escapeHtml(payment.payer_phone)}</p>` : ''}</div>
+          <div><p style="margin:0 0 8px;color:#64748b;font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase">Receipt details</p><p style="margin:0;color:#64748b;font-size:11px">Category</p><strong style="font-size:11px">${escapeHtml(payment.category || payment.paid_for)}</strong><p style="margin:7px 0 0;color:#64748b;font-size:11px">Reference</p><strong style="font-family:monospace;font-size:11px;overflow-wrap:anywhere">${escapeHtml(payment.reference)}</strong><p style="margin:8px 0 0;color:#64748b;font-size:11px">Date received</p><strong style="font-size:11px">${escapeHtml(new Date(payment.created_at).toLocaleString())}</strong></div>
         </section>
+        <p style="margin:0;color:#475569;font-size:11px"><strong>Paid for:</strong> ${escapeHtml(payment.paid_for)}</p>
         ${rows ? `<table style="width:100%;border-collapse:collapse;margin-top:10px"><thead><tr style="background:#1e3a8a;color:white;text-align:left;font-size:10px"><th style="padding:12px">Description</th><th style="padding:12px;text-align:right">Qty</th><th style="padding:12px;text-align:right">Amount</th></tr></thead><tbody>${rows}</tbody></table>` : ''}
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:22px;padding:18px 20px;background:#f8fafc;border-radius:10px"><strong style="font-size:11px;color:#475569">TOTAL RECEIVED</strong><strong style="font-size:23px;color:#1e3a8a">${escapeHtml(money(payment.amount, payment.currency))}</strong></div>
         <section style="margin-top:28px;padding-top:20px;border-top:1px solid #e2e8f0"><p style="margin:0;font-size:11px;font-weight:800">Payment method: ${escapeHtml(payment.gateway || 'Rhema Bible School')}</p><p style="margin:6px 0 0;color:#64748b;font-size:10px">Provider transaction: ${escapeHtml(payment.gateway_transaction_id || 'Not supplied')}</p><p style="margin:22px 0 0;color:#64748b;font-size:10px;line-height:1.6">This receipt confirms payment received by Rhema Bible School for the item described above. Keep the reference for any payment enquiries.</p></section>

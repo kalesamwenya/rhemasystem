@@ -17,6 +17,7 @@ import {
   X,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { confirmWithApp } from '@/components/ui/app-dialogs';
 
 type TaskStatus = 'todo' | 'in_progress' | 'completed';
 type TaskPriority = 'low' | 'normal' | 'high';
@@ -249,7 +250,7 @@ export default function AdminTasksPage() {
   };
 
   const deleteTask = async (task: AdminTask) => {
-    if (!window.confirm(`Delete "${task.title}"? This cannot be undone.`)) return;
+    if (!(await confirmWithApp(`Delete "${task.title}"? This cannot be undone.`, { title: 'Delete task?', confirmText: 'Delete', tone: 'danger' }))) return;
     setDeletingTaskId(task.id);
     setError('');
     try {

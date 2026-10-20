@@ -45,8 +45,6 @@ export default function LecturerLoginPage() {
         throw new Error('The sign-in service returned an invalid lecturer session.');
       }
 
-      window.sessionStorage.setItem('rhema_access_token', response.access_token!);
-      window.sessionStorage.setItem('rhema_access_token_expires_at', String(Date.now() + response.expires_in! * 1000));
       window.localStorage.setItem('rhema_user', JSON.stringify(user));
       window.location.assign('/lecturer');
     } catch (submitError) {

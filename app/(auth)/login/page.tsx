@@ -40,8 +40,6 @@ export default function LoginPage() {
         || (response.expires_in || 0) <= 0) {
         throw new Error('The sign-in service returned an invalid session. Please try again or contact the school office.');
       }
-      window.sessionStorage.setItem('rhema_access_token', response.access_token!);
-      window.sessionStorage.setItem('rhema_access_token_expires_at', String(Date.now() + response.expires_in! * 1000));
       window.localStorage.setItem('rhema_user', JSON.stringify(response.user));
       const requestedPath = new URLSearchParams(window.location.search).get('next');
       let returnPath = '/student';

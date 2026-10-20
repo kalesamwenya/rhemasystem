@@ -18,7 +18,7 @@ export default function CommunicationDropdown({
   const { snapshot, loading, soundsEnabled, error, retry, markNotificationRead, toggleSounds } = useCommunications();
   const messages = kind === 'messages';
   const notifications = snapshot.notifications.filter((item) => !isChatNotification(item));
-  const unread = messages ? snapshot.unread_messages : notifications.filter((item) => !item.read_at).length;
+  const unread = messages ? snapshot.unread_messages : snapshot.unread_notifications;
   const href = `${rolePath}/${messages ? 'messages' : 'notifications'}`;
   const Icon = messages ? MessageSquare : Bell;
 

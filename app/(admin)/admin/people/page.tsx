@@ -1,5 +1,7 @@
 'use client';
 
+import { confirmWithApp } from '@/components/ui/app-dialogs';
+
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { api, assetUrl } from '@/lib/api';
@@ -31,7 +33,7 @@ export default function PeoplePage() {
   const rows = visible.slice((page - 1) * pageSize, page * pageSize);
   const update = (key: keyof FormState, value: string | string[]) => setEditing((current) => current ? { ...current, [key]: value } : current);
   const save = async (event: React.FormEvent) => { event.preventDefault(); if (!editing) return; try { await api.people.save(editing); setEditing(null); setMessage('Profile saved.'); await load(); } catch (saveError) { setError(saveError instanceof Error ? saveError.message : 'Unable to save profile.'); } };
-  const remove = async (person: Person) => { if (!window.confirm(`Delete ${person.first_name} ${person.last_name}?`)) return; try { await api.people.remove(person.id); setMessage('Profile deleted.'); await load(); } catch (deleteError) { setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete profile.'); } };
+  const remove = async (person: Person) => { if (!(await confirmWithApp(`Delete ${person.first_name} ${person.last_name}?`, { title: 'Delete profile?', confirmText: 'Delete', tone: 'danger' }))) return; try { await api.people.remove(person.id); setMessage('Profile deleted.'); await load(); } catch (deleteError) { setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete profile.'); } };
   const uploadAvatar = async (file: File) => { try { const body = await api.uploads.image(file, 'people') as { data?: { path?: string } }; update('avatar', assetUrl(body.data?.path || '')); } catch (uploadError) { setError(uploadError instanceof Error ? uploadError.message : 'Unable to upload avatar.'); } };
   const editPerson = (person: Person) => { let parsed: string[] = []; try { parsed = Array.isArray(person.permissions) ? person.permissions : JSON.parse(person.permissions || '[]'); } catch { parsed = []; } setEditing({ ...person, permissions: parsed, initial_password: '' }); };
   const openTab = (next: PersonType) => { setTab(next); setPage(1); };

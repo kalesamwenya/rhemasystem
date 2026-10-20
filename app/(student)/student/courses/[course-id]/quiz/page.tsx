@@ -5,6 +5,7 @@ import { useParams, useSearchParams } from 'next/navigation';
 import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Clock, CreditCard, HelpCircle, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { openFlutterwaveInlineCheckout, type FlutterwaveInlineCheckout } from '@/lib/flutterwave-inline';
+import { uploadVerifiedStudentPaymentReceipt } from '@/lib/payment-receipt';
 
 type QuizQuestion = {
   id: number;
@@ -130,6 +131,11 @@ export default function CourseQuizPage() {
       api.students.verifyMyPayment(transactionId, reference)
         .then(async (response: { message?: string }) => {
           setNotice(response.message || 'Payment verified. Your assessment access is ready.');
+          try {
+            await uploadVerifiedStudentPaymentReceipt(reference, transactionId);
+          } catch (cause) {
+            setError(`Payment verified, but the branded receipt could not be saved: ${cause instanceof Error ? cause.message : 'Please try again from billing.'}`);
+          }
           cleanUrl();
           await loadQuiz();
         })
@@ -232,6 +238,11 @@ export default function CourseQuizPage() {
         try {
           const verification = await api.students.verifyMyPayment(transactionId, response.data.reference) as { message?: string };
           setNotice(verification.message || 'Payment verified. Your assessment access is ready.');
+          try {
+            await uploadVerifiedStudentPaymentReceipt(response.data.reference, transactionId);
+          } catch (cause) {
+            setError(`Payment verified, but the branded receipt could not be saved: ${cause instanceof Error ? cause.message : 'Please try again from billing.'}`);
+          }
           await loadQuiz();
         } catch (cause) {
           setError(cause instanceof Error ? cause.message : 'Payment could not be verified. Assessment access has not been granted.');

@@ -1,5 +1,6 @@
 'use client';
 
+import { confirmWithApp } from '@/components/ui/app-dialogs';
 import { useEffect, useMemo, useState } from 'react';
 import { Banknote, CalendarDays, Loader2, Pencil, Plus, Search, Trash2, Wallet, X } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -114,7 +115,7 @@ export default function BudgetsPage() {
   }
 
   async function deleteBudget(budget: FinanceBudget) {
-    if (!window.confirm(`Delete budget "${budget.name}"? Linked expenditures will remain in the ledger.`)) return;
+    if (!(await confirmWithApp(`Delete budget "${budget.name}"? Linked expenditures will remain in the ledger.`, { title: 'Delete budget?', confirmText: 'Delete', tone: 'danger' }))) return;
     setError('');
     try {
       await api.finance.removeBudget(budget.id);

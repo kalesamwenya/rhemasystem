@@ -1,5 +1,6 @@
 'use client';
 
+import { confirmWithApp } from '@/components/ui/app-dialogs';
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { AlertCircle, ArrowDownWideNarrow, ClipboardList, Clock3, FileCheck2, HelpCircle, Pencil, Plus, Search, ShieldCheck, Trash2, X } from 'lucide-react';
 import { deleteCourseAssessment, requestAssessmentQuestions, requestCourseContent, saveCourseAssessment, type AssessmentDraft, type AssessmentQuestionDraft, type CourseAssessmentKind, type CourseAssignment, type CourseContent, type CourseQuiz, type GradingCriterion } from '@/lib/course-content';
@@ -376,7 +377,7 @@ export default function CourseAssessmentsPanel({ courseId, kind }: { courseId: s
   };
 
   const remove = async (id: number, name: string) => {
-    if (!window.confirm(`Delete "${name}" from this course?`)) return;
+    if (!(await confirmWithApp(`Delete "${name}" from this course?`, { title: 'Delete assessment?', confirmText: 'Delete', tone: 'danger' }))) return;
     setError('');
     try {
       await deleteCourseAssessment(courseId, kindFor(kind), id);

@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, CreditCard, Download, ExternalLink, FileText, Headphones, Loader2, LockKeyhole, Play, Search } from 'lucide-react';
-import { api, assetUrl } from '@/lib/api';
+import { api, assetUrl, uploadPdfDocument } from '@/lib/api';
 import { openFlutterwaveInlineCheckout, type FlutterwaveInlineCheckout } from '@/lib/flutterwave-inline';
+import { createOrderPaymentReceiptPdf, openPaymentReceiptBlob } from '@/lib/payment-receipt';
 import { useStudentAudio, type AudioSession } from '@/components/students/StudentAudioPlayer';
 
 type CourseResource = {
@@ -39,6 +40,15 @@ type SessionAudioResource = {
 };
 
 type ApiResponse<T> = { success: boolean; message?: string; data: T };
+type AudioPaymentReceipt = {
+  order_reference: string;
+  payment_status: string;
+  amount: number;
+  currency: string;
+  student_name: string;
+  student_email: string;
+  items: Array<{ title: string }>;
+};
 
 function isApiResponse<T>(
   value: unknown,
@@ -113,6 +123,7 @@ export default function StudentLibraryPage() {
   const [error, setError] = useState('');
   const [audioError, setAudioError] = useState('');
   const [audioNotice, setAudioNotice] = useState('');
+  const [audioReceipt, setAudioReceipt] = useState<{ pdf: Blob; reference: string } | null>(null);
   const [purchasingAudioId, setPurchasingAudioId] = useState<number | null>(null);
   const [downloadingAudioId, setDownloadingAudioId] = useState<number | null>(null);
   const handledAudioReturn = useRef(false);
@@ -123,6 +134,36 @@ export default function StudentLibraryPage() {
       throw new Error('The session audio response was invalid.');
     }
     setAudioResources(response.data.map(normalizeSessionAudio));
+  }, []);
+
+  const saveAudioReceipt = useCallback(async (payment: AudioPaymentReceipt, transactionId: string) => {
+    try {
+      const pdf = await createOrderPaymentReceiptPdf({
+        category: 'Audio purchase',
+        payer_name: payment.student_name,
+        payer_email: payment.student_email,
+        paid_for: 'Session audio purchase',
+        amount: Number(payment.amount),
+        currency: payment.currency,
+        reference: payment.order_reference,
+        gateway: 'Flutterwave',
+        gateway_transaction_id: transactionId,
+        created_at: new Date().toISOString(),
+        items: payment.items.map((item) => ({ description: item.title, quantity: 1 })),
+      });
+      setAudioReceipt({ pdf, reference: payment.order_reference });
+      await uploadPdfDocument(
+        pdf,
+        'receipts',
+        `Rhema-Audio-Receipt-${payment.order_reference}.pdf`,
+        payment.order_reference,
+        'receipt',
+        transactionId,
+        'audio',
+      );
+    } catch (cause) {
+      setAudioError(`Payment was confirmed, but the receipt could not be saved: ${cause instanceof Error ? cause.message : 'Please try again from your library.'}`);
+    }
   }, []);
 
   useEffect(() => {
@@ -176,9 +217,10 @@ export default function StudentLibraryPage() {
       if (active) setAudioNotice('Confirming your audio payment securely...');
     });
     api.audio.verifyStudentPurchase(transactionId, reference)
-      .then(async (response: { message?: string }) => {
+      .then(async (response: { message?: string; data?: AudioPaymentReceipt }) => {
         if (!active) return;
         setAudioNotice(response.message || 'Payment confirmed. Your audio is now available.');
+        if (response.data) await saveAudioReceipt(response.data, transactionId);
         try {
           await refreshAudioResources();
         } catch (cause) {
@@ -196,7 +238,7 @@ export default function StudentLibraryPage() {
         clearCheckoutParameters();
       });
     return () => { active = false; };
-  }, [refreshAudioResources]);
+  }, [refreshAudioResources, saveAudioReceipt]);
 
   const buyAudio = async (audio: SessionAudioResource) => {
     setPurchasingAudioId(audio.id);
@@ -215,8 +257,9 @@ export default function StudentLibraryPage() {
         }
         setAudioNotice('Confirming your audio payment securely...');
         try {
-          const verification = await api.audio.verifyStudentPurchase(transactionId, response.data.reference) as { message?: string };
+          const verification = await api.audio.verifyStudentPurchase(transactionId, response.data.reference) as { message?: string; data?: AudioPaymentReceipt };
           setAudioNotice(verification.message || 'Payment confirmed. Your audio is now available.');
+          if (verification.data) await saveAudioReceipt(verification.data, transactionId);
           await refreshAudioResources();
         } catch (cause) {
           setAudioNotice('');
@@ -306,7 +349,7 @@ export default function StudentLibraryPage() {
 
       {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
       {audioError && <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">{audioError}</div>}
-      {audioNotice && <div role="status" className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800"><CheckCircle2 className="h-4 w-4 shrink-0" />{audioNotice}</div>}
+      {audioNotice && <div role="status" className="flex flex-wrap items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800"><span className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 shrink-0" />{audioNotice}</span>{audioReceipt && <button type="button" onClick={() => openPaymentReceiptBlob(audioReceipt.pdf, 'download', audioReceipt.reference)} className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-white px-3 py-2 text-xs font-bold text-emerald-800"><Download className="h-3.5 w-3.5" /> Receipt PDF</button>}</div>}
 
       {loading ? (
         <div className="flex items-center gap-2 p-8 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" />Loading course materials and session audio…</div>

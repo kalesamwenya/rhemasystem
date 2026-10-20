@@ -1,5 +1,7 @@
 'use client';
 
+import { confirmWithApp } from '@/components/ui/app-dialogs';
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CalendarDays, ChevronLeft, ChevronRight, Clock3, ImagePlus, LoaderCircle,
@@ -238,7 +240,7 @@ export default function SocialMediaPage() {
   };
 
   const deletePost = async (post: Post) => {
-    if (!window.confirm(`Delete "${post.title}" from the content calendar?`)) return;
+    if (!(await confirmWithApp(`Delete "${post.title}" from the content calendar?`, { title: 'Delete calendar post?', confirmText: 'Delete', tone: 'danger' }))) return;
     try {
       await api.socialMedia.remove(post.id);
       setPosts((current) => current.filter((item) => item.id !== post.id));

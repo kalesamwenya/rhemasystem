@@ -69,6 +69,7 @@ const navigationGroups: NavGroup[] = [
     title: 'Overview',
     items: [
       { title: 'Dashboard', href: '/admin', module: 'dashboard', icon: LayoutDashboard },
+      { title: 'Shared reports', href: '/admin/reports', module: 'reports', icon: BarChart3 },
       { title: 'Tasks & calendar', href: '/admin/tasks', module: 'tasks', icon: CheckSquare },
       { title: 'Statistics', href: '/admin/statistics', module: 'statistics', icon: BarChart3 },
       { title: 'Analysis', href: '/admin/analysis', module: 'analysis', icon: Gauge },

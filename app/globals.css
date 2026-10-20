@@ -83,12 +83,12 @@ textarea {
 }
 
 @keyframes rhema-toast-in {
-  from { opacity: 0; transform: translate3d(0, -12px, 0) scale(0.98); }
+  from { opacity: 0; transform: translate3d(0, 12px, 0) scale(0.98); }
   to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
 }
 
 @keyframes rhema-toast-out {
-  to { opacity: 0; transform: translate3d(0, -8px, 0) scale(0.98); }
+  to { opacity: 0; transform: translate3d(0, 8px, 0) scale(0.98); }
 }
 
 .rhema-skeleton {

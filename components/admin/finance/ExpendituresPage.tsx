@@ -1,5 +1,6 @@
 'use client';
 
+import { confirmWithApp } from '@/components/ui/app-dialogs';
 import { useEffect, useMemo, useState } from 'react';
 import { Banknote, CheckCircle2, Clock3, Loader2, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -158,7 +159,7 @@ export default function ExpendituresPage() {
   }
 
   async function deleteExpenditure(record: FinanceExpenditure) {
-    if (!window.confirm(`Delete expenditure "${record.description}"?`)) return;
+    if (!(await confirmWithApp(`Delete expenditure "${record.description}"?`, { title: 'Delete expenditure?', confirmText: 'Delete', tone: 'danger' }))) return;
     setError('');
     try {
       await api.finance.removeExpenditure(record.id);

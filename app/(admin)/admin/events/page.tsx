@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from 'react';
 import { CalendarDays, Check, Eye, Pencil, Plus, Search, Trash2, Upload, Users, X } from 'lucide-react';
 import { useEvents, type AcademyEvent, type EventRegistration, type EventSpeaker } from '@/components/events/EventsContext';
 import EventViewerModal from '@/components/admin/events/EventViewerModal';
+import { confirmWithApp } from '@/components/ui/app-dialogs';
 import { api, assetUrl } from '@/lib/api';
 
 const menuOptions = ['Standard', 'Vegetarian', 'Vegan', 'Halal', 'Gluten-free', 'Dairy-free'];
@@ -109,7 +110,7 @@ export default function AdminEventsPage() {
   const updateSpeaker = (index: number, value: Partial<EventSpeaker>) => updateDraft('speakers', draft.speakers.map((speaker, speakerIndex) => speakerIndex === index ? { ...speaker, ...value } : speaker));
   const readImage = (file: File | undefined, onDone: (value: string) => void) => { if (!file) return; api.uploads.image(file, 'events').then((body: { data?: { path?: string } }) => onDone(assetUrl(body.data?.path || ''))).catch(() => undefined); };
   const saveEvent = (event: React.FormEvent) => { event.preventDefault(); if (!draft.title.trim() || !draft.theme.trim() || !draft.date || !draft.location.trim()) return; if (editing) updateEvent({ ...editing, ...draft }); else createEvent(draft); setEditorOpen(false); };
-  const removeEvent = (event: AcademyEvent) => { if (!window.confirm(`Delete ${event.title}?`)) return; deleteEvent(event.id); if (selectedId === event.id) setSelectedId(events.find((item) => item.id !== event.id)?.id ?? ''); };
+  const removeEvent = async (event: AcademyEvent) => { if (!(await confirmWithApp(`Delete ${event.title}?`, { title: 'Delete event?', confirmText: 'Delete', tone: 'danger' }))) return; deleteEvent(event.id); if (selectedId === event.id) setSelectedId(events.find((item) => item.id !== event.id)?.id ?? ''); };
 
   return <div className="space-y-6">
     <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between"><div><p className="text-[11px] font-black uppercase tracking-[0.22em] text-red-600">Community</p><h1 className="mt-2 text-3xl font-black tracking-tight text-slate-900">Events Management</h1><p className="mt-1 text-sm text-slate-500">Create events, publish details, and manage attendee registrations.</p></div><button onClick={openCreate} className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-black uppercase tracking-[0.16em] text-white"><Plus size={15} /> Create event</button></header>

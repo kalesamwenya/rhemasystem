@@ -1,5 +1,6 @@
 'use client';
 
+import { confirmWithApp } from '@/components/ui/app-dialogs';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import {
@@ -473,7 +474,7 @@ export default function AdminPaymentsPage() {
 
   const handlePaymentStatusUpdate = async (transaction: PaymentLedgerRecord, status: PaymentLedgerRecord['status']) => {
     if ((transaction.status === status && (status !== 'paid' || transaction.receipt_path)) || updatingPaymentId !== null) return;
-    if (status === 'paid' && !window.confirm('Confirm that you verified this payment. Marking it paid will credit the student account and issue a receipt.')) return;
+    if (status === 'paid' && !(await confirmWithApp('Confirm that you verified this payment. Marking it paid will credit the student account and issue a receipt.', { title: 'Confirm payment verification?', confirmText: 'Mark as paid' }))) return;
     setUpdatingPaymentId(transaction.id);
     setError('');
     try {

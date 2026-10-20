@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { confirmWithApp } from '@/components/ui/app-dialogs';
 import { 
   Sliders, Shield, Bell, Key, Database, 
   CheckCircle2, AlertTriangle, HelpCircle, Save, 
@@ -240,8 +241,8 @@ export default function LecturerAdvancedSettingsPage() {
           <div className="pt-2 flex items-center justify-end gap-2 text-xs">
             <button 
               type="button"
-              onClick={() => {
-                if(confirm('Reset settings to default factory variables?')) window.location.reload();
+              onClick={async () => {
+                if (await confirmWithApp('Reset settings to default factory variables?', { title: 'Reset lecturer settings?', confirmText: 'Reset settings', tone: 'danger' })) window.location.reload();
               }}
               className="px-4 py-2 border border-slate-200 bg-white text-slate-600 rounded-xl font-bold hover:bg-slate-50 transition-colors inline-flex items-center gap-1"
             >

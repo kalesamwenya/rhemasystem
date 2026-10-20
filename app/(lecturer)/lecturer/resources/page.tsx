@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
+import { confirmWithApp } from '@/components/ui/app-dialogs';
 import { 
   FolderPlus, FileCode, FileText, Video, Globe, 
   Trash2, Eye, EyeOff, Search, HardDrive, 
@@ -66,8 +67,8 @@ export default function LecturerAdvancedResourcesPage() {
     ));
   };
 
-  const deleteResource = (id: string) => {
-    if (confirm('Are you sure you want to permanently purge this asset from the cluster file systems?')) {
+  const deleteResource = async (id: string) => {
+    if (await confirmWithApp('Are you sure you want to permanently purge this asset from the cluster file systems?', { title: 'Delete resource?', confirmText: 'Delete', tone: 'danger' })) {
       setResources(resources.filter(res => res.id !== id));
     }
   };

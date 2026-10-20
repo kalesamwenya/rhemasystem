@@ -1,5 +1,6 @@
 'use client';
 
+import { confirmWithApp } from '@/components/ui/app-dialogs';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
@@ -120,7 +121,7 @@ export default function CourseDetailsPage() {
       setSavingLecturers(false);
     }
   };
-  const deleteCourse = async () => { if (!window.confirm(`Delete ${course.course} and all its sessions?`)) return; try { await api.courses.removeSchedule(course.id); router.push('/admin/courses'); } catch (error) { setMessage(error instanceof Error ? error.message : 'Unable to delete course.'); } };
+  const deleteCourse = async () => { if (!(await confirmWithApp(`Delete ${course.course} and all its sessions?`, { title: 'Delete course?', confirmText: 'Delete course', tone: 'danger' }))) return; try { await api.courses.removeSchedule(course.id); router.push('/admin/courses'); } catch (error) { setMessage(error instanceof Error ? error.message : 'Unable to delete course.'); } };
   return (
     <div className="space-y-6 pb-12">
       <header className="flex flex-col gap-4 border-b border-slate-200 pb-5 md:flex-row md:items-end md:justify-between">

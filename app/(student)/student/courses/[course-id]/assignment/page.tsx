@@ -7,6 +7,7 @@ import { AlertCircle, CheckCircle, Clock, CreditCard, FileText, Loader2, Send } 
 import { api } from '@/lib/api';
 import { assignmentTextParagraphs, splitAnnotatedText, type AssignmentAnnotation } from '@/lib/assignment-annotations';
 import { openFlutterwaveInlineCheckout, type FlutterwaveInlineCheckout } from '@/lib/flutterwave-inline';
+import { uploadVerifiedStudentPaymentReceipt } from '@/lib/payment-receipt';
 import 'react-quill-new/dist/quill.snow.css';
 
 const ReactQuill = dynamic(async () => {
@@ -129,6 +130,11 @@ export default function AssignmentSubmissionPage() {
       api.students.verifyMyPayment(transactionId, reference)
         .then(async (response: { message?: string }) => {
           setNotice(response.message || 'Payment verified. Your assignment submission is unlocked.');
+          try {
+            await uploadVerifiedStudentPaymentReceipt(reference, transactionId);
+          } catch (cause) {
+            setError(`Payment verified, but the branded receipt could not be saved: ${cause instanceof Error ? cause.message : 'Please try again from billing.'}`);
+          }
           cleanUrl();
           await loadAssignment();
         })
@@ -179,6 +185,11 @@ export default function AssignmentSubmissionPage() {
         try {
           const verification = await api.students.verifyMyPayment(transactionId, response.data.reference) as { message?: string };
           setNotice(verification.message || 'Payment verified. Your assignment submission is unlocked.');
+          try {
+            await uploadVerifiedStudentPaymentReceipt(response.data.reference, transactionId);
+          } catch (cause) {
+            setError(`Payment verified, but the branded receipt could not be saved: ${cause instanceof Error ? cause.message : 'Please try again from billing.'}`);
+          }
           await loadAssignment();
         } catch (cause) {
           setError(cause instanceof Error ? cause.message : 'Payment could not be verified. Submission access has not been granted.');

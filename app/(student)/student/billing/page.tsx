@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { AlertCircle, ArrowDownLeft, ArrowUpRight, CheckCircle2, CreditCard, Download, Eye, Loader2, RefreshCw, Wallet } from 'lucide-react';
-import { api } from '@/lib/api';
+import { api, uploadPdfDocument } from '@/lib/api';
 import { openFlutterwaveInlineCheckout, type FlutterwaveInlineCheckout } from '@/lib/flutterwave-inline';
-import { downloadPaymentReceipt, viewPaymentReceipt } from '@/lib/payment-receipt';
+import { createPaymentReceiptPdf, openPaymentReceiptBlob, uploadVerifiedStudentPaymentReceipt } from '@/lib/payment-receipt';
 
 type BillingTransaction = {
   id: number;
@@ -18,6 +18,7 @@ type BillingTransaction = {
   gateway: string;
   gateway_transaction_id?: string | null;
   receipt_token?: string | null;
+  receipt_path?: string | null;
   created_at: string;
   liability_type?: 'tuition' | 'missed_audio' | 'assignment' | 'quiz' | 'exam' | 'other_penalty' | null;
 };
@@ -67,7 +68,13 @@ export default function StudentBillingPage() {
     setError('');
     const response = await api.students.myBilling() as BillingResponse;
     setAccount(response.data);
+    return response.data;
   }, []);
+
+  const uploadConfirmedReceipt = useCallback(async (reference: string, transactionId: string) => {
+    await uploadVerifiedStudentPaymentReceipt(reference, transactionId);
+    await loadBilling();
+  }, [loadBilling]);
 
   useEffect(() => {
     let active = true;
@@ -110,7 +117,12 @@ export default function StudentBillingPage() {
       .then(async (response: { message?: string }) => {
         if (!active) return;
         setNotice(response.message || 'Payment confirmed. Your account has been updated.');
-        await loadBilling();
+        try {
+          await uploadConfirmedReceipt(reference, transactionId);
+          if (active) setNotice('Payment confirmed. Your branded receipt has been saved to your billing account.');
+        } catch (reason) {
+          if (active) setError(`Payment confirmed, but the receipt PDF could not be saved: ${reason instanceof Error ? reason.message : 'Please try again from your billing activity.'}`);
+        }
       })
       .catch((reason: unknown) => {
         if (!active) return;
@@ -123,7 +135,7 @@ export default function StudentBillingPage() {
         window.history.replaceState({}, '', window.location.pathname);
       });
     return () => { active = false; };
-  }, [loadBilling]);
+  }, [uploadConfirmedReceipt]);
 
   const startPayment = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -150,7 +162,12 @@ export default function StudentBillingPage() {
         try {
           const verification = await api.students.verifyMyPayment(transactionId, response.data.reference) as { message?: string };
           setNotice(verification.message || 'Payment confirmed. Your account has been updated.');
-          await loadBilling();
+          try {
+            await uploadConfirmedReceipt(response.data.reference, transactionId);
+            setNotice('Payment confirmed. Your branded receipt has been saved to your billing account.');
+          } catch (reason) {
+            setError(`Payment confirmed, but the receipt PDF could not be saved: ${reason instanceof Error ? reason.message : 'Please try again from your billing activity.'}`);
+          }
         } catch (reason) {
           setNotice('');
           setError(reason instanceof Error ? reason.message : 'We could not confirm this payment. Your account has not been credited.');
@@ -176,6 +193,7 @@ export default function StudentBillingPage() {
 
     setReceiptAction({ id: transaction.id, mode });
     setError('');
+    let preview: Window | null = null;
     try {
       const paymentReceipt = {
         student_name: account.student.name,
@@ -191,10 +209,37 @@ export default function StudentBillingPage() {
         created_at: transaction.created_at,
         receipt_token: transaction.receipt_token,
       };
-      if (mode === 'view') await viewPaymentReceipt(paymentReceipt);
-      else await downloadPaymentReceipt(paymentReceipt);
+      if (mode === 'view') {
+        preview = window.open('about:blank', '_blank');
+        if (!preview) throw new Error('Allow pop-ups to open the receipt preview.');
+      }
+      const pdf = await createPaymentReceiptPdf(paymentReceipt);
+      if (preview) {
+        const url = URL.createObjectURL(pdf);
+        preview.location.replace(url);
+        window.setTimeout(() => URL.revokeObjectURL(url), 10 * 60 * 1000);
+      } else {
+        openPaymentReceiptBlob(pdf, mode, transaction.reference);
+      }
+      if (!transaction.receipt_path) {
+        try {
+          await uploadPdfDocument(
+            pdf,
+            'receipts',
+            `Rhema-Receipt-${transaction.reference.replace(/[^a-z0-9_-]/gi, '-')}.pdf`,
+            transaction.reference,
+            'receipt',
+            transaction.gateway_transaction_id || '',
+            'student',
+          );
+          await loadBilling();
+        } catch (reason) {
+          setError(`Receipt prepared, but could not be saved to the account: ${reason instanceof Error ? reason.message : 'Please try again.'}`);
+        }
+      }
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Unable to create your payment receipt. Please try again.');
+      preview?.close();
+      setError(reason instanceof Error ? reason.message : 'Unable to prepare or save your payment receipt. Please try again.');
     } finally {
       setReceiptAction(null);
     }

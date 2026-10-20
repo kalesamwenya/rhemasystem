@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { BookOpen, ChevronLeft, ChevronRight, FileText, Headphones, Link2, Pencil, Plus, Search, Trash2, UploadCloud, X } from 'lucide-react';
+import { confirmWithApp } from '@/components/ui/app-dialogs';
 import { api } from '@/lib/api';
 import { useAdminAudioPlayer, type AdminAudioTrack } from '@/components/admin/AdminAudioPlayer';
 
@@ -391,7 +392,7 @@ export default function LibraryList() {
   };
 
   const deleteResource = async (resource: LibraryResource) => {
-    if (!window.confirm(`Delete ${resource.title}?`)) return;
+    if (!(await confirmWithApp(`Delete ${resource.title}?`, { title: 'Delete library resource?', confirmText: 'Delete', tone: 'danger' }))) return;
     try {
       if (resource.audio_id) await api.audio.removeResource(resource.audio_id);
       else await api.library.remove(resource.id);

@@ -1,5 +1,6 @@
 'use client';
 
+import { confirmWithApp } from '@/components/ui/app-dialogs';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { BookOpen, ExternalLink, FileText, Link2, Plus, Save, Trash2, UploadCloud, X } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -113,7 +114,7 @@ export default function ReadingsPanel({ course }: { course: string }) {
   };
 
   const deleteReading = async (reading: CourseReading) => {
-    if (!window.confirm(`Delete "${reading.title}" from ${course}?`)) return;
+    if (!(await confirmWithApp(`Delete "${reading.title}" from ${course}?`, { title: 'Delete reading?', confirmText: 'Delete', tone: 'danger' }))) return;
     try {
       const response = await api.library.remove(reading.id) as { success?: boolean; message?: string };
       if (!response.success) throw new Error(response.message ?? 'Unable to delete the reading.');
