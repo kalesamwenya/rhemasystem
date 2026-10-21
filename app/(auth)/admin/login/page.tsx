@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { AlertCircle, ArrowRight, GraduationCap, Loader2, Lock, Mail, ShieldCheck } from 'lucide-react';
 import { api } from '@/lib/api';
+import { setAuthSession } from '@/lib/auth';
 import { getAdminLandingPath } from '@/lib/admin-access';
 
 interface AdminLoginResponse {
@@ -47,6 +48,7 @@ export default function AdminLoginPage() {
       }
 
       window.localStorage.setItem('rhema_user', JSON.stringify(user));
+      setAuthSession(response.access_token!, response.expires_in!);
       window.location.assign(getAdminLandingPath(user.admin_role));
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'Unable to sign in. Check your credentials and try again.');

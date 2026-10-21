@@ -30,7 +30,8 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   const [authChecked, setAuthChecked] = useState(false);
   const [adminProfile, setAdminProfile] = useState<AdminProfile | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(260);
   const [isDragging, setIsDragging] = useState(false);
   
@@ -74,6 +75,19 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     clearAuthSession();
     router.replace('/admin/login');
   }, [router]);
+
+  const closeSidebar = useCallback(() => {
+    setIsMobileSidebarOpen(false);
+    setIsDesktopSidebarOpen(false);
+  }, []);
+
+  const toggleSidebar = useCallback(() => {
+    if (window.matchMedia('(min-width: 768px)').matches) {
+      setIsDesktopSidebarOpen((open) => !open);
+    } else {
+      setIsMobileSidebarOpen((open) => !open);
+    }
+  }, []);
 
   const stopResizing = useCallback(() => {
     setIsDragging(false);
@@ -134,21 +148,23 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     <AdminAudioPlayerProvider>
     <div
       style={{ '--sidebar-width': `${sidebarWidth}px` } as React.CSSProperties}
-      className="admin-shell relative h-screen overflow-hidden bg-[#f6f7f4] text-[#17201d] antialiased"
+      className="admin-shell relative h-screen overflow-hidden bg-[#f3f3f3] text-[#17201d] antialiased"
     >
       
       {/* Mobile Drawer Dim Overlay Backdrop */}
-      {isMobileOpen && (
+      {isMobileSidebarOpen && (
         <div 
-          onClick={() => setIsMobileOpen(false)}
+          onClick={() => setIsMobileSidebarOpen(false)}
           className="fixed inset-0 z-40 bg-[#17201d]/35 transition-opacity duration-300 md:hidden"
         />
       )}
 
       {/* Separated Sidebar Node */}
       <AdminSidebar 
-        isMobileOpen={isMobileOpen}
-        setIsMobileOpen={setIsMobileOpen}
+        isMobileOpen={isMobileSidebarOpen}
+        isDesktopOpen={isDesktopSidebarOpen}
+        closeSidebar={closeSidebar}
+        closeMobileSidebar={() => setIsMobileSidebarOpen(false)}
         sidebarWidth={sidebarWidth}
         onMouseDownResize={startResizing}
         isDragging={isDragging}
@@ -157,11 +173,13 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       />
 
       {/* Main Structural Viewport Track */}
-      <div className="relative ml-0 h-screen overflow-hidden md:ml-[var(--sidebar-width)]">
+      <div className={`relative ml-0 h-screen overflow-hidden ${isDesktopSidebarOpen ? 'md:ml-[var(--sidebar-width)]' : 'md:ml-0'}`}>
         
         {/* Separated Header Node */}
         <AdminHeader
-          onMenuOpenClick={() => setIsMobileOpen(true)}
+          onMenuToggle={toggleSidebar}
+          isMobileSidebarOpen={isMobileSidebarOpen}
+          isDesktopSidebarOpen={isDesktopSidebarOpen}
           admin={adminProfile}
           onSignOut={signOut}
         />

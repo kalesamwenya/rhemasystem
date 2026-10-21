@@ -18,6 +18,7 @@ import {
   FileSpreadsheet,
   Gauge,
   GraduationCap,
+  Handshake,
   LayoutDashboard,
   Library,
   LifeBuoy,
@@ -43,7 +44,9 @@ interface AdminProfile {
 
 interface AdminSidebarProps {
   isMobileOpen: boolean;
-  setIsMobileOpen: (open: boolean) => void;
+  isDesktopOpen: boolean;
+  closeSidebar: () => void;
+  closeMobileSidebar: () => void;
   sidebarWidth: number;
   onMouseDownResize: (e: React.MouseEvent) => void;
   isDragging: boolean;
@@ -76,15 +79,16 @@ const navigationGroups: NavGroup[] = [
     ],
   },
   {
-    title: 'Admissions & people',
+    title: 'People',
     items: [
       { title: 'Admissions', href: '/admin/admissions', module: 'admissions', icon: ClipboardCheck },
+      { title: 'Partnership applications', href: '/admin/partner-applications', module: 'partnerships', icon: Handshake },
       { title: 'Student Directory', href: '/admin/students', module: 'students', icon: Users },
       { title: 'Staff & Lecturers', href: '/admin/people', module: 'people', icon: UserCog },
     ],
   },
   {
-    title: 'Academics & student affairs',
+    title: 'Student affairs',
     items: [
       { title: 'Academic Registry', href: '/admin/courses', module: 'academics', icon: BookOpen },
       { title: 'Assessment Manager', href: '/admin/assessments', module: 'academics', icon: FileSpreadsheet },
@@ -95,7 +99,7 @@ const navigationGroups: NavGroup[] = [
     ],
   },
   {
-    title: 'Communications & website',
+    title: 'Communications',
     items: [
       { title: 'Communications', href: '/admin/communications', module: 'communications', icon: MessageSquareText, badge: 'Live' },
       { title: 'Messages & alerts', href: '/admin/messages', module: 'communications', icon: MessageSquareText },
@@ -124,7 +128,7 @@ const navigationGroups: NavGroup[] = [
     ],
   },
   {
-    title: 'System administration',
+    title: 'Systems',
     items: [
       { title: 'Performance Logs', href: '/admin/performance-logs', module: 'performance', icon: Activity },
       { title: 'System Settings', href: '/admin/settings', module: 'settings', icon: Sliders },
@@ -142,7 +146,9 @@ function formatRole(role: string): string {
 
 export default function AdminSidebar({
   isMobileOpen,
-  setIsMobileOpen,
+  isDesktopOpen,
+  closeSidebar,
+  closeMobileSidebar,
   sidebarWidth,
   onMouseDownResize,
   isDragging,
@@ -168,15 +174,16 @@ export default function AdminSidebar({
 
   return (
     <aside
+      id="admin-navigation"
       style={{ '--sidebar-width': `${sidebarWidth}px` } as React.CSSProperties}
-      className={`fixed inset-y-0 left-0 z-50 flex h-screen w-64 shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white text-slate-900 transition-transform duration-300 ease-in-out md:z-30 md:translate-x-0 md:w-[var(--sidebar-width)] ${isMobileOpen ? 'translate-x-0' : '-translate-x-full'}`}
+      className={`fixed inset-y-0 left-0 z-50 flex h-screen w-64 shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white text-slate-900 transition-transform duration-300 ease-in-out md:z-30 md:w-[var(--sidebar-width)] ${isMobileOpen ? 'translate-x-0' : '-translate-x-full'} ${isDesktopOpen ? 'md:translate-x-0' : 'md:-translate-x-full'}`}
     >
       <div className="flex h-16 shrink-0 items-center justify-between border-b border-slate-100 bg-white px-4">
         <div className="flex items-center gap-3 overflow-hidden">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#fbe9e7] text-red-700"><GraduationCap className="h-5 w-5" /></div>
           <div className="flex flex-col truncate"><span className="text-xs font-black uppercase leading-tight tracking-wider text-slate-950">Rhema</span><span className="mt-0.5 text-[9px] font-bold uppercase tracking-widest text-slate-400">Admin workspace</span></div>
         </div>
-        <button type="button" onClick={() => setIsMobileOpen(false)} className="rounded-lg border border-slate-200 p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 md:hidden" aria-label="Close admin navigation"><X className="h-4 w-4" /></button>
+        <button type="button" onClick={closeSidebar} className="rounded-lg border border-slate-200 p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900" aria-label="Close admin navigation"><X className="h-4 w-4" /></button>
       </div>
 
       <nav className="scrollbar-none flex-1 space-y-2 overflow-y-auto px-3 py-4" aria-label="Administrator navigation" style={{ msOverflowStyle: 'none', scrollbarWidth: 'none' }}>
@@ -193,7 +200,7 @@ export default function AdminSidebar({
               {expanded && <div className="mt-1 space-y-1">{visibleItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = pathname === item.href || (item.href !== '/admin' && pathname.startsWith(`${item.href}/`));
-                return <Link key={item.href} href={item.href} onClick={() => setIsMobileOpen(false)} aria-current={isActive ? 'page' : undefined} className={`group flex items-center justify-between rounded-xl px-3 py-2.5 text-xs font-semibold tracking-wide transition-all ${isActive ? 'bg-[#173b3a] text-white shadow-sm' : 'text-slate-600 hover:bg-[#f3f6f4] hover:text-[#173b3a]'}`}>
+                return <Link key={item.href} href={item.href} onClick={closeMobileSidebar} aria-current={isActive ? 'page' : undefined} className={`group flex items-center justify-between rounded-xl px-3 py-2.5 text-xs font-semibold tracking-wide transition-all ${isActive ? 'bg-[#173b3a] text-white shadow-sm' : 'text-slate-600 hover:bg-[#f3f6f4] hover:text-[#173b3a]'}`}>
                   <span className="flex min-w-0 items-center gap-3"><Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-[#173b3a]'}`} /><span className="truncate">{item.title}</span></span>
                   {item.badge && <span className={`ml-2 rounded-md px-2 py-0.5 text-[9px] font-black uppercase tracking-wider ${isActive ? 'bg-white/15 text-white' : 'bg-[#fbe9e7] text-red-700'}`}>{item.badge}</span>}
                 </Link>;

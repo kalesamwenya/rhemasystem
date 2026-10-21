@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowRight, BookOpen, CheckCircle2, ChevronLeft, ChevronRight, ClipboardCheck, Filter, GraduationCap, Search, UserRound, Users } from 'lucide-react';
+import { ArrowRight, BookOpen, CheckCircle2, ChevronLeft, ChevronRight, ClipboardCheck, Filter, GraduationCap, QrCode, Search, UserRound, Users } from 'lucide-react';
 import { requestRhemaAttendance, requestRhemaSchedules, requestRhemaStudents, type RhemaAttendanceRecord, type RhemaSchedule } from '@/lib/rhema-schedule-api';
 
 type CourseWatchlistRow = {
@@ -216,6 +216,13 @@ export default function StudentAffairsDashboardPage() {
           >
             Open attendance tracker
             <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+          <Link
+            href="/admin/student-affairs/slips"
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-black uppercase tracking-[0.18em] text-slate-800 shadow-sm transition hover:bg-slate-50"
+          >
+            QR slips & flags
+            <QrCode className="h-3.5 w-3.5" />
           </Link>
         </div>
       </div>

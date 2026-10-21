@@ -4,6 +4,7 @@
 import React, { useState } from 'react';
 import { GraduationCap, Mail, Lock, AlertCircle, Loader2, ArrowRight } from 'lucide-react';
 import { api } from '@/lib/api';
+import { setAuthSession } from '@/lib/auth';
 
 type LoginResponse = {
   access_token?: string;
@@ -41,6 +42,7 @@ export default function LoginPage() {
         throw new Error('The sign-in service returned an invalid session. Please try again or contact the school office.');
       }
       window.localStorage.setItem('rhema_user', JSON.stringify(response.user));
+      setAuthSession(response.access_token!, response.expires_in!);
       const requestedPath = new URLSearchParams(window.location.search).get('next');
       let returnPath = '/student';
       if (requestedPath) {

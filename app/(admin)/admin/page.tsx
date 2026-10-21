@@ -2,10 +2,10 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import { Activity, ArrowUpRight, CalendarDays, CheckSquare, CircleDollarSign, GraduationCap, LifeBuoy, RefreshCw, Users } from 'lucide-react';
+import { Activity, ArrowUpRight, CalendarDays, CheckSquare, CircleDollarSign, GraduationCap, LifeBuoy, RefreshCw, Search, Users } from 'lucide-react';
 import { CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { api } from '@/lib/api';
-import { canAccessAdminModule, type AdminModule } from '@/lib/admin-access';
+import { canAccessAdminModule, isMediaOrItDepartment, type AdminModule } from '@/lib/admin-access';
 
 interface DashboardProfile {
   admin_role: string;
@@ -51,7 +51,9 @@ const departmentLinks: Record<string, DepartmentLink[]> = {
     { label: 'Help desk', description: 'Review and respond to support requests.', href: '/admin/help-desk', module: 'help-desk' },
     { label: 'Communications', description: 'Manage administrator communications.', href: '/admin/communications', module: 'communications' },
     { label: 'Contact messages', description: 'Review website contact enquiries.', href: '/admin/contact-messages', module: 'contact-messages' },
-    { label: 'Media & site content', description: 'Manage social media and published content.', href: '/admin/social-media', module: 'social-media' },
+    { label: 'Website content', description: 'Edit public pages and published website content.', href: '/admin/site-content', module: 'social-media' },
+    { label: 'Social media', description: 'Plan and manage social media posts.', href: '/admin/social-media', module: 'social-media' },
+    { label: 'Website chatbot', description: 'Manage chatbot answers and contact leads.', href: '/admin/chatbot', module: 'chatbot' },
   ],
   operations: [
     { label: 'Tasks', description: 'Coordinate and track operational work.', href: '/admin/tasks', module: 'tasks' },
@@ -59,6 +61,14 @@ const departmentLinks: Record<string, DepartmentLink[]> = {
     { label: 'Schedules', description: 'Review published schedules.', href: '/admin/schedule', module: 'schedule' },
   ],
 };
+
+const mediaItLinks: DepartmentLink[] = [
+  { label: 'Website content', description: 'Edit public pages and published website content.', href: '/admin/site-content', module: 'social-media' },
+  { label: 'Social media', description: 'Plan and manage social media posts.', href: '/admin/social-media', module: 'social-media' },
+  { label: 'Website chatbot', description: 'Manage chatbot answers and contact leads.', href: '/admin/chatbot', module: 'chatbot' },
+  { label: 'Website contact messages', description: 'Review incoming website enquiries.', href: '/admin/contact-messages', module: 'contact-messages' },
+  { label: 'Communications', description: 'Open the internal communications workspace.', href: '/admin/communications', module: 'communications' },
+];
 
 const metricDefinitions: Record<string, Array<{ label: string; icon: typeof Users; load: () => Promise<unknown> }>> = {
   finance: [
@@ -152,6 +162,7 @@ export default function AdminDashboard() {
   const [metrics, setMetrics] = useState<Metric[]>([]);
   const [loading, setLoading] = useState(true);
   const [profileError, setProfileError] = useState('');
+  const [toolQuery, setToolQuery] = useState('');
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
@@ -200,10 +211,19 @@ export default function AdminDashboard() {
   }, [loadDashboard]);
 
   const department = profile ? departmentForRole(profile.admin_role) : null;
-  const title = department === 'director' ? 'Director Dashboard' : department ? `${departmentTitles[department]} Dashboard` : 'Administrator Dashboard';
-  const links = department === 'director'
+  const isMediaItAdmin = profile ? isMediaOrItDepartment(profile.department) : false;
+  const title = isMediaItAdmin
+    ? 'Media & IT Dashboard'
+    : department === 'director' ? 'Director Dashboard' : department ? `${departmentTitles[department]} Dashboard` : 'Administrator Dashboard';
+  const roleLinks = department === 'director'
     ? Object.entries(departmentLinks).flatMap(([role, items]) => items.map((item) => ({ ...item, group: departmentTitles[role] })))
     : department ? (departmentLinks[department] ?? []).map((item) => ({ ...item, group: '' })) : [];
+  const links = [...roleLinks, ...(isMediaItAdmin ? mediaItLinks.map((item) => ({ ...item, group: 'Media & IT' })) : [])]
+    .filter((item, index, all) => all.findIndex((candidate) => candidate.href === item.href) === index);
+  const accessibleLinks = links.filter((item) => profile && canAccessAdminModule(profile.admin_role, profile.department, item.module));
+  const filteredLinks = accessibleLinks.filter((item) =>
+    `${item.label} ${item.description}`.toLowerCase().includes(toolQuery.trim().toLowerCase())
+  );
   const availableMetrics = metrics.filter((metric) => metric.value !== null);
   const monthlyActivity = getMonthlyActivity(availableMetrics);
   const hasMonthlyActivity = availableMetrics.some((metric) => metric.records.some((record) => {
@@ -217,23 +237,31 @@ export default function AdminDashboard() {
 
   return (
     <main className="pb-8">
-      <div className="grid items-start gap-5 2xl:grid-cols-[minmax(0,1fr)_17rem]">
+      <div className="grid items-start gap-5 2xl:grid-cols-[minmax(0,1fr)_18rem]">
         <div className="min-w-0 space-y-5">
-          <header className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-5 sm:px-7">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-red-700">Rhema · Admin workspace</p>
-              <h1 className="mt-2 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">{profile ? `Hello, ${profile.name.split(' ')[0]}` : title}</h1>
-              <p className="mt-1.5 text-sm text-slate-500">{profile ? `Your ${department === 'director' ? 'leadership' : departmentTitles[department ?? ''] ?? 'department'} overview is ready.` : 'Loading your department workspace.'}</p>
+          <header className="relative isolate overflow-hidden rounded-3xl bg-[#10283a] px-5 py-6 text-white shadow-lg shadow-slate-900/10 sm:px-8 sm:py-8">
+            <div aria-hidden="true" className="absolute -right-12 -top-28 -z-10 h-72 w-72 rounded-full border-[34px] border-white/10" />
+            <div aria-hidden="true" className="absolute -bottom-28 right-40 -z-10 h-48 w-48 rounded-full border-[26px] border-amber-300/10" />
+            <div className="flex flex-wrap items-center justify-between gap-5">
+              <div className="max-w-2xl">
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-300">Rhema · Admin workspace</p>
+                <h1 className="mt-2 text-2xl font-black tracking-tight sm:text-4xl">{profile ? `Welcome, ${profile.name.split(' ')[0]}` : title}</h1>
+                <p className="mt-2 text-sm leading-6 text-slate-100">{profile ? `${title.replace(' Dashboard', '')} workspace · ${profile.department}` : 'Loading your department workspace.'}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void loadDashboard()}
+                disabled={loading}
+                className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white px-4 py-2.5 text-sm font-bold text-[#10283a] transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-amber-300 focus:ring-offset-2 focus:ring-offset-[#10283a] disabled:cursor-wait disabled:opacity-70"
+              >
+                <RefreshCw className={`h-4 w-4 text-[#10283a] ${loading ? 'animate-spin' : ''}`} />
+                Refresh data
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => void loadDashboard()}
-              disabled={loading}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-[#9ab2a6] hover:bg-[#f6f8f6] disabled:cursor-wait disabled:opacity-60"
-            >
-              <RefreshCw className={`h-4 w-4 text-[#31584c] ${loading ? 'animate-spin' : ''}`} />
-              Refresh
-            </button>
+            <div className="mt-6 flex flex-wrap gap-2 text-xs font-semibold">
+              <span className="rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-white">{loading ? 'Updating summaries…' : `${availableMetrics.length} live summaries`}</span>
+              <span className="rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-white">Auto-refreshes every minute</span>
+            </div>
           </header>
 
           {profileError && (
@@ -245,28 +273,28 @@ export default function AdminDashboard() {
 
           {department && (
             <>
-              <section aria-label="Department summaries" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <section aria-label="Department summaries" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {metrics.map((metric, index) => {
                   const Icon = metric.icon;
                   const iconStyles = [
-                    'bg-[#fbe9e7] text-red-700',
-                    'bg-[#e8f1ec] text-[#31584c]',
-                    'bg-[#f6efe3] text-[#9a6a19]',
+                    'bg-rose-100 text-rose-800',
+                    'bg-emerald-100 text-emerald-900',
+                    'bg-amber-100 text-amber-900',
                   ];
                   return (
-                    <article key={metric.label} className="rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-slate-300 sm:p-5">
+                    <article key={metric.label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:shadow-md sm:p-6">
                       <div className="flex items-start justify-between gap-4">
                         <div className="min-w-0">
-                          <p className="text-xs font-semibold text-slate-500">{metric.label}</p>
+                          <p className="text-sm font-semibold text-slate-700">{metric.label}</p>
                           {loading
                             ? <div className="mt-3 h-8 w-20 animate-pulse rounded-lg bg-slate-100" />
                             : metric.error
-                              ? <p className="mt-3 text-sm font-semibold text-amber-800">Unavailable</p>
-                              : <p className="mt-2 text-3xl font-black tracking-tight text-slate-950">{metric.value?.toLocaleString()}</p>}
+                              ? <p className="mt-3 text-sm font-bold text-amber-900">Unavailable</p>
+                              : <p className="mt-2 text-4xl font-black tracking-tight text-[#10283a]">{metric.value?.toLocaleString()}</p>}
                         </div>
-                        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${iconStyles[index % iconStyles.length]}`}><Icon className="h-5 w-5" /></span>
+                        <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${iconStyles[index % iconStyles.length]}`}><Icon className="h-5 w-5" /></span>
                       </div>
-                      {metric.error && <p className="mt-2 text-xs leading-5 text-amber-800">{metric.error}</p>}
+                      {metric.error && <p className="mt-2 text-xs leading-5 text-amber-900">{metric.error}</p>}
                     </article>
                   );
                 })}
@@ -292,7 +320,7 @@ export default function AdminDashboard() {
                           <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#68746e' }} />
                           <YAxis allowDecimals={false} axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#68746e' }} />
                           <Tooltip contentStyle={{ borderRadius: 12, borderColor: '#dce3de', fontSize: 12 }} />
-                          <Line type="monotone" dataKey="records" name="Records created" stroke="#173b3a" strokeWidth={3} dot={{ r: 3, fill: '#b91c1c', strokeWidth: 0 }} activeDot={{ r: 5, fill: '#b91c1c' }} />
+                          <Line type="monotone" dataKey="records" name="Records created" stroke="#0f4c5c" strokeWidth={3} dot={{ r: 3, fill: '#b42318', strokeWidth: 0 }} activeDot={{ r: 5, fill: '#b42318' }} />
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
@@ -310,7 +338,7 @@ export default function AdminDashboard() {
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
                           <Pie data={availableMetrics.map(({ label, value }) => ({ name: label, records: value ?? 0 }))} dataKey="records" nameKey="name" cx="50%" cy="50%" innerRadius={48} outerRadius={78} paddingAngle={3}>
-                            {availableMetrics.map((metric, index) => <Cell key={metric.label} fill={['#173b3a', '#b91c1c', '#c99b4b', '#668c7b', '#8a6d5b', '#7c8791'][index % 6]} />)}
+                            {availableMetrics.map((metric, index) => <Cell key={metric.label} fill={['#0f4c5c', '#b42318', '#8a5a00', '#216e4e', '#6b3fa0', '#475569'][index % 6]} />)}
                           </Pie>
                           <Tooltip contentStyle={{ borderRadius: 12, borderColor: '#dce3de', fontSize: 12 }} />
                         </PieChart>
@@ -324,7 +352,7 @@ export default function AdminDashboard() {
                   <div className="mt-2 grid gap-2">
                     {availableMetrics.map((metric, index) => (
                       <div key={metric.label} className="flex items-center justify-between gap-3 text-xs">
-                        <span className="flex min-w-0 items-center gap-2 text-slate-600"><span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: ['#173b3a', '#b91c1c', '#c99b4b', '#668c7b', '#8a6d5b', '#7c8791'][index % 6] }} /> <span className="truncate">{metric.label}</span></span>
+                        <span className="flex min-w-0 items-center gap-2 text-slate-700"><span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: ['#0f4c5c', '#b42318', '#8a5a00', '#216e4e', '#6b3fa0', '#475569'][index % 6] }} /> <span className="truncate">{metric.label}</span></span>
                         <span className="font-bold text-slate-900">{metric.value?.toLocaleString()}</span>
                       </div>
                     ))}
@@ -341,26 +369,41 @@ export default function AdminDashboard() {
               <section aria-label="Department tools">
                 <div className="mb-3 flex items-end justify-between gap-3">
                   <div>
-                    <h2 className="text-lg font-bold text-slate-900">Your department tools</h2>
-                    <p className="mt-1 text-sm text-slate-500">Quick access to the workspaces available to your role.</p>
+                    <h2 className="text-lg font-bold text-slate-950">Workspace options</h2>
+                    <p className="mt-1 text-sm text-slate-700">Quick access to tools available for your role and department.</p>
                   </div>
-                  <span className="hidden text-xs font-medium text-slate-400 sm:block">{links.length} workspaces</span>
                 </div>
+                <label className="mb-4 flex max-w-md items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-slate-700 shadow-sm focus-within:border-[#0f4c5c] focus-within:ring-2 focus-within:ring-[#0f4c5c]/20">
+                  <Search className="h-4 w-4 shrink-0 text-slate-600" aria-hidden="true" />
+                  <span className="sr-only">Filter workspace options</span>
+                  <input
+                    type="search"
+                    value={toolQuery}
+                    onChange={(event) => setToolQuery(event.target.value)}
+                    placeholder="Search your workspace options"
+                    className="w-full bg-transparent text-sm text-slate-950 outline-none placeholder:text-slate-500"
+                  />
+                </label>
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                  {links.filter((item) => profile && canAccessAdminModule(profile.admin_role, profile.department, item.module)).map((item) => (
+                  {filteredLinks.map((item) => (
                     <Link
                       key={`${item.group}-${item.href}`}
                       href={item.href}
-                      className="group rounded-2xl border border-slate-200 bg-white p-4 transition hover:-translate-y-0.5 hover:border-[#9ab2a6] hover:bg-[#fcfdfc] sm:p-5"
+                      className="group rounded-2xl border border-slate-300 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-[#0f4c5c] hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#0f4c5c] focus:ring-offset-2"
                     >
-                      {item.group && <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-red-700">{item.group}</p>}
+                      {item.group && <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-red-800">{item.group}</p>}
                       <div className="flex items-center justify-between gap-3">
                         <h3 className="font-bold text-slate-900">{item.label}</h3>
-                        <ArrowUpRight className="h-4 w-4 shrink-0 text-slate-400 transition group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-[#31584c]" />
+                        <ArrowUpRight className="h-4 w-4 shrink-0 text-slate-600 transition group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-[#0f4c5c]" />
                       </div>
-                      <p className="mt-2 text-sm leading-5 text-slate-500">{item.description}</p>
+                      <p className="mt-2 text-sm leading-5 text-slate-700">{item.description}</p>
                     </Link>
                   ))}
+                  {filteredLinks.length === 0 && (
+                    <p className="rounded-xl border border-slate-300 bg-white p-4 text-sm font-medium text-slate-700 sm:col-span-2 xl:col-span-3">
+                      {toolQuery ? 'No workspace options match your search.' : 'No workspace options are available for this account.'}
+                    </p>
+                  )}
                 </div>
               </section>
             </>
@@ -368,58 +411,39 @@ export default function AdminDashboard() {
         </div>
 
         <aside className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-1">
-          <section className="rounded-2xl border border-slate-200 bg-white p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Signed in as</p>
-                <h2 className="mt-1 font-bold text-slate-900">Administrator</h2>
-              </div>
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#fbe9e7] text-red-700"><Users className="h-4 w-4" /></span>
-            </div>
-            <div className="my-5 flex flex-col items-center border-y border-slate-100 py-5 text-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full border-4 border-[#e8f1ec] bg-[#173b3a] text-lg font-black text-white">
-                {profile?.name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'AD'}
-              </div>
-              <p className="mt-3 font-bold text-slate-900">{profile?.name || 'Loading profile…'}</p>
-              <p className="mt-1 text-xs text-slate-500">{profile?.department}</p>
-              <span className="mt-3 rounded-full bg-[#e8f1ec] px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-[#31584c]">{title.replace(' Dashboard', '')}</span>
-            </div>
-            <p className="text-center text-[11px] leading-5 text-slate-500">Your access is tailored to your department. Dashboard data refreshes automatically every minute.</p>
-          </section>
-
-          <section className="rounded-2xl border border-slate-200 bg-white p-5">
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-red-700">Today</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-red-800">Today</p>
                 <h2 className="mt-1 font-bold text-slate-900">{today.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</h2>
               </div>
-              <CalendarDays className="h-5 w-5 text-[#31584c]" />
+              <CalendarDays className="h-5 w-5 text-[#0f4c5c]" />
             </div>
             <div className="grid grid-cols-7 gap-y-2 text-center">
-              {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, index) => <span key={`${day}-${index}`} className="pb-1 text-[10px] font-bold text-slate-400">{day}</span>)}
+              {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, index) => <span key={`${day}-${index}`} className="pb-1 text-[10px] font-bold text-slate-600">{day}</span>)}
               {calendarCells.map((day, index) => day
-                ? <span key={index} className={`mx-auto flex h-7 w-7 items-center justify-center rounded-full text-[11px] ${day === today.getDate() ? 'bg-[#173b3a] font-bold text-white' : 'text-slate-600'}`}>{day}</span>
+                ? <span key={index} className={`mx-auto flex h-7 w-7 items-center justify-center rounded-full text-[11px] ${day === today.getDate() ? 'bg-[#10283a] font-bold text-white' : 'text-slate-700'}`}>{day}</span>
                 : <span key={`blank-${index}`} />)}
             </div>
-            <p className="mt-4 border-t border-slate-100 pt-3 text-xs text-slate-500">Use your department schedule for class and event details.</p>
+            <p className="mt-4 border-t border-slate-200 pt-3 text-xs text-slate-700">Use your department schedule for class and event details.</p>
           </section>
 
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 sm:col-span-2 2xl:col-span-1">
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:col-span-2 2xl:col-span-1">
             <div className="mb-3 flex items-center justify-between">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Get started</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-600">Get started</p>
                 <h2 className="mt-1 font-bold text-slate-900">Quick links</h2>
               </div>
-              <ArrowUpRight className="h-4 w-4 text-red-700" />
+              <ArrowUpRight className="h-4 w-4 text-red-800" />
             </div>
             <div className="divide-y divide-slate-100">
-              {links.filter((item) => profile && canAccessAdminModule(profile.admin_role, profile.department, item.module)).slice(0, 4).map((item) => (
-                <Link key={`quick-${item.href}`} href={item.href} className="group flex items-center justify-between gap-3 py-3 text-sm font-medium text-slate-600 transition hover:text-[#173b3a]">
+              {accessibleLinks.slice(0, 4).map((item) => (
+                <Link key={`quick-${item.href}`} href={item.href} className="group flex items-center justify-between gap-3 py-3 text-sm font-semibold text-slate-700 transition hover:text-[#0f4c5c] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f4c5c]">
                   <span className="truncate">{item.label}</span>
-                  <ArrowUpRight className="h-4 w-4 shrink-0 text-slate-300 transition group-hover:text-red-700" />
+                  <ArrowUpRight className="h-4 w-4 shrink-0 text-slate-500 transition group-hover:text-red-800" />
                 </Link>
               ))}
-              {!links.length && <p className="py-3 text-xs text-slate-500">Department workspaces will appear here when available.</p>}
+              {!accessibleLinks.length && <p className="py-3 text-xs font-medium text-slate-700">Department workspaces will appear here when available.</p>}
             </div>
           </section>
         </aside>

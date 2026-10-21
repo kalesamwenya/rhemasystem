@@ -3,6 +3,7 @@ export type AdminModule =
   | 'dashboard'
   | 'reports'
   | 'admissions'
+  | 'partnerships'
   | 'students'
   | 'people'
   | 'student-affairs'
@@ -25,7 +26,7 @@ export type AdminModule =
   | 'tasks';
 
 const allModules: AdminModule[] = [
-  'dashboard', 'reports', 'admissions', 'students', 'people', 'student-affairs', 'academics',
+  'dashboard', 'reports', 'admissions', 'partnerships', 'students', 'people', 'student-affairs', 'academics',
   'communications', 'contact-messages', 'chatbot', 'social-media', 'events', 'store', 'help-desk', 'tasks',
   'statistics', 'analysis', 'performance', 'finance', 'schedule', 'library', 'profile', 'settings',
 ];
@@ -35,8 +36,8 @@ const roleModules: Record<AdminRole, AdminModule[]> = {
   administrator: allModules,
   finance: ['dashboard', 'reports', 'finance', 'store', 'communications', 'profile', 'tasks'],
   academic: ['dashboard', 'reports', 'academics', 'student-affairs', 'schedule', 'library', 'communications', 'profile', 'tasks'],
-  registrar: ['dashboard', 'reports', 'admissions', 'students', 'people', 'events', 'student-affairs', 'communications', 'profile', 'tasks'],
-  support: ['dashboard', 'reports', 'communications', 'contact-messages', 'chatbot', 'social-media', 'help-desk', 'profile', 'tasks'],
+  registrar: ['dashboard', 'reports', 'admissions', 'partnerships', 'students', 'people', 'events', 'student-affairs', 'communications', 'profile', 'tasks'],
+  support: ['dashboard', 'reports', 'partnerships', 'communications', 'contact-messages', 'chatbot', 'social-media', 'help-desk', 'profile', 'tasks'],
   operations: ['dashboard', 'reports', 'events', 'schedule', 'tasks', 'profile'],
 };
 
@@ -57,6 +58,11 @@ function departmentMatchesRole(department: string, role: AdminRole): boolean {
   return matchingRoles.length === 0 || (matchingRoles.length === 1 && matchingRoles.includes(role));
 }
 
+export function isMediaOrItDepartment(department: string): boolean {
+  const normalized = department.trim().toLowerCase().replace(/[_-]+/g, ' ');
+  return /(^|[^a-z])(media|information technology|it)([^a-z]|$)/.test(normalized);
+}
+
 export function normalizeAdminRole(value: string): AdminRole | null {
   const role = value.trim().toLowerCase();
   return Object.prototype.hasOwnProperty.call(roleModules, role) ? role as AdminRole : null;
@@ -64,13 +70,16 @@ export function normalizeAdminRole(value: string): AdminRole | null {
 
 export function canAccessAdminModule(roleValue: string, department: string, module: AdminModule): boolean {
   const role = normalizeAdminRole(roleValue);
-  if (!role || !roleModules[role].includes(module)) return false;
+  if (!role) return false;
+  if (module === 'social-media' && isMediaOrItDepartment(department)) return true;
+  if (!roleModules[role].includes(module)) return false;
   return departmentMatchesRole(department, role);
 }
 
 export function getAdminModuleForPath(pathname: string): AdminModule {
   if (pathname === '/admin') return 'dashboard';
   if (pathname.startsWith('/admin/reports')) return 'reports';
+  if (pathname.startsWith('/admin/partnerships') || pathname.startsWith('/admin/partner-applications')) return 'partnerships';
   if (pathname.startsWith('/admin/admissions')) return 'admissions';
   if (pathname.startsWith('/admin/students')) return 'students';
   if (pathname.startsWith('/admin/people')) return 'people';

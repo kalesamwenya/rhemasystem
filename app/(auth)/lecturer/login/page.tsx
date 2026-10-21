@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { AlertCircle, ArrowRight, GraduationCap, Loader2, Lock, Mail } from 'lucide-react';
 import { api } from '@/lib/api';
+import { setAuthSession } from '@/lib/auth';
 
 interface LecturerLoginResponse {
   access_token?: string;
@@ -46,6 +47,7 @@ export default function LecturerLoginPage() {
       }
 
       window.localStorage.setItem('rhema_user', JSON.stringify(user));
+      setAuthSession(response.access_token!, response.expires_in!);
       window.location.assign('/lecturer');
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'Unable to sign in. Check your credentials and try again.');

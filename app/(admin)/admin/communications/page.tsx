@@ -18,7 +18,6 @@ import {
   Smartphone,
   Users,
   History,
-  X,
 } from "lucide-react";
 import { api } from "@/lib/api";
 
@@ -255,7 +254,6 @@ export default function CommunicationsPage() {
   const [history, setHistory] = useState<HistoryEntry[]>(initialHistory);
   const [incomingCalls, setIncomingCalls] = useState<IncomingCall[]>(initialIncomingCalls);
   const [activeTab, setActiveTab] = useState<CommunicationsTab>("compose");
-  const [dialerOpen, setDialerOpen] = useState(false);
   const [audiencePage, setAudiencePage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [selectedIds, setSelectedIds] = useState<number[]>([1, 2]);
@@ -520,7 +518,7 @@ export default function CommunicationsPage() {
   const removeDialDigit = () => setDialNumber((current) => current.slice(0, -1));
 
   return (
-    <main className="mx-auto max-w-8xl space-y-8 pb-20">
+    <main className="mx-auto w-full min-w-0 max-w-screen-2xl space-y-6 pb-8">
       <header className="flex flex-col justify-between gap-5 rounded-3xl bg-slate-950 p-8 text-white shadow-xl sm:flex-row sm:items-end">
         <div>
           <p className="text-xs font-black uppercase tracking-[0.22em] text-amber-300">Communications hub</p>
@@ -551,13 +549,13 @@ export default function CommunicationsPage() {
           { id: "dialer", label: "Dialer", icon: PhoneCall },
           { id: "followups", label: "Attendance follow-ups", icon: Clock3 },
         ].map(({ id, label, icon: Icon }) => (
-          <button key={id} type="button" onClick={() => { const nextTab = id as CommunicationsTab; setActiveTab(nextTab); if (nextTab === "dialer") setDialerOpen(true); if (nextTab === "followups") { setFollowupsLoading(true); setFollowupError(""); } }} className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-black transition ${activeTab === id ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-100"}`}>
+          <button key={id} type="button" aria-pressed={activeTab === id} onClick={() => { const nextTab = id as CommunicationsTab; setActiveTab(nextTab); if (nextTab === "followups") { setFollowupsLoading(true); setFollowupError(""); } }} className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-black transition ${activeTab === id ? "bg-slate-950 text-white" : "text-slate-700 hover:bg-slate-100"}`}>
             <Icon className="h-4 w-4" /> {label}
           </button>
         ))}
       </nav>
 
-      <div className={`grid gap-6 lg:grid-cols-[0.9fr_1.1fr_0.85fr] ${activeTab === "activity" || activeTab === "followups" ? "hidden" : ""}`}>
+      <div className={`grid min-w-0 grid-cols-1 gap-4 xl:gap-6 ${activeTab === "activity" || activeTab === "followups" ? "hidden" : activeTab === "dialer" ? "mx-auto w-full max-w-xl" : "lg:grid-cols-[minmax(17rem,0.85fr)_minmax(0,1.15fr)]"}`}>
         <section className={`${activeTab === "dialer" ? "hidden" : ""} rounded-3xl border border-slate-200 bg-white p-5 shadow-sm`}>
           <div className="flex items-center justify-between gap-3">
             <h2 className="inline-flex items-center gap-2 text-lg font-black text-slate-900"><Users className="h-5 w-5 text-red-600" /> Audience groups</h2>
@@ -723,14 +721,13 @@ export default function CommunicationsPage() {
           </div>
         </section>
 
-        <section className={`${dialerOpen ? "fixed" : "hidden"} bottom-20 right-6 z-40 w-[min(92vw,22rem)] rounded-3xl border border-slate-200 bg-white p-5 shadow-2xl shadow-slate-900/20`}>
+        <section className={`${activeTab === "dialer" ? "block" : "hidden"} min-w-0 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6`}>
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.22em] text-red-600">Calling tools</p>
               <h2 className="mt-1 text-2xl font-black text-slate-900">Dialer</h2>
             </div>
-            <button type="button" onClick={() => setDialerOpen(false)} className="rounded-full bg-slate-100 p-2 text-slate-500" aria-label="Close dialer"><X className="h-4 w-4" /></button>
-            <PhoneCall className="h-6 w-6 text-red-600" />
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-red-50 text-red-700" aria-hidden="true"><PhoneCall className="h-5 w-5" /></span>
           </div>
 
           <label className="mt-5 block text-sm font-bold text-slate-700">
@@ -814,8 +811,6 @@ export default function CommunicationsPage() {
           </p>
         </section>
       </div>
-
-      {activeTab !== "activity" && activeTab !== "followups" && !dialerOpen && <button type="button" onClick={() => setDialerOpen(true)} className="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-red-600 text-white shadow-2xl shadow-red-900/30 transition hover:bg-red-500" aria-label="Open dialer"><PhoneCall className="h-6 w-6" /></button>}
 
       <section className={`${activeTab === "activity" ? "" : "hidden"} rounded-3xl border border-slate-200 bg-white p-5 shadow-sm`}>
         <div className="flex items-center justify-between gap-3">
