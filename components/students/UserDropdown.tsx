@@ -16,7 +16,7 @@ interface UserDropdownProps {
 }
 
 export default function UserDropdown({ isOpen, onToggle, student }: UserDropdownProps) {
-  const avatarInitials = student.name.split(' ').map(n => n[0]).join('');
+  const avatarInitials = student.name.split(' ').filter(Boolean).map(n => n[0]).join('').slice(0, 2) || 'S';
 
   const logout = async () => {
     try {
@@ -56,24 +56,24 @@ export default function UserDropdown({ isOpen, onToggle, student }: UserDropdown
           
           <Link href="/student/profile" className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
             <User className="h-4 w-4 text-slate-400" />
-            Profile Identity Record
+            Profile
           </Link>
           
           <Link href="/student/settings" className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
             <Settings className="h-4 w-4 text-slate-400" />
-            Portal Preferences
+            Settings
           </Link>
           
           <Link href="/student/security" className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
             <ShieldCheck className="h-4 w-4 text-slate-400" />
-            Security Framework Keys
+            Security
           </Link>
           
           <div className="h-px bg-slate-100 my-1" />
           
           <button onClick={() => void logout()} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 transition-colors">
             <LogOut className="h-4 w-4 text-red-500" />
-            Terminate System Link
+            Sign out
           </button>
         </div>
       )}

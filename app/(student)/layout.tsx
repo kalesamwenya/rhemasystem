@@ -51,20 +51,10 @@ export default function StudentDashboardLayout({
 
   return (
     <CommunicationProvider>
-    <div className="flex h-screen w-full bg-slate-50 text-slate-900 overflow-hidden font-sans antialiased">
+    <div className="flex h-screen w-full overflow-hidden bg-[#f6f8fc] font-sans text-slate-900 antialiased">
       
-      {/* Background Dimming Overlay for Mobile Viewports */}
-      {isSidebarOpen && (
-        <div 
-          className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm transition-opacity md:hidden"
-          onClick={() => setIsSidebarOpen(false)}
-        />
-      )}
-
-      {/* Structural Desktop/Mobile Sidebar Navigation */}
       <StudentSidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
 
-      {/* Main Workspace Area Pane */}
       <div className="flex flex-1 flex-col overflow-hidden">
         <StudentTopbar 
           student={student} 
@@ -72,10 +62,9 @@ export default function StudentDashboardLayout({
           isSidebarOpen={isSidebarOpen}
         />
         
-        {/* Scrollable Content Viewport Container */}
         <StudentAudioProvider>
-          <main className="flex-1 overflow-y-auto p-4 md:p-8">
-            <div className="mx-auto max-w-8xl">
+          <main className="flex-1 scroll-smooth overflow-y-auto p-3 sm:p-5 lg:p-7">
+            <div className="mx-auto max-w-[1440px]">
               {children}
             </div>
           </main>

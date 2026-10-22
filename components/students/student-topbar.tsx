@@ -15,7 +15,7 @@ interface StudentTopbarProps {
   isSidebarOpen: boolean;
 }
 
-export default function StudentTopbar({ student, onMenuToggle }: StudentTopbarProps) {
+export default function StudentTopbar({ student, onMenuToggle, isSidebarOpen }: StudentTopbarProps) {
   const [activeDropdown, setActiveDropdown] = useState<'notifications' | 'messages' | 'user' | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -34,25 +34,24 @@ export default function StudentTopbar({ student, onMenuToggle }: StudentTopbarPr
   };
 
   return (
-    <header ref={containerRef} className="h-16 border-b border-slate-200 bg-white px-4 md:px-6 flex items-center justify-between shadow-sm relative z-50">
+    <header ref={containerRef} className="relative z-50 flex h-16 shrink-0 items-center justify-between border-b border-slate-200/80 bg-white/90 px-3 shadow-sm shadow-slate-200/30 backdrop-blur-xl sm:px-5 lg:px-7">
       
-      {/* Left Control Area */}
-      <div className="flex items-center gap-4">
+      <div className="flex min-w-0 items-center gap-3">
         <button
           onClick={onMenuToggle}
-          className="rounded-xl p-2 text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-colors focus:outline-none border border-transparent hover:border-slate-200"
-          aria-label="Toggle structural sidebar layout alignment"
+          className="rounded-xl border border-slate-200 p-2 text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 focus:outline-none"
+          aria-label="Toggle navigation"
+          aria-expanded={isSidebarOpen}
         >
           <Menu className="h-5 w-5" />
         </button>
-        
-        <span className="hidden sm:inline-block rounded-lg bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-[10px] font-black tracking-wider text-emerald-800">
-          CAMPUS NETWORK ONLINE
-        </span>
+        <div className="min-w-0">
+          <p className="truncate text-sm font-bold text-slate-900">{student.name ? `Welcome, ${student.name.split(' ')[0]}` : 'Student portal'}</p>
+          <p className="hidden text-[10px] text-slate-500 sm:block">Your learning space</p>
+        </div>
       </div>
 
-      {/* Right Core Controls Cluster */}
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-1 sm:gap-2">
         <CommunicationDropdown
           kind="notifications"
           isOpen={activeDropdown === 'notifications'} 
@@ -67,7 +66,7 @@ export default function StudentTopbar({ student, onMenuToggle }: StudentTopbarPr
           rolePath="/student"
         />
 
-        <div className="h-6 w-px bg-slate-200 mx-1.5" />
+        <div className="mx-1.5 h-6 w-px bg-slate-200" />
 
         <UserDropdown 
           isOpen={activeDropdown === 'user'} 

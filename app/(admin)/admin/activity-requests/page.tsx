@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Check, ClipboardList, Loader2, RefreshCw, X } from 'lucide-react';
+import { Check, ClipboardList, Download, Loader2, RefreshCw, X } from 'lucide-react';
 import { api } from '@/lib/api';
 
 type AccessRequest = {
@@ -14,12 +14,17 @@ type AccessRequest = {
   activity_id: number;
   activity_name: string;
   reason: string;
+  illness_related: boolean;
+  has_sick_note: boolean;
   review_note: string | null;
   status: 'pending_finance' | 'pending_it' | 'approved' | 'rejected';
   amount: number | null;
   currency: string | null;
   charge_id: number | null;
   invoice_reference: string | null;
+  invoice_number: string | null;
+  has_invoice: boolean;
+  invoice_emailed_at: string | null;
   paid_amount: number;
   created_at: string;
 };
@@ -97,23 +102,73 @@ export default function ActivityRequestsPage() {
     }
   }
 
+  async function downloadSickNote(request: AccessRequest) {
+    try {
+      const blob = await api.activityRequests.sickNote(request.id);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `activity-sick-note-${request.id}`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to download the sick note.');
+    }
+  }
+
+  async function downloadInvoice(request: AccessRequest) {
+    try {
+      const blob = await api.activityRequests.invoice(request.id);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${request.invoice_number || `activity-invoice-${request.id}`}.pdf`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to download the invoice.');
+    }
+  }
+
+  async function resendInvoice(request: AccessRequest) {
+    setSavingId(request.id);
+    setError('');
+    setNotice('');
+    try {
+      const response = await api.activityRequests.emailInvoice(request.id) as { message?: string };
+      setNotice(response.message || 'Invoice emailed to the student.');
+      await loadRequests();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to email the invoice.');
+    } finally {
+      setSavingId(null);
+    }
+  }
+
   return (
     <main className="space-y-6 pb-10">
       <header className="flex flex-wrap items-end justify-between gap-4">
-        <div><p className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-900">Student finance</p><h1 className="mt-1 text-3xl font-black text-slate-950">Activity access requests</h1><p className="mt-1 text-sm text-slate-500">Finance invoices student requests; IT reviews the access authorization.</p></div>
+        <div><p className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-900">{canApprove && !canFinance ? 'Media & IT review' : 'Student finance'}</p><h1 className="mt-1 text-3xl font-black text-slate-950">Activity access requests</h1><p className="mt-1 text-sm text-slate-500">{canApprove && !canFinance ? 'Review invoiced requests and grant or decline student access.' : 'Finance invoices student requests; Media & IT grants or declines access.'}</p></div>
         <button type="button" onClick={() => { setLoading(true); void loadRequests(); }} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-700"><RefreshCw size={15} /> Refresh</button>
       </header>
       {error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p>}
       {notice && <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{notice}</p>}
-      {loading ? <div className="flex justify-center p-12"><Loader2 className="h-5 w-5 animate-spin text-slate-500" /></div> : requests.length === 0 ? (
+      {loading ? <div className="flex justify-center p-12"><Loader2 className="h-5 w-5 animate-spin text-slate-500" /></div> : !error && requests.length === 0 ? (
         <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center"><ClipboardList className="mx-auto h-8 w-8 text-slate-300" /><p className="mt-3 font-bold text-slate-800">No requests to review</p></div>
-      ) : <section className="space-y-4">{requests.map((request) => (
+      ) : !error && <section className="space-y-4">{requests.map((request) => (
         <article key={request.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div><div className="flex flex-wrap items-center gap-2"><h2 className="font-black text-slate-900">{request.activity_name}</h2><span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black uppercase text-slate-600">{request.activity_type}</span><span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${request.status === 'approved' ? 'bg-emerald-50 text-emerald-700' : request.status === 'rejected' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-800'}`}>{request.status.replace('_', ' ')}</span></div>
               <p className="mt-1 text-xs text-slate-500">{request.student_name} · {request.student_id} · {request.cohort} · {new Date(request.created_at).toLocaleString()}</p>
+              {request.illness_related && <p className="mt-3 w-fit rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-black uppercase text-amber-800">Illness-related</p>}
               <p className="mt-3 text-sm text-slate-700">{request.reason}</p>
+              {request.has_sick_note && <button type="button" onClick={() => void downloadSickNote(request)} className="mt-3 inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-bold text-blue-800 hover:bg-blue-50"><Download size={14} />Download sick note</button>}
               {request.charge_id && <p className="mt-2 text-xs font-semibold text-slate-600">Invoice {request.invoice_reference} · {formatMoney(request.amount || 0, request.currency || 'ZMW')} · Paid {formatMoney(request.paid_amount, request.currency || 'ZMW')}</p>}
+              {request.has_invoice && <div className="mt-3 flex flex-wrap items-center gap-3">
+                <button type="button" onClick={() => void downloadInvoice(request)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"><Download size={14} />Download {request.invoice_number || 'invoice'}</button>
+                {canFinance && <button type="button" onClick={() => void resendInvoice(request)} disabled={savingId === request.id} className="text-xs font-bold text-blue-900 hover:underline disabled:opacity-60">{request.invoice_emailed_at ? 'Resend invoice email' : 'Send invoice email'}</button>}
+                <span className="text-[11px] text-slate-500">{request.invoice_emailed_at ? `Emailed ${new Date(request.invoice_emailed_at).toLocaleString()}` : 'Email not confirmed'}</span>
+              </div>}
               {request.review_note && <p className="mt-2 text-xs text-slate-500">Review note: {request.review_note}</p>}
             </div>
           </div>
@@ -123,12 +178,12 @@ export default function ActivityRequestsPage() {
           </div>}
           {canApprove && request.status === 'pending_it' && <div className="mt-4 flex flex-wrap items-end gap-3 border-t border-slate-100 pt-4">
             <label className="block min-w-64 flex-1 text-[10px] font-black uppercase tracking-wide text-slate-500">Decision note (required to reject)<input value={notes[request.id] || ''} onChange={(event) => setNotes((current) => ({ ...current, [request.id]: event.target.value }))} className="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-900" /></label>
-            <button type="button" onClick={() => void updateRequest(request, 'approve')} disabled={savingId === request.id} className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2.5 text-xs font-black text-white disabled:opacity-60"><Check size={14} />Approve access</button>
+            <button type="button" onClick={() => void updateRequest(request, 'approve')} disabled={savingId === request.id} className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2.5 text-xs font-black text-white disabled:opacity-60">{savingId === request.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}Grant access</button>
             <button type="button" onClick={() => void updateRequest(request, 'reject')} disabled={savingId === request.id} className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-4 py-2.5 text-xs font-black text-red-700 disabled:opacity-60"><X size={14} />Reject and void invoice</button>
           </div>}
         </article>
       ))}</section>}
-      {!canFinance && !canApprove && <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Your account can view requests but cannot invoice or approve them.</p>}
+      {!error && !loading && !canFinance && !canApprove && <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Your account can view requests but cannot invoice or approve them.</p>}
     </main>
   );
 }

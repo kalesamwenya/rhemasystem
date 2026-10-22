@@ -128,6 +128,7 @@ export default function StudentLibraryPage() {
   const [purchasingAudioId, setPurchasingAudioId] = useState<number | null>(null);
   const [downloadingAudioId, setDownloadingAudioId] = useState<number | null>(null);
   const handledAudioReturn = useRef(false);
+  const handledDeepLinkAudioId = useRef('');
 
   const refreshAudioResources = useCallback(async () => {
     const response: unknown = await api.audio.myResources();
@@ -328,6 +329,17 @@ export default function StudentLibraryPage() {
     setPlaylist(accessibleAudioTracks);
   }, [accessibleAudioTracks, setPlaylist]);
 
+  useEffect(() => {
+    const audioId = new URLSearchParams(window.location.search).get('audio_id') || '';
+    if (!/^\d+$/.test(audioId) || loading || handledDeepLinkAudioId.current === audioId) return;
+    const audio = audioResources.find((resource) => resource.id === Number(audioId));
+    if (!audio) return;
+    handledDeepLinkAudioId.current = audioId;
+    document.getElementById(`session-audio-${audioId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const track = accessibleAudioTracks.find((item) => item.id === Number(audioId));
+    if (track) playAudio(track);
+  }, [accessibleAudioTracks, audioResources, loading, playAudio]);
+
   const hasResults = filteredResources.length > 0 || filteredAudioResources.length > 0;
 
   return (
@@ -372,7 +384,7 @@ export default function StudentLibraryPage() {
                   const externalAudioUrl = audio.audio_url?.startsWith('https://') ? audio.audio_url : '';
                   const duration = formatDuration(audio.duration_seconds);
                   return (
-                    <article key={audio.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <article key={audio.id} id={`session-audio-${audio.id}`} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                       <div className="flex items-start justify-between gap-3">
                         <div className="rounded-xl bg-violet-50 p-3 text-violet-900"><Headphones className="h-5 w-5" /></div>
                         <div className="flex flex-wrap justify-end gap-2">

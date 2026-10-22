@@ -31,7 +31,6 @@ type SettingsState = {
   };
   paymentGateway: {
     provider: 'flutterwave';
-    enabled: boolean;
     currency: string;
     secretKeyConfigured: boolean;
     publicKeyConfigured: boolean;
@@ -75,7 +74,6 @@ const initialState: SettingsState = {
   assessmentPricing: defaultAssessmentPricing,
   paymentGateway: {
     provider: 'flutterwave',
-    enabled: true,
     currency: 'ZMW',
     secretKeyConfigured: false,
     publicKeyConfigured: false,
@@ -160,7 +158,6 @@ export default function SettingsHub() {
           },
           paymentGateway: {
             provider: 'flutterwave',
-            enabled: data.paymentGateway?.enabled ?? true,
             currency: data.paymentGateway?.currency ?? 'ZMW',
             secretKeyConfigured: data.paymentGateway?.secretKeyConfigured ?? false,
             publicKeyConfigured: data.paymentGateway?.publicKeyConfigured ?? false,
@@ -255,7 +252,6 @@ export default function SettingsHub() {
           assessmentPricing: settings.assessmentPricing,
           paymentGateway: {
             provider: 'flutterwave',
-            enabled: settings.paymentGateway.enabled,
             currency: settings.paymentGateway.currency,
           },
       });
@@ -409,8 +405,8 @@ export default function SettingsHub() {
                 <p className="mt-1 max-w-xl text-sm leading-6 text-slate-600">One gateway and currency for student tuition, assessment fees, audio purchases and admin-initiated payments.</p>
               </div>
             </div>
-            <span className={`rounded-full px-3 py-1.5 text-xs font-bold ${settings.paymentGateway.enabled && secretReady && publicKeyReady ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
-              {settings.paymentGateway.enabled && credentialsMatch ? 'Gateway enabled' : settings.paymentGateway.enabled ? 'Setup required' : 'Gateway disabled'}
+            <span className={`rounded-full px-3 py-1.5 text-xs font-bold ${credentialsMatch ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+              {credentialsMatch ? 'Gateway connected' : 'Setup required'}
             </span>
           </div>
 
@@ -437,23 +433,12 @@ export default function SettingsHub() {
               </select>
             </label>
 
-            <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white px-4 py-3">
+            <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+              <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" />
               <div>
-                <p className="text-xs font-bold text-slate-800">Accept online payments</p>
-                <p className="mt-1 text-[11px] text-slate-500">Turn off to pause all new Flutterwave checkouts.</p>
+                <p className="text-xs font-bold text-emerald-900">Online payments connect automatically</p>
+                <p className="mt-1 text-[11px] text-emerald-800">Student checkouts use the Flutterwave credentials configured in the PHP API. No permission switch is required.</p>
               </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={settings.paymentGateway.enabled}
-                onClick={() => setSettings((current) => ({
-                  ...current,
-                  paymentGateway: { ...current.paymentGateway, enabled: !current.paymentGateway.enabled },
-                }))}
-                className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${settings.paymentGateway.enabled ? 'bg-emerald-600' : 'bg-slate-300'}`}
-              >
-                <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${settings.paymentGateway.enabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
-              </button>
             </div>
           </div>
         </section>
@@ -518,7 +503,7 @@ export default function SettingsHub() {
         <button
           type="button"
           onClick={handleSave}
-          disabled={isSaving}
+          disabled={isSaving || isLoading}
           className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-xs font-black uppercase tracking-[0.18em] text-white shadow-sm transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <Save className="h-3.5 w-3.5" />

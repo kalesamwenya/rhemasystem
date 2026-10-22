@@ -66,6 +66,11 @@ export function isMediaOrItDepartment(department: string): boolean {
   return /(^|[^a-z])(media|information technology|it)([^a-z]|$)/.test(normalized);
 }
 
+export function isFinanceDepartment(department: string): boolean {
+  const normalized = department.trim().toLowerCase().replace(/[_-]+/g, ' ');
+  return /(^|[^a-z])(finance|financial|account|accounts|bursar|payments?)([^a-z]|$)/.test(normalized);
+}
+
 export function normalizeAdminRole(value: string): AdminRole | null {
   const role = value.trim().toLowerCase();
   return Object.prototype.hasOwnProperty.call(roleModules, role) ? role as AdminRole : null;
@@ -78,7 +83,8 @@ export function canAccessAdminModule(roleValue: string, department: string, modu
   if (module === 'activity-requests') {
     return role === 'owner' || role === 'administrator'
       || role === 'finance'
-      || (role === 'support' && isMediaOrItDepartment(department));
+      || isFinanceDepartment(department)
+      || isMediaOrItDepartment(department);
   }
   if (module === 'social-media' && isMediaOrItDepartment(department)) return true;
   if (!roleModules[role].includes(module)) return false;

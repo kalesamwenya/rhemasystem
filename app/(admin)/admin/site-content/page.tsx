@@ -151,6 +151,10 @@ function ImageField({
   const upload = async (file?: File) => {
     if (!file) return;
     setUploadError('');
+    if (file.size > 15 * 1024 * 1024) {
+      setUploadError('Choose an image no larger than 15 MB.');
+      return;
+    }
     setIsUploading(true);
     try {
       const response = await api.uploads.image(file, 'site-content') as {
@@ -220,7 +224,7 @@ function ImageField({
             void upload(file);
           }}
         />
-        <span className="text-xs text-slate-500">JPG, PNG, WEBP, or GIF · up to 8 MB</span>
+        <span className="text-xs text-slate-500">JPG, PNG, WEBP, or GIF · up to 15 MB</span>
       </div>
       {uploadError && <p role="alert" className="text-xs font-semibold text-red-700">{uploadError}</p>}
     </div>

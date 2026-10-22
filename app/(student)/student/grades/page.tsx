@@ -18,11 +18,48 @@ type StudentGrade = {
 
 type GradesResponse = { data: StudentGrade[] };
 
+function isActivityGrade(grade: StudentGrade) {
+  return grade.item_type.toLowerCase() === 'mod' && Boolean(grade.item_module);
+}
+
+function summarizeGrades(grades: StudentGrade[]) {
+  const gradedActivities = grades.filter((grade) =>
+    isActivityGrade(grade)
+    && grade.grade !== null
+    && Number.isFinite(grade.grade)
+    && Number.isFinite(grade.maximum_grade)
+    && grade.maximum_grade > 0,
+  );
+  const earned = gradedActivities.reduce((total, grade) => total + (grade.grade ?? 0), 0);
+  const possible = gradedActivities.reduce((total, grade) => total + grade.maximum_grade, 0);
+  return {
+    earned,
+    possible,
+    percentage: possible > 0 ? (earned / possible) * 100 : null,
+    gradedActivityCount: gradedActivities.length,
+    activityCount: grades.filter(isActivityGrade).length,
+  };
+}
+
+function formatGrade(value: number) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+}
+
 export default function StudentGradesPage() {
   const [grades, setGrades] = useState<StudentGrade[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState<'view' | 'download' | null>(null);
+  const overallSummary = summarizeGrades(grades);
+  const courseSummaries = Array.from(
+    grades.reduce((courses, grade) => {
+      const current = courses.get(grade.course_id) || { name: grade.course_name, grades: [] as StudentGrade[] };
+      current.grades.push(grade);
+      courses.set(grade.course_id, current);
+      return courses;
+    }, new Map<string, { name: string; grades: StudentGrade[] }>()),
+    ([id, course]) => ({ id, ...course, summary: summarizeGrades(course.grades) }),
+  );
 
   const exportTranscript = async (mode: 'view' | 'download') => {
     setExporting(mode);
@@ -34,20 +71,30 @@ export default function StudentGradesPage() {
         const courses = Array.from(new Set(grades.map((grade) => grade.course_name)));
         return {
           title: 'Academic Transcript',
-          subtitle: 'Published gradebook results for enrolled courses',
+          subtitle: 'Published gradebook results and cumulative activity grades for enrolled courses',
           fileName: `Rhema-Transcript-${student.student_id}`,
           student: { name: student.name, id: student.student_id, cohort: student.class },
-          sections: courses.map((courseName) => ({
+          sections: [
+            {
+              title: 'Cumulative activity grade',
+              columns: ['Activities graded', 'Cumulative grade', 'Percentage'],
+              rows: [[
+                `${overallSummary.gradedActivityCount} of ${overallSummary.activityCount}`,
+                overallSummary.possible > 0 ? `${formatGrade(overallSummary.earned)} / ${formatGrade(overallSummary.possible)}` : 'Pending',
+                overallSummary.percentage === null ? 'Pending' : `${overallSummary.percentage.toFixed(1)}%`,
+              ]],
+            },
+            ...courses.map((courseName) => ({
             title: courseName,
-            columns: ['Assessment', 'Type', 'Grade', 'Maximum', 'Feedback'],
+            columns: ['Assessment', 'Type', 'Grade', 'Maximum'],
             rows: grades.filter((grade) => grade.course_name === courseName).map((grade) => [
               grade.item_name || 'Course total',
               grade.item_module || grade.item_type,
               grade.grade === null ? 'Pending' : String(grade.grade),
               String(grade.maximum_grade),
-              grade.feedback || '—',
             ]),
-          })),
+            })),
+          ],
         };
       }, mode);
     } catch (reason) {
@@ -95,24 +142,53 @@ export default function StudentGradesPage() {
       ) : grades.length === 0 ? (
         <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">No published grades are available for your enrolled courses yet.</div>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-              <tr><th className="p-4">Course</th><th className="p-4">Assessment</th><th className="p-4">Type</th><th className="p-4 text-right">Grade</th><th className="p-4">Feedback</th></tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {grades.map((grade, index) => (
-                <tr key={`${grade.course_id}-${grade.item_name}-${index}`}>
-                  <td className="p-4 font-semibold text-slate-800">{grade.course_name}</td>
-                  <td className="p-4 text-slate-700">{grade.item_name || 'Course total'}</td>
-                  <td className="p-4 capitalize text-slate-500">{grade.item_module || grade.item_type}</td>
-                  <td className="p-4 text-right font-mono font-semibold text-slate-800">{grade.grade === null ? 'Pending' : `${grade.grade} / ${grade.maximum_grade}`}</td>
-                  <td className="p-4 text-slate-500">{grade.feedback || '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <>
+          <section aria-label="Cumulative activity grades" className="grid gap-3 sm:grid-cols-2">
+            <article className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-950 to-blue-800 p-5 text-white shadow-sm">
+              <p className="text-xs font-bold uppercase tracking-wider text-blue-100">Cumulative grade · all courses</p>
+              <p className="mt-2 text-3xl font-black">
+                {overallSummary.possible > 0
+                  ? `${formatGrade(overallSummary.earned)} / ${formatGrade(overallSummary.possible)}`
+                  : 'Pending'}
+              </p>
+              <p className="mt-1 text-sm text-blue-100">
+                {overallSummary.percentage === null ? 'No activities graded yet' : `${overallSummary.percentage.toFixed(1)}%`}
+                {' · '}{overallSummary.gradedActivityCount} of {overallSummary.activityCount} activities graded
+              </p>
+            </article>
+            {courseSummaries.map((course) => (
+              <article key={course.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <p className="truncate text-xs font-bold uppercase tracking-wider text-slate-500">{course.name}</p>
+                <p className="mt-2 text-2xl font-black text-slate-900">
+                  {course.summary.possible > 0
+                    ? `${formatGrade(course.summary.earned)} / ${formatGrade(course.summary.possible)}`
+                    : 'Pending'}
+                  {course.summary.percentage !== null && <span className="ml-2 text-base font-bold text-blue-800">({course.summary.percentage.toFixed(1)}%)</span>}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {course.summary.gradedActivityCount} of {course.summary.activityCount} activities graded
+                </p>
+              </article>
+            ))}
+          </section>
+          <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                <tr><th className="p-4">Course</th><th className="p-4">Assessment</th><th className="p-4">Type</th><th className="p-4 text-right">Grade</th></tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {grades.map((grade, index) => (
+                  <tr key={`${grade.course_id}-${grade.item_name}-${index}`}>
+                    <td className="p-4 font-semibold text-slate-800">{grade.course_name}</td>
+                    <td className="p-4 text-slate-700">{grade.item_name || 'Course total'}</td>
+                    <td className="p-4 capitalize text-slate-500">{grade.item_module || grade.item_type}</td>
+                    <td className="p-4 text-right font-mono font-semibold text-slate-800">{grade.grade === null ? 'Pending' : `${grade.grade} / ${grade.maximum_grade}`}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </main>
   );

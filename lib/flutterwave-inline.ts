@@ -158,7 +158,7 @@ function requestPaymentDetails(checkout: FlutterwaveInlineCheckout): Promise<Pay
 
     const helper = document.createElement('p');
     helper.className = 'text-xs leading-5 text-slate-600';
-    helper.textContent = 'Your selected method will be opened securely by Flutterwave. Enter any card or wallet verification code in Flutterwave’s secure window; Rhema will never ask you to share it in this form.';
+    helper.textContent = 'Flutterwave opens the secure payment window. If your card issuer requires an OTP, it sends that code to the contact method registered with your bank. Mobile Money approval codes come from your mobile operator. Enter codes only in Flutterwave checkout; Rhema will never ask for them here.';
 
     const error = document.createElement('p');
     error.className = 'hidden rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-800';
