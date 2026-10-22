@@ -20,8 +20,14 @@ type ViolationRecord = {
   id: number;
   student_id: string;
   student_name: string;
+  cohort_name: string;
   term_id: number;
   details: string;
+  incident_date: string;
+  incident_time: string;
+  email: string;
+  acknowledgement_name: string;
+  administration_signoff: string;
   submitted_at: string;
   violation_count: number;
   flagged: number | boolean;
@@ -31,7 +37,12 @@ type LateSlipRecord = {
   id: number;
   student_id: string;
   student_name: string;
+  email: string;
   schedule_id: string;
+  cohort_name: string;
+  reasons: string;
+  audio_acknowledgement: string;
+  administration_authorization: string;
   late_seconds: number;
   submitted_at: string;
   audio_title: string | null;
@@ -185,9 +196,13 @@ export default function StudentAffairsSlipsPage() {
               <tbody>{data.violations.map((row) => {
                 const flagged = Boolean(Number(row.flagged));
                 return <tr key={row.id} className="border-b border-slate-100 align-top last:border-0">
-                  <td className="p-3"><p className="font-bold text-slate-900">{row.student_name}</p><p className="text-xs text-slate-500">{row.student_id}</p></td>
+                  <td className="p-3"><p className="font-bold text-slate-900">{row.student_name}</p><p className="text-xs text-slate-500">{row.student_id} · {row.cohort_name}</p></td>
                   <td className="p-3">Term {row.term_id}</td>
-                  <td className="max-w-sm whitespace-pre-wrap p-3 text-slate-700">{row.details}</td>
+                  <td className="max-w-sm p-3 text-slate-700">
+                    <p className="whitespace-pre-wrap">{row.details}</p>
+                    <p className="mt-1 text-xs text-slate-500">Incident: {row.incident_date} · {String(row.incident_time).slice(0, 5)}</p>
+                    <p className="mt-1 text-xs text-slate-500">{row.email}{row.acknowledgement_name ? ` · Acknowledged by ${row.acknowledgement_name}` : ''}{row.administration_signoff ? ` · Signed by ${row.administration_signoff}` : ''}</p>
+                  </td>
                   <td className="p-3 font-bold">{row.violation_count}</td>
                   <td className="p-3">{flagged ? <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-black text-amber-950"><AlertTriangle className="h-3.5 w-3.5" />Flagged</span> : <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-800"><CheckCircle2 className="h-3.5 w-3.5" />On record</span>}</td>
                   <td className="whitespace-nowrap p-3 text-xs text-slate-500">{formatDateTime(row.submitted_at)}</td>
@@ -210,8 +225,8 @@ export default function StudentAffairsSlipsPage() {
             <table className="w-full min-w-[760px] text-left text-sm">
               <thead><tr className="border-b border-slate-200 text-xs uppercase tracking-wider text-slate-500"><th className="p-3">Student</th><th className="p-3">Class</th><th className="p-3">Lateness</th><th className="p-3">Required audio</th><th className="p-3">Submitted</th></tr></thead>
               <tbody>{data.late_slips.map((row) => <tr key={row.id} className="border-b border-slate-100 align-top last:border-0">
-                <td className="p-3"><p className="font-bold text-slate-900">{row.student_name}</p><p className="text-xs text-slate-500">{row.student_id}</p></td>
-                <td className="p-3"><p className="font-semibold text-slate-800">{row.course_name}</p><p className="text-xs text-slate-500">{formatDate(row.session_date)} · {row.start_time}</p></td>
+                <td className="p-3"><p className="font-bold text-slate-900">{row.student_name}</p><p className="text-xs text-slate-500">{row.student_id} · {row.email}</p></td>
+                <td className="p-3"><p className="font-semibold text-slate-800">{row.course_name}</p><p className="text-xs text-slate-500">{row.cohort_name} · {formatDate(row.session_date)} · {row.start_time}</p><p className="mt-1 max-w-sm whitespace-pre-wrap text-xs text-slate-600">Reason: {row.reasons}</p><p className="mt-1 text-xs text-slate-500">Audio acknowledgement: {row.audio_acknowledgement.toUpperCase()}{row.administration_authorization ? ` · Authorized by ${row.administration_authorization}` : ''}</p></td>
                 <td className="whitespace-nowrap p-3 font-bold">{Math.ceil(Number(row.late_seconds) / 60)} min</td>
                 <td className="p-3"><p className="font-semibold text-slate-800">{row.audio_title || '—'}</p><span className={`mt-1 inline-block rounded-full px-2.5 py-1 text-xs font-bold ${row.audio_status === 'Purchase required' || row.audio_status === 'Audio not configured' ? 'bg-amber-100 text-amber-950' : 'bg-emerald-50 text-emerald-800'}`}>{row.audio_status}</span></td>
                 <td className="whitespace-nowrap p-3 text-xs text-slate-500">{formatDateTime(row.submitted_at)}</td>

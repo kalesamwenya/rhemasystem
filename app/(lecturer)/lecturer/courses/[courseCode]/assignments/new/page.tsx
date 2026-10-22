@@ -3,9 +3,9 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { 
-  ArrowLeft, Plus, Trash2, Save, Rocket, 
-  HelpCircle, CheckSquare, Code, AlignLeft, HelpCircle as QueryIcon
+import {
+  ArrowLeft, Plus, Trash2, Save, Rocket,
+  CheckSquare, Code, HelpCircle as QueryIcon
 } from 'lucide-react';
 
 interface QuestionBlock {
@@ -17,7 +17,7 @@ interface QuestionBlock {
   correctAnswer: string; // Key match text or index string
 }
 
-export default function lecturerAssessmentCreationStudio() {
+export default function LecturerAssessmentCreationStudio() {
   const params = useParams();
   const courseCode = (params?.courseCode as string)?.toUpperCase() || 'CSC-301';
 

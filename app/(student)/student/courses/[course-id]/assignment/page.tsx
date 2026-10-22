@@ -8,6 +8,7 @@ import { api } from '@/lib/api';
 import { assignmentTextParagraphs, splitAnnotatedText, type AssignmentAnnotation } from '@/lib/assignment-annotations';
 import { openFlutterwaveInlineCheckout, type FlutterwaveInlineCheckout } from '@/lib/flutterwave-inline';
 import { uploadVerifiedStudentPaymentReceipt } from '@/lib/payment-receipt';
+import ActivityAccessRequest from '@/components/students/ActivityAccessRequest';
 import 'react-quill-new/dist/quill.snow.css';
 
 const ReactQuill = dynamic(async () => {
@@ -352,6 +353,7 @@ export default function AssignmentSubmissionPage() {
           {paying || verifyingPayment ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
           {verifyingPayment ? 'Verifying payment...' : paying ? 'Connecting to payment...' : 'Pay and unlock submission'}
         </button> : <p className="text-xs font-semibold text-red-800">The school has not set an assignment fee. Contact the school office.</p>}
+        <ActivityAccessRequest activityType="assignment" activityId={assignment.id} courseId={courseId} activityName={assignment.name} />
       </section>
     ) : assignment.can_resubmit ? (
       <form onSubmit={(event) => void submit(event)} className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">

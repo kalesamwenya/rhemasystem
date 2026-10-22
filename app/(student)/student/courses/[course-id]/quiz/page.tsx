@@ -6,6 +6,7 @@ import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Clock, CreditCard, He
 import { api } from '@/lib/api';
 import { openFlutterwaveInlineCheckout, type FlutterwaveInlineCheckout } from '@/lib/flutterwave-inline';
 import { uploadVerifiedStudentPaymentReceipt } from '@/lib/payment-receipt';
+import ActivityAccessRequest from '@/components/students/ActivityAccessRequest';
 
 type QuizQuestion = {
   id: number;
@@ -375,6 +376,7 @@ export default function CourseQuizPage() {
           {paying || verifyingPayment ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
           {verifyingPayment ? 'Verifying payment...' : paying ? 'Connecting to payment...' : 'Pay and unlock attempt'}
         </button> : <p className="text-xs font-semibold text-red-800">The school has not set a fee for this assessment. Contact the school office.</p>}
+        <ActivityAccessRequest activityType={quiz.quiz.assessment_type} activityId={quiz.quiz.id} courseId={courseId} activityName={quiz.quiz.name} />
       </section>
     </div>;
   }

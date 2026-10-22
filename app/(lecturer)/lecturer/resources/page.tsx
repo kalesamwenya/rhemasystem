@@ -2,10 +2,10 @@
 
 import React, { useState, useRef } from 'react';
 import { confirmWithApp } from '@/components/ui/app-dialogs';
-import { 
-  FolderPlus, FileCode, FileText, Video, Globe, 
-  Trash2, Eye, EyeOff, Search, HardDrive, 
-  CloudUpload, Layers, ChevronRight, X, CheckCircle2, AlertCircle
+import {
+  FileCode, FileText, Video, Globe,
+  Trash2, Eye, EyeOff, Search, HardDrive,
+  CloudUpload, Layers, X, CheckCircle2
 } from 'lucide-react';
 
 interface ResourceAsset {
@@ -420,8 +420,9 @@ export default function LecturerAdvancedResourcesPage() {
                 <select 
                   value={formResourceType}
                   onChange={(e) => {
-                    setFormResourceType(e.target.value as any);
-                    if (e.target.value !== 'link') setFormExternalUrl('');
+                    const nextResourceType = e.target.value as 'code' | 'document' | 'video' | 'link';
+                    setFormResourceType(nextResourceType);
+                    if (nextResourceType !== 'link') setFormExternalUrl('');
                   }}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none"
                 >

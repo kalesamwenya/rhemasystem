@@ -8,6 +8,7 @@ import { financeInputClass, formatFinanceMoney, formatFinanceTotals, localDateSt
 
 type BudgetDraft = {
   name: string;
+  department: string;
   category: string;
   period_start: string;
   period_end: string;
@@ -19,10 +20,16 @@ type BudgetDraft = {
 
 const blankDraft = (): BudgetDraft => {
   const today = localDateString();
-  return { name: '', category: '', period_start: `${today.slice(0, 4)}-01-01`, period_end: `${today.slice(0, 4)}-12-31`, amount: '', currency: 'ZMW', notes: '', status: 'active' };
+  return { name: '', department: '', category: '', period_start: `${today.slice(0, 4)}-01-01`, period_end: `${today.slice(0, 4)}-12-31`, amount: '', currency: 'ZMW', notes: '', status: 'active' };
 };
 
-function isBudgetResponse(value: unknown): value is { success: true; data: FinanceBudget[] } {
+type BudgetResponse = {
+  success: true;
+  data: FinanceBudget[];
+  user?: { department?: string; admin_role?: string };
+};
+
+function isBudgetResponse(value: unknown): value is BudgetResponse {
   return Boolean(value && typeof value === 'object'
     && (value as { success?: unknown }).success === true
     && Array.isArray((value as { data?: unknown }).data));
@@ -30,6 +37,8 @@ function isBudgetResponse(value: unknown): value is { success: true; data: Finan
 
 export default function BudgetsPage() {
   const [budgets, setBudgets] = useState<FinanceBudget[]>([]);
+  const [userDepartment, setUserDepartment] = useState('');
+  const [userRole, setUserRole] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
@@ -44,6 +53,8 @@ export default function BudgetsPage() {
       const response: unknown = await api.finance.budgets();
       if (!isBudgetResponse(response)) throw new Error('The budget service returned an invalid response.');
       setBudgets(response.data);
+      setUserDepartment(response.user?.department || '');
+      setUserRole(response.user?.admin_role || '');
       setError('');
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to load budgets.');
@@ -57,7 +68,11 @@ export default function BudgetsPage() {
     api.finance.budgets()
       .then((response: unknown) => {
         if (!isBudgetResponse(response)) throw new Error('The budget service returned an invalid response.');
-        if (active) setBudgets(response.data);
+        if (active) {
+          setBudgets(response.data);
+          setUserDepartment(response.user?.department || '');
+          setUserRole(response.user?.admin_role || '');
+        }
       })
       .catch((reason: unknown) => {
         if (active) setError(reason instanceof Error ? reason.message : 'Unable to load budgets.');
@@ -71,7 +86,7 @@ export default function BudgetsPage() {
   const visibleBudgets = useMemo(() => {
     const query = search.trim().toLowerCase();
     return budgets.filter((budget) => (statusFilter === 'all' || budget.status === statusFilter)
-      && (!query || `${budget.name} ${budget.category} ${budget.notes || ''}`.toLowerCase().includes(query)));
+      && (!query || `${budget.name} ${budget.department} ${budget.category} ${budget.notes || ''}`.toLowerCase().includes(query)));
   }, [budgets, search, statusFilter]);
   const activeBudgets = budgets.filter((item) => item.status === 'active');
   const totalBudgeted = formatFinanceTotals(activeBudgets.map((item) => ({ amount: item.amount, currency: item.currency })));
@@ -80,7 +95,7 @@ export default function BudgetsPage() {
 
   function openCreate() {
     setEditingId(null);
-    setDraft(blankDraft());
+    setDraft({ ...blankDraft(), department: userDepartment });
     setModalOpen(true);
   }
 
@@ -88,6 +103,7 @@ export default function BudgetsPage() {
     setEditingId(budget.id);
     setDraft({
       name: budget.name,
+      department: budget.department || '',
       category: budget.category,
       period_start: budget.period_start,
       period_end: budget.period_end,
@@ -147,11 +163,12 @@ export default function BudgetsPage() {
         {loading ? <LoadingState /> : (
           <div className="overflow-x-auto">
             <table className="min-w-full text-left text-sm">
-              <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-[0.15em] text-slate-500"><tr><th className="px-4 py-3">Budget</th><th className="px-4 py-3">Period</th><th className="px-4 py-3">Allocated</th><th className="px-4 py-3">Committed</th><th className="px-4 py-3">Pending</th><th className="px-4 py-3">Remaining</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Actions</th></tr></thead>
+              <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-[0.15em] text-slate-500"><tr><th className="px-4 py-3">Budget</th><th className="px-4 py-3">Department</th><th className="px-4 py-3">Period</th><th className="px-4 py-3">Allocated</th><th className="px-4 py-3">Committed</th><th className="px-4 py-3">Pending</th><th className="px-4 py-3">Remaining</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Actions</th></tr></thead>
               <tbody>{visibleBudgets.map((budget) => {
                 const balance = Number(budget.amount) - Number(budget.committed_amount);
                 return <tr key={budget.id} className="border-t border-slate-100">
                   <td className="px-4 py-3"><p className="font-bold text-slate-900">{budget.name}</p><p className="text-xs text-slate-500">{budget.category}</p></td>
+                  <td className="px-4 py-3 text-xs text-slate-600">{budget.department || '—'}</td>
                   <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-600">{budget.period_start} – {budget.period_end}</td>
                   <td className="whitespace-nowrap px-4 py-3 font-semibold">{formatFinanceMoney(budget.amount, budget.currency)}</td>
                   <td className="whitespace-nowrap px-4 py-3 text-slate-700">{formatFinanceMoney(budget.committed_amount, budget.currency)}</td>
@@ -160,7 +177,7 @@ export default function BudgetsPage() {
                   <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${budget.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>{budget.status}</span></td>
                   <td className="whitespace-nowrap px-4 py-3"><button type="button" onClick={() => openEdit(budget)} aria-label={`Edit ${budget.name}`} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><Pencil size={15} /></button><button type="button" onClick={() => void deleteBudget(budget)} aria-label={`Delete ${budget.name}`} className="rounded-lg p-2 text-red-600 hover:bg-red-50"><Trash2 size={15} /></button></td>
                 </tr>;
-              })}{visibleBudgets.length === 0 && <tr><td colSpan={8} className="px-4 py-10 text-center text-sm text-slate-500">{budgets.length ? 'No budgets match your filters.' : 'No budgets yet. Create a budget to start planning finance allocations.'}</td></tr>}</tbody>
+              })}{visibleBudgets.length === 0 && <tr><td colSpan={9} className="px-4 py-10 text-center text-sm text-slate-500">{budgets.length ? 'No budgets match your filters.' : 'No budgets yet. Create a budget to start planning finance allocations.'}</td></tr>}</tbody>
             </table>
           </div>
         )}
@@ -169,6 +186,9 @@ export default function BudgetsPage() {
       {modalOpen && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4"><form onSubmit={saveBudget} className="max-h-[92vh] w-full max-w-xl space-y-4 overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
         <div className="flex items-start justify-between"><div><p className="text-[10px] font-black uppercase tracking-[0.2em] text-red-600">Budget record</p><h2 className="mt-1 text-xl font-black text-slate-900">{editingId ? 'Edit budget' : 'Create budget'}</h2></div><button type="button" onClick={() => setModalOpen(false)} aria-label="Close form" className="rounded-lg bg-slate-100 p-2"><X size={16} /></button></div>
         <Field label="Budget name"><input required maxLength={180} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} className={financeInputClass} /></Field>
+        {['owner', 'administrator', 'finance'].includes(userRole.toLowerCase())
+          ? <Field label="Department"><input required maxLength={150} value={draft.department} onChange={(event) => setDraft({ ...draft, department: event.target.value })} placeholder="Department responsible for this budget" className={financeInputClass} /></Field>
+          : <p className="rounded-xl bg-slate-50 px-3 py-2.5 text-sm text-slate-600">Department: <span className="font-bold text-slate-800">{userDepartment || 'Your department'}</span></p>}
         <div className="grid gap-4 sm:grid-cols-2"><Field label="Category"><input required maxLength={100} value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value })} placeholder="e.g. Operations" className={financeInputClass} /></Field><Field label="Allocation"><input required type="number" min="0.01" step="0.01" value={draft.amount} onChange={(event) => setDraft({ ...draft, amount: event.target.value })} className={financeInputClass} /></Field></div>
         <div className="grid gap-4 sm:grid-cols-3"><Field label="Currency"><select value={draft.currency} onChange={(event) => setDraft({ ...draft, currency: event.target.value })} className={financeInputClass}><option value="ZMW">ZMW</option><option value="GHS">GHS</option><option value="USD">USD</option></select></Field><Field label="Start date"><input required type="date" value={draft.period_start} onChange={(event) => setDraft({ ...draft, period_start: event.target.value })} className={financeInputClass} /></Field><Field label="End date"><input required type="date" min={draft.period_start} value={draft.period_end} onChange={(event) => setDraft({ ...draft, period_end: event.target.value })} className={financeInputClass} /></Field></div>
         <Field label="Status"><select value={draft.status} onChange={(event) => setDraft({ ...draft, status: event.target.value as BudgetDraft['status'] })} className={financeInputClass}><option value="active">Active</option><option value="closed">Closed</option></select></Field>

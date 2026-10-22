@@ -24,11 +24,21 @@ The portal reads local Next.js settings from `.env.local`; start with `.env.exam
 
 The PHP API reads its settings from the PHP hosting environment, not from a `.env` file. Use `../php-api/.env.example` as the variable checklist and configure values in PHP-FPM, Apache, or the deployment platform. Do not commit production credentials.
 
+The admin Configuration & billing page stores academic terms, cohort names, fee schedules, and payment preferences in the `school_system_settings` database table; academic term dates are also synchronized to `academic_terms`. Existing `php-api/data/sys_config.json` settings are imported into the database automatically the first time the API loads settings. If the PHP host does not run the application database initializer, import `../php-api/config/createSchoolSettingsTable.sql`. Flutterwave keys remain server environment variables and are never stored with school settings.
+
 ## Chat and account notifications
 
 The portal's role-scoped message center supports admin-to-admin, admin-to-lecturer, and Student Affairs admin-to-student conversations. It stores messages and unread state in `communications_*`; server-side participant checks apply to every request. In-app account notifications use the existing `rhema_notifications` table and link to relevant course, assessment, attendance, and event pages. Assignment submission and grading, quiz results, enrolment, published assessments, class schedule changes, attendance follow-ups, lecturer account changes, and registered event updates generate relevant notifications.
 
 The PHP database initializer creates the required tables automatically. If the PHP host is configured not to run the application initializer, import `../php-api/communications/createTables.sql` into the same database before deploying communications endpoints. Email delivery uses PHP outbound `mail()` and is enabled unless `NOTIFICATION_EMAIL_ENABLED=false`; configure `NOTIFICATION_EMAIL_FROM` (or reuse `PAYMENT_RECEIPT_FROM`) with a valid sender address and set `PORTAL_BASE_URL` for action links. Email delivery is best effort: a mail transport failure is logged and does not undo the in-app notification or the underlying operation.
+
+## Student payments and activity access
+
+Students can pay tuition from `/student/billing` in partial or additional amounts. Tuition overpayments remain visible as account credit. Other posted liabilities are paid individually from that page; each is marked settled only after Flutterwave verification. A student who cannot pay an assessment retake/resubmission or session-audio fee can request help from its paywall. Finance issues the invoice, then an IT administrator approves or rejects the access request at `/admin/activity-requests`; approval grants the activity access window and does not remove the invoiced liability. The PHP initializer adds the liability-payment ledger fields and creates the activity-request table automatically.
+
+## Department budgets and school assets
+
+Every administrator department can create and manage its own budgets; departmental accounts only see and change budgets assigned to their department. Finance, owner, and administrator roles can manage budgets across departments. The API adds the budget department field to existing databases automatically. The `/admin/assets` register records school property with an asset ID code, serial number, image, description, department, status, and repair history (identified problem, fix, cost, currency, and reporter). Asset and repair tables are created automatically when the asset API is first used, and asset images are stored under `php-api/uploads/assets`. Ensure the PHP uploads directory is writable and include it in deployment backups.
 
 ## Attendance absence follow-ups
 

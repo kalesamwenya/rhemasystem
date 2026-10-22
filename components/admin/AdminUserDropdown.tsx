@@ -43,10 +43,6 @@ export default function AdminUserDropdown({ isOpen, onToggle, admin, onSignOut }
         <div className="h-8 w-8 rounded-xl bg-slate-900 text-white font-black text-xs flex items-center justify-center uppercase">
           {admin.name.charAt(0)}
         </div>
-        <div className="hidden md:block pr-1 text-left">
-          <p className="text-xs font-bold text-slate-900 leading-none">{admin.name}</p>
-          <p className="text-[10px] text-slate-400 mt-1 leading-none uppercase tracking-wider">{admin.role}</p>
-        </div>
         <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 

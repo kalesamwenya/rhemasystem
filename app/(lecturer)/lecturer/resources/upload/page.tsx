@@ -3,9 +3,9 @@
 import React, { useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { 
-  ArrowLeft, CloudUpload, FileCode, FileText, 
-  Video, Globe, HelpCircle, X, CheckCircle2, AlertCircle 
+import {
+  ArrowLeft, CloudUpload, FileCode, FileText,
+  Globe, X, CheckCircle2, AlertCircle
 } from 'lucide-react';
 
 interface SelectedFilePayload {
@@ -234,8 +234,9 @@ export default function LecturerResourceUploadSystem() {
                 <select 
                   value={resourceType}
                   onChange={(e) => {
-                    setResourceType(e.target.value as any);
-                    if (e.target.value !== 'link') setExternalUrl('');
+                    const nextResourceType = e.target.value as 'code' | 'document' | 'video' | 'link';
+                    setResourceType(nextResourceType);
+                    if (nextResourceType !== 'link') setExternalUrl('');
                   }}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-700 outline-none focus:border-slate-300"
                 >

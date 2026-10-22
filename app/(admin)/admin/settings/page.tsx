@@ -97,17 +97,30 @@ function normalizeTerms(input: Record<string, Partial<TermDates>> | undefined): 
   return next;
 }
 
-function normalizePricing(input: Record<string, Partial<CohortFeePlan>> | undefined): SettingsState['cohortPricing'] {
+function normalizeCohorts(input: Record<string, unknown> | undefined): Record<string, string> {
+  return Object.fromEntries(Object.entries(defaultCohorts).map(([id, fallback]) => {
+    const value = input?.[id];
+    return [id, typeof value === 'string' && value.trim() ? value.trim().toUpperCase() : fallback];
+  }));
+}
+
+function normalizePricing(
+  input: Record<string, Partial<CohortFeePlan>> | undefined,
+  cohorts: Record<string, string> = defaultCohorts,
+): SettingsState['cohortPricing'] {
   const next: SettingsState['cohortPricing'] = {};
-  Object.entries(defaultPricing).forEach(([cohort, value]) => {
+  const cohortNames = new Set([...Object.keys(defaultPricing), ...Object.keys(input ?? {}), ...Object.values(cohorts)]);
+  cohortNames.forEach((cohort) => {
+    const cohortId = Object.entries(cohorts).find(([, name]) => name.toUpperCase() === cohort.toUpperCase())?.[0];
+    const fallback = defaultPricing[cohort] ?? defaultPricing[defaultCohorts[cohortId ?? '1']] ?? defaultPricing.FYM;
     const source = input?.[cohort] ?? {};
     next[cohort] = {
-      term: source.term || value.term,
-      tuition: Number(source.tuition ?? value.tuition ?? 0),
-      missedExam: Number(source.missedExam ?? value.missedExam ?? 0),
-      missedQuiz: Number(source.missedQuiz ?? value.missedQuiz ?? 0),
-      missedAssignment: Number(source.missedAssignment ?? value.missedAssignment ?? 0),
-      audioRecording: Number(source.audioRecording ?? value.audioRecording ?? 0),
+      term: source.term || fallback.term,
+      tuition: Number(source.tuition ?? fallback.tuition ?? 0),
+      missedExam: Number(source.missedExam ?? fallback.missedExam ?? 0),
+      missedQuiz: Number(source.missedQuiz ?? fallback.missedQuiz ?? 0),
+      missedAssignment: Number(source.missedAssignment ?? fallback.missedAssignment ?? 0),
+      audioRecording: Number(source.audioRecording ?? fallback.audioRecording ?? 0),
     };
   });
   return next;
@@ -119,6 +132,7 @@ export default function SettingsHub() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [messageIsError, setMessageIsError] = useState(false);
 
   const navItems = [
     { name: 'Academic', icon: GraduationCap },
@@ -133,10 +147,11 @@ export default function SettingsHub() {
       try {
         const body = await api.config.get() as { data?: Partial<SettingsState> };
         const data = body?.data ?? {};
+        const cohorts = normalizeCohorts(data.cohorts);
         setSettings({
-          cohorts: data.cohorts ?? defaultCohorts,
+          cohorts,
           terms: normalizeTerms(data.terms),
-          cohortPricing: normalizePricing(data.cohortPricing),
+          cohortPricing: normalizePricing(data.cohortPricing, cohorts),
           assessmentPricing: {
             missedExam: Number(data.assessmentPricing?.missedExam ?? defaultAssessmentPricing.missedExam),
             missedQuiz: Number(data.assessmentPricing?.missedQuiz ?? defaultAssessmentPricing.missedQuiz),
@@ -154,6 +169,7 @@ export default function SettingsHub() {
           },
         });
       } catch (error) {
+        setMessageIsError(true);
         setMessage(error instanceof Error ? error.message : 'Unable to load school settings.');
       } finally {
         setIsLoading(false);
@@ -186,6 +202,22 @@ export default function SettingsHub() {
     }));
   };
 
+  const setCohortName = (cohortId: string, value: string) => {
+    const nextName = value.trim().toUpperCase();
+    setSettings((current) => {
+      const previousName = current.cohorts[cohortId]?.trim().toUpperCase();
+      const nextPricing = { ...current.cohortPricing };
+      if (nextName && previousName && !nextPricing[nextName] && nextPricing[previousName]) {
+        nextPricing[nextName] = { ...nextPricing[previousName] };
+      }
+      return {
+        ...current,
+        cohorts: { ...current.cohorts, [cohortId]: nextName },
+        cohortPricing: nextPricing,
+      };
+    });
+  };
+
   const setAssessmentFee = (field: keyof SettingsState['assessmentPricing'], value: string) => {
     const amount = Number(value || 0);
     const cohortField: keyof CohortFeePlan = field === 'missedExam'
@@ -212,6 +244,7 @@ export default function SettingsHub() {
 
   const handleSave = async () => {
     setIsSaving(true);
+    setMessageIsError(false);
     setMessage('');
 
     try {
@@ -226,8 +259,9 @@ export default function SettingsHub() {
             currency: settings.paymentGateway.currency,
           },
       });
-      setMessage('School pricing and payment settings were saved successfully.');
+      setMessage('School settings were saved successfully.');
     } catch (error) {
+      setMessageIsError(true);
       setMessage(error instanceof Error ? error.message : 'Unable to save configurations.');
     } finally {
       setIsSaving(false);
@@ -284,15 +318,12 @@ export default function SettingsHub() {
         </div>
 
         <div className="grid gap-3 md:grid-cols-2">
-          {Object.entries(settings.cohorts ?? settings.cohorts).map(([id, name]) => (
+          {Object.entries(settings.cohorts).map(([id, name]) => (
             <label key={id} className="block text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500">
               Cohort {id}
               <input
                 value={name}
-                onChange={(event) => setSettings((current) => ({
-                  ...current,
-                  cohorts: { ...current.cohorts, [id]: event.target.value.toUpperCase() },
-                }))}
+                onChange={(event) => setCohortName(id, event.target.value)}
                 className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-400"
               />
             </label>
@@ -314,7 +345,9 @@ export default function SettingsHub() {
         </div>
 
         <div className="space-y-4">
-          {Object.entries(settings.cohortPricing).map(([cohort, values]) => (
+          {Object.entries(settings.cohortPricing)
+            .filter(([cohort]) => Object.values(settings.cohorts).some((name) => name.toUpperCase() === cohort.toUpperCase()))
+            .map(([cohort, values]) => (
             <div key={cohort} className="rounded-2xl border border-slate-200 bg-white p-4">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <h4 className="text-sm font-black text-slate-900">{cohort}</h4>
@@ -453,12 +486,12 @@ export default function SettingsHub() {
     <div className="space-y-4">
       <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
         <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">Alert policy</p>
-        <p className="mt-2 text-sm font-semibold text-amber-900">Students with attendance below 75% automatically receive academic follow-up alerts, and a missed assessment fee reminder is posted when required content is accessed.</p>
+        <p className="mt-2 text-sm font-semibold text-amber-900">The attendance report includes a below-75% filter. Alert thresholds and delivery channels are not configurable on this page; existing in-app and email notifications follow their event workflows.</p>
       </div>
       <div className="rounded-2xl border border-slate-200 bg-white p-4">
-        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Alert channels</p>
-        <div className="mt-3 grid gap-3 md:grid-cols-3">
-          {['SMS', 'WhatsApp', 'Email'].map((channel) => (
+        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Existing notification channels</p>
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
+          {['In-app notifications', 'Email (server-configured)'].map((channel) => (
             <div key={channel} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700">{channel}</div>
           ))}
         </div>
@@ -469,8 +502,8 @@ export default function SettingsHub() {
   const renderSystem = () => (
     <div className="space-y-4">
       <div className="rounded-2xl border border-slate-200 bg-white p-4">
-        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Registry status</p>
-        <p className="mt-3 text-sm font-semibold text-slate-700">The schedule store, attendance logs, and audio pricing metadata are synced to the school config file and importable into the reporting dashboard.</p>
+        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Settings storage</p>
+        <p className="mt-3 text-sm font-semibold text-slate-700">Academic terms, cohort names, fee schedules, and payment preferences are stored in the school database and used by the relevant student billing and assessment flows.</p>
       </div>
     </div>
   );
@@ -523,7 +556,11 @@ export default function SettingsHub() {
       </div>
 
       {message && (
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-semibold text-emerald-800">
+        <div className={`rounded-2xl border px-4 py-3 text-xs font-semibold ${
+          messageIsError
+            ? 'border-rose-200 bg-rose-50 text-rose-800'
+            : 'border-emerald-200 bg-emerald-50 text-emerald-800'
+        }`}>
           {message}
         </div>
       )}

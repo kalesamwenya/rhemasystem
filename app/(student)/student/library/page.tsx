@@ -6,6 +6,7 @@ import { api, assetUrl, uploadPdfDocument } from '@/lib/api';
 import { openFlutterwaveInlineCheckout, type FlutterwaveInlineCheckout } from '@/lib/flutterwave-inline';
 import { createOrderPaymentReceiptPdf, openPaymentReceiptBlob } from '@/lib/payment-receipt';
 import { useStudentAudio, type AudioSession } from '@/components/students/StudentAudioPlayer';
+import ActivityAccessRequest from '@/components/students/ActivityAccessRequest';
 
 type CourseResource = {
   id: number;
@@ -419,15 +420,18 @@ export default function StudentLibraryPage() {
                           <div>
                             <p>Purchase this session audio to unlock playback.</p>
                             {audio.price > 0 ? (
-                              <button
-                                type="button"
-                                onClick={() => void buyAudio(audio)}
-                                disabled={purchasingAudioId !== null}
-                                className="mt-3 inline-flex items-center gap-2 rounded-lg bg-blue-900 px-3 py-2 text-xs font-bold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
-                              >
-                                {purchasingAudioId === audio.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CreditCard className="h-3.5 w-3.5" />}
-                                {purchasingAudioId === audio.id ? 'Starting checkout…' : `Buy audio · ${audio.currency} ${audio.price.toFixed(2)}`}
-                              </button>
+                              <div className="mt-3 space-y-3">
+                                <button
+                                  type="button"
+                                  onClick={() => void buyAudio(audio)}
+                                  disabled={purchasingAudioId !== null}
+                                  className="inline-flex items-center gap-2 rounded-lg bg-blue-900 px-3 py-2 text-xs font-bold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  {purchasingAudioId === audio.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CreditCard className="h-3.5 w-3.5" />}
+                                  {purchasingAudioId === audio.id ? 'Starting checkout…' : `Buy audio · ${audio.currency} ${audio.price.toFixed(2)}`}
+                                </button>
+                                <ActivityAccessRequest activityType="audio" activityId={audio.id} activityName={audio.title} />
+                              </div>
                             ) : (
                               <p className="mt-1 text-amber-800">Online purchase is unavailable because a price has not been set. Contact the school office.</p>
                             )}

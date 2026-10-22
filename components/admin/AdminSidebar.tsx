@@ -15,6 +15,8 @@ import {
   CreditCard,
   CheckSquare,
   Banknote,
+  Boxes,
+  ClipboardList,
   FileSpreadsheet,
   Gauge,
   GraduationCap,
@@ -123,8 +125,10 @@ const navigationGroups: NavGroup[] = [
     items: [
       { title: 'Finance & Payments', href: '/admin/payments', module: 'finance', icon: CreditCard, badge: 'Review' },
       { title: 'Financial Reports', href: '/admin/financials', module: 'finance', icon: CreditCard },
-      { title: 'Budgets', href: '/admin/budgets', module: 'finance', icon: FileSpreadsheet },
+      { title: 'Budgets', href: '/admin/budgets', module: 'budgets', icon: FileSpreadsheet },
       { title: 'Expenditures', href: '/admin/expenditures', module: 'finance', icon: Banknote },
+      { title: 'School assets', href: '/admin/assets', module: 'assets', icon: Boxes },
+      { title: 'Activity access requests', href: '/admin/activity-requests', module: 'activity-requests', icon: ClipboardList },
     ],
   },
   {
@@ -186,6 +190,11 @@ export default function AdminSidebar({
         <button type="button" onClick={closeSidebar} className="rounded-lg border border-slate-200 p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900" aria-label="Close admin navigation"><X className="h-4 w-4" /></button>
       </div>
 
+      <div className="mb-2 flex flex-col items-center text-center gap-3 rounded-xl bg-slate-50 px-3 py-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#fbe9e7] text-sm font-black text-red-700" aria-label={`${admin.name} avatar`}>{getInitials(admin.name)}</div>
+          <div className="min-w-0 flex-1"><p className="truncate text-xs font-black text-slate-900">{admin.name}</p><p className="mt-0.5 truncate text-[10px] font-semibold capitalize text-[#31584c]">{formatRole(admin.admin_role)}</p><p className="truncate text-[9px] text-slate-500">{admin.department}</p></div>
+      </div>
+
       <nav className="scrollbar-none flex-1 space-y-2 overflow-y-auto px-3 py-4" aria-label="Administrator navigation" style={{ msOverflowStyle: 'none', scrollbarWidth: 'none' }}>
         {navigationGroups.map((group) => {
           const visibleItems = group.items.filter((item) => canAccessAdminModule(admin.admin_role, admin.department, item.module));
@@ -212,11 +221,8 @@ export default function AdminSidebar({
 
       <div className="shrink-0 border-t border-slate-200 p-3">
         {signOutError && <p role="alert" className="mb-2 rounded-lg bg-red-50 px-3 py-2 text-[11px] text-red-700">{signOutError}</p>}
-        <div className="mb-2 flex items-center gap-3 rounded-xl bg-slate-50 px-3 py-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#fbe9e7] text-sm font-black text-red-700" aria-label={`${admin.name} avatar`}>{getInitials(admin.name)}</div>
-          <div className="min-w-0 flex-1"><p className="truncate text-xs font-black text-slate-900">{admin.name}</p><p className="mt-0.5 truncate text-[10px] font-semibold capitalize text-[#31584c]">{formatRole(admin.admin_role)}</p><p className="truncate text-[9px] text-slate-500">{admin.department}</p></div>
-        </div>
-        <button type="button" onClick={() => void signOut()} disabled={signingOut} className="group flex w-full items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-xs font-bold uppercase tracking-wide text-slate-500 transition-all hover:border-red-100 hover:bg-red-50 hover:text-red-700 disabled:opacity-60"><LogOut className="h-4 w-4 shrink-0 transition-transform group-hover:-translate-x-0.5" /><span className="truncate">{signingOut ? 'Signing out...' : 'Sign out'}</span></button>
+        
+         <button type="button" onClick={() => void signOut()} disabled={signingOut} className="group flex w-full items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-xs font-bold uppercase tracking-wide text-slate-500 transition-all hover:border-red-100 hover:bg-red-50 hover:text-red-700 disabled:opacity-60"><LogOut className="h-4 w-4 shrink-0 transition-transform group-hover:-translate-x-0.5" /><span className="truncate">{signingOut ? 'Signing out...' : 'Sign out'}</span></button>
       </div>
 
       <div onMouseDown={onMouseDownResize} className={`absolute bottom-0 right-0 top-0 z-50 hidden w-1 cursor-col-resize transition-all hover:bg-[#31584c] md:block ${isDragging ? 'w-1.5 bg-red-600' : ''}`} />

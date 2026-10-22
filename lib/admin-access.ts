@@ -19,6 +19,9 @@ export type AdminModule =
   | 'analysis'
   | 'performance'
   | 'finance'
+  | 'budgets'
+  | 'assets'
+  | 'activity-requests'
   | 'schedule'
   | 'library'
   | 'profile'
@@ -28,17 +31,17 @@ export type AdminModule =
 const allModules: AdminModule[] = [
   'dashboard', 'reports', 'admissions', 'partnerships', 'students', 'people', 'student-affairs', 'academics',
   'communications', 'contact-messages', 'chatbot', 'social-media', 'events', 'store', 'help-desk', 'tasks',
-  'statistics', 'analysis', 'performance', 'finance', 'schedule', 'library', 'profile', 'settings',
+  'statistics', 'analysis', 'performance', 'finance', 'budgets', 'assets', 'activity-requests', 'schedule', 'library', 'profile', 'settings',
 ];
 
 const roleModules: Record<AdminRole, AdminModule[]> = {
   owner: allModules,
   administrator: allModules,
-  finance: ['dashboard', 'reports', 'finance', 'store', 'communications', 'profile', 'tasks'],
-  academic: ['dashboard', 'reports', 'academics', 'student-affairs', 'schedule', 'library', 'communications', 'profile', 'tasks'],
-  registrar: ['dashboard', 'reports', 'admissions', 'partnerships', 'students', 'people', 'events', 'student-affairs', 'communications', 'profile', 'tasks'],
-  support: ['dashboard', 'reports', 'partnerships', 'communications', 'contact-messages', 'chatbot', 'social-media', 'help-desk', 'profile', 'tasks'],
-  operations: ['dashboard', 'reports', 'events', 'schedule', 'tasks', 'profile'],
+  finance: ['dashboard', 'reports', 'finance', 'budgets', 'assets', 'activity-requests', 'store', 'communications', 'profile', 'tasks'],
+  academic: ['dashboard', 'reports', 'academics', 'budgets', 'assets', 'student-affairs', 'schedule', 'library', 'communications', 'profile', 'tasks'],
+  registrar: ['dashboard', 'reports', 'admissions', 'partnerships', 'students', 'people', 'events', 'budgets', 'assets', 'student-affairs', 'communications', 'profile', 'tasks'],
+  support: ['dashboard', 'reports', 'partnerships', 'budgets', 'assets', 'activity-requests', 'communications', 'contact-messages', 'chatbot', 'social-media', 'help-desk', 'profile', 'tasks'],
+  operations: ['dashboard', 'reports', 'events', 'budgets', 'assets', 'schedule', 'tasks', 'profile'],
 };
 
 const departmentAliases: Record<Exclude<AdminRole, 'owner' | 'administrator'>, string[]> = {
@@ -71,6 +74,12 @@ export function normalizeAdminRole(value: string): AdminRole | null {
 export function canAccessAdminModule(roleValue: string, department: string, module: AdminModule): boolean {
   const role = normalizeAdminRole(roleValue);
   if (!role) return false;
+  if (module === 'budgets' || module === 'assets') return true;
+  if (module === 'activity-requests') {
+    return role === 'owner' || role === 'administrator'
+      || role === 'finance'
+      || (role === 'support' && isMediaOrItDepartment(department));
+  }
   if (module === 'social-media' && isMediaOrItDepartment(department)) return true;
   if (!roleModules[role].includes(module)) return false;
   return departmentMatchesRole(department, role);
@@ -96,7 +105,10 @@ export function getAdminModuleForPath(pathname: string): AdminModule {
   if (pathname.startsWith('/admin/statistics')) return 'statistics';
   if (pathname.startsWith('/admin/analysis')) return 'analysis';
   if (pathname.startsWith('/admin/performance-logs')) return 'performance';
-  if (pathname.startsWith('/admin/budgets') || pathname.startsWith('/admin/expenditures')) return 'finance';
+  if (pathname.startsWith('/admin/budgets')) return 'budgets';
+  if (pathname.startsWith('/admin/assets')) return 'assets';
+  if (pathname.startsWith('/admin/activity-requests')) return 'activity-requests';
+  if (pathname.startsWith('/admin/expenditures')) return 'finance';
   if (pathname.startsWith('/admin/payments') || pathname.startsWith('/admin/financials')) return 'finance';
   if (pathname.startsWith('/admin/schedule')) return 'schedule';
   if (pathname.startsWith('/admin/library')) return 'library';

@@ -35,7 +35,8 @@ type PaymentLedgerRecord = Omit<PaymentReceiptData, 'receipt_token'> & {
   receipt_path?: string | null;
   entry_type: 'charge' | 'payment';
   status: 'posted' | 'pending' | 'paid' | 'failed' | 'void';
-  payment_purpose: 'tuition' | 'assessment';
+  payment_purpose: 'tuition' | 'assessment' | 'liability';
+  liability_charge_id?: number | null;
   assessment_type: 'quiz' | 'exam' | 'assignment' | null;
   assessment_id: number | null;
   liability_type: 'tuition' | 'missed_audio' | 'assignment' | 'quiz' | 'exam' | 'other_penalty' | null;
@@ -81,6 +82,13 @@ const getLiabilityLabel = (record: PaymentLedgerRecord) => {
 
 const isAccountPayment = (record: PaymentLedgerRecord) =>
   record.entry_type === 'payment' && record.status === 'paid' && record.payment_purpose === 'tuition';
+
+const isLiabilityPayment = (record: PaymentLedgerRecord) =>
+  record.entry_type === 'payment' && record.status === 'paid' && record.payment_purpose === 'liability';
+
+const appliedPaymentTotal = (records: PaymentLedgerRecord[]) =>
+  records.filter((record) => isAccountPayment(record) || isLiabilityPayment(record))
+    .reduce((total, record) => total + record.amount, 0);
 
 export default function AdminPaymentsPage() {
   const [records, setRecords] = useState<PaymentLedgerRecord[]>([]);
@@ -221,7 +229,7 @@ export default function AdminPaymentsPage() {
       const paid = studentRecords
         .filter((record) => record.entry_type === 'payment' && record.status === 'paid')
         .reduce((total, record) => total + record.amount, 0);
-      const credited = studentRecords.filter(isAccountPayment).reduce((total, record) => total + record.amount, 0);
+      const credited = appliedPaymentTotal(studentRecords);
       const balance = Math.max(0, invoiced - credited);
       const firstRecord = studentRecords[0];
       return {
@@ -302,7 +310,7 @@ export default function AdminPaymentsPage() {
         setRecords(ledgerResponse.data);
         const invoiced = studentRecords.filter((record) => record.entry_type === 'charge' && record.status === 'posted').reduce((sum, record) => sum + record.amount, 0);
         const paid = studentRecords.filter((record) => record.entry_type === 'payment' && record.status === 'paid').reduce((sum, record) => sum + record.amount, 0);
-        const credited = studentRecords.filter(isAccountPayment).reduce((sum, record) => sum + record.amount, 0);
+        const credited = appliedPaymentTotal(studentRecords);
         const balance = Math.max(0, invoiced - credited);
         setSelectedAccount({
           ...account,
@@ -508,7 +516,7 @@ export default function AdminPaymentsPage() {
         const updatedRecords = current.records.map((record) => record.id === response.data.id ? response.data : record);
         const invoiced = updatedRecords.filter((record) => record.entry_type === 'charge' && record.status === 'posted').reduce((sum, record) => sum + record.amount, 0);
         const paid = updatedRecords.filter((record) => record.entry_type === 'payment' && record.status === 'paid').reduce((sum, record) => sum + record.amount, 0);
-        const credited = updatedRecords.filter(isAccountPayment).reduce((sum, record) => sum + record.amount, 0);
+        const credited = appliedPaymentTotal(updatedRecords);
         const balance = Math.max(0, invoiced - credited);
         return {
           ...current,

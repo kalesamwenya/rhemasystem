@@ -16,8 +16,8 @@ import { confirmWithApp } from '@/components/ui/app-dialogs';
 // --- INITIAL DATASET ---
 type AdminStudent = { id: string; name: string; email: string; avatar?: string; department: string; gpa: string; status: string; paymentStatus?: string; registrationDate: string };
 type StudentProfile = { student: { student_id: string; name: string; class: string; email?: string; avatar?: string; payment_status: string; account_status?: string }; attendance: { totalSessions: number; attended: number; absent: number; percentage: number; morning: { attended: number }; evening: { attended: number } } };
-type StudentFinanceRecord = { id: number; student_id: string; entry_type: 'charge' | 'payment'; description: string; amount: number; currency: string; status: string; liability_type?: string | null; reference: string };
-type StudentFinance = { charges: StudentFinanceRecord[]; total_charges: number; total_paid: number; amount_due: number; currency: string };
+type StudentFinanceRecord = { id: number; student_id: string; entry_type: 'charge' | 'payment'; description: string; amount: number; currency: string; status: string; liability_type?: string | null; reference: string; paid_amount?: number; pending_amount?: number; outstanding_amount?: number };
+type StudentFinance = { charges: StudentFinanceRecord[]; liabilities: StudentFinanceRecord[]; total_charges: number; total_paid: number; amount_due: number; liabilities_due: number; total_account_due: number; currency: string };
 type StudentForm = AdminStudent;
 
 const formatFinanceAmount = (amount: number, currency: string) =>
@@ -143,6 +143,9 @@ export default function StudentManagementPage() {
           total_charges: 0,
           total_paid: 0,
           amount_due: 0,
+          liabilities: [],
+          liabilities_due: 0,
+          total_account_due: 0,
           currency: 'ZMW',
         });
       }).catch((reason: unknown) => {
@@ -154,7 +157,7 @@ export default function StudentManagementPage() {
   };
 
   const sendLiabilityEmail = async () => {
-    if (!selectedStudent || !studentFinance || studentFinance.amount_due <= 0 || sendingReminder) return;
+    if (!selectedStudent || !studentFinance || studentFinance.total_account_due <= 0 || sendingReminder) return;
     setSendingReminder(true);
     setReminderError('');
     setReminderNotice('');
@@ -169,7 +172,7 @@ export default function StudentManagementPage() {
   };
 
   const openMessageComposer = (channel: 'sms' | 'whatsapp') => {
-    if (!selectedStudent || !studentFinance || studentFinance.amount_due <= 0) return;
+    if (!selectedStudent || !studentFinance || studentFinance.total_account_due <= 0) return;
     const phone = reminderPhone.trim();
     const digits = phone.replace(/\D/g, '');
     if (digits.length < 7 || digits.length > 15) {
@@ -182,7 +185,7 @@ export default function StudentManagementPage() {
       style: 'currency',
       currency: studentFinance.currency,
       maximumFractionDigits: 2,
-    }).format(studentFinance.amount_due);
+    }).format(studentFinance.total_account_due);
     const text = `Rhema Bible School account reminder for ${selectedStudent.name}: your outstanding balance is ${amountDue}. Review your charges and pay securely here: ${paymentUrl}`;
     const destination = channel === 'whatsapp'
       ? `https://wa.me/${digits}?text=${encodeURIComponent(text)}`
@@ -745,19 +748,26 @@ export default function StudentManagementPage() {
                           <div className="rounded-xl border border-slate-200 bg-white p-3 text-xs"><p className="font-black uppercase tracking-wider text-slate-400">Student summary</p><p className="mt-2 text-slate-700">{studentProfile.attendance.totalSessions} attendance sessions recorded. Morning present: {studentProfile.attendance.morning.attended}; evening present: {studentProfile.attendance.evening.attended}.</p><p className="mt-2 font-bold text-slate-800">Payment: {studentProfile.student.payment_status || 'Pending'} · Access: {formFields.status}</p></div>
                           <section className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/60 p-3" aria-label="Student outstanding liabilities">
                             <div className="flex items-center justify-between gap-2">
-                              <div><p className="text-[9px] font-black uppercase tracking-wider text-amber-800">Outstanding balance</p><p className="mt-1 text-xl font-black text-slate-900">{studentFinance ? formatFinanceAmount(studentFinance.amount_due, studentFinance.currency) : 'Loading…'}</p></div>
-                              {studentFinance && <span className="text-right text-[9px] font-semibold text-slate-500">{studentFinance.charges.length} posted charge{studentFinance.charges.length === 1 ? '' : 's'}</span>}
+                              <div><p className="text-[9px] font-black uppercase tracking-wider text-amber-800">Total account due</p><p className="mt-1 text-xl font-black text-slate-900">{studentFinance ? formatFinanceAmount(studentFinance.total_account_due, studentFinance.currency) : 'Loading…'}</p></div>
+                              {studentFinance && <span className="text-right text-[9px] font-semibold text-slate-500">{studentFinance.charges.length + studentFinance.liabilities.length} posted charge{studentFinance.charges.length + studentFinance.liabilities.length === 1 ? '' : 's'}</span>}
                             </div>
                             {studentFinance && <div className="space-y-2 border-t border-amber-200 pt-2">
-                              {studentFinance.charges.length ? studentFinance.charges.map((charge) => (
+                              {studentFinance.charges.length > 0 && <><p className="text-[9px] font-black uppercase tracking-wide text-slate-500">Tuition charges</p>{studentFinance.charges.map((charge) => (
                                 <div key={charge.id} className="flex items-start justify-between gap-3 text-[10px]">
                                   <span className="min-w-0 text-slate-700"><span className="block font-bold text-slate-500">{liabilityLabel(charge)}</span>{charge.description}</span>
                                   <span className="shrink-0 font-mono font-bold text-slate-900">{formatFinanceAmount(Number(charge.amount), charge.currency)}</span>
                                 </div>
-                              )) : <p className="text-[10px] text-slate-500">No posted liabilities.</p>}
-                              <div className="flex justify-between border-t border-amber-200 pt-2 text-[10px]"><span className="text-slate-500">Charges · confirmed payments</span><span className="font-bold text-slate-800">{formatFinanceAmount(studentFinance.total_charges, studentFinance.currency)} · {formatFinanceAmount(studentFinance.total_paid, studentFinance.currency)}</span></div>
+                              ))}</>}
+                              {studentFinance.liabilities.length > 0 && <><p className="mt-3 border-t border-amber-200 pt-2 text-[9px] font-black uppercase tracking-wide text-slate-500">Other liabilities</p>{studentFinance.liabilities.map((liability) => (
+                                <div key={liability.id} className="flex items-start justify-between gap-3 text-[10px]">
+                                  <span className="min-w-0 text-slate-700"><span className="block font-bold text-slate-500">{liabilityLabel(liability)} · {liability.outstanding_amount === 0 ? 'Paid & verified' : liability.pending_amount ? 'Payment pending' : 'Outstanding'}</span>{liability.description}</span>
+                                  <span className="shrink-0 text-right font-mono font-bold text-slate-900">{formatFinanceAmount(Number(liability.outstanding_amount || 0), liability.currency)} due</span>
+                                </div>
+                              ))}</>}
+                              {!studentFinance.charges.length && !studentFinance.liabilities.length && <p className="text-[10px] text-slate-500">No posted liabilities.</p>}
+                              <div className="flex justify-between border-t border-amber-200 pt-2 text-[10px]"><span className="text-slate-500">Tuition charges · tuition payments · other liabilities due</span><span className="text-right font-bold text-slate-800">{formatFinanceAmount(studentFinance.total_charges, studentFinance.currency)} · {formatFinanceAmount(studentFinance.total_paid, studentFinance.currency)} · {formatFinanceAmount(studentFinance.liabilities_due, studentFinance.currency)}</span></div>
                             </div>}
-                            {studentFinance && studentFinance.amount_due > 0 && <div className="space-y-2 border-t border-amber-200 pt-3">
+                            {studentFinance && studentFinance.total_account_due > 0 && <div className="space-y-2 border-t border-amber-200 pt-3">
                               <button type="button" onClick={() => void sendLiabilityEmail()} disabled={sendingReminder} className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-900 px-3 py-2.5 text-[10px] font-black uppercase tracking-wide text-white disabled:opacity-60">
                                 {sendingReminder ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}Email branded payment reminder
                               </button>

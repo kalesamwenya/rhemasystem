@@ -33,6 +33,13 @@ type FlutterwaveInlineOptions = {
   onclose: () => void;
 };
 
+type PaymentMethod = 'mobile_money' | 'card';
+
+type PaymentDetails = {
+  method: PaymentMethod;
+  phone?: string;
+};
+
 declare global {
   interface Window {
     FlutterwaveCheckout?: (options: FlutterwaveInlineOptions) => void;
@@ -52,7 +59,7 @@ function formatCheckoutAmount(checkout: FlutterwaveInlineCheckout): string {
   return `${checkout.amount.toFixed(2)} ${checkout.currency}`;
 }
 
-function requestPaymentPhone(checkout: FlutterwaveInlineCheckout): Promise<string | null> {
+function requestPaymentDetails(checkout: FlutterwaveInlineCheckout): Promise<PaymentDetails | null> {
   return new Promise((resolve) => {
     const dialog = document.createElement('dialog');
     dialog.className = 'm-auto w-[min(92vw,28rem)] max-w-none rounded-2xl border border-slate-200 bg-white p-0 text-slate-900 shadow-2xl backdrop:bg-slate-950/60';
@@ -68,7 +75,7 @@ function requestPaymentPhone(checkout: FlutterwaveInlineCheckout): Promise<strin
     const heading = document.createElement('h2');
     heading.className = 'mt-2 text-xl font-black';
     heading.id = 'rhema-payment-dialog-title';
-    heading.textContent = 'Confirm payment details';
+    heading.textContent = 'Choose how to pay';
     const description = document.createElement('p');
     description.className = 'mt-1 text-sm leading-5 text-slate-300';
     description.textContent = checkout.description;
@@ -86,6 +93,42 @@ function requestPaymentPhone(checkout: FlutterwaveInlineCheckout): Promise<strin
     amountValue.textContent = formatCheckoutAmount(checkout);
     amountPanel.append(amountLabel, amountValue);
 
+    const methodFieldset = document.createElement('fieldset');
+    methodFieldset.className = 'space-y-2';
+    const methodLegend = document.createElement('legend');
+    methodLegend.className = 'mb-2 text-sm font-bold text-slate-800';
+    methodLegend.textContent = 'Payment method';
+    const methodOptions: Array<{ value: PaymentMethod; title: string; description: string }> = [
+      { value: 'mobile_money', title: 'Mobile Money', description: 'Pay using your Zambian mobile wallet' },
+      { value: 'card', title: 'Bank card', description: 'Pay using Visa or Mastercard' },
+    ];
+    const methodInputs = methodOptions.map((option) => {
+      const label = document.createElement('label');
+      label.className = 'flex cursor-pointer items-start gap-3 rounded-xl border border-slate-300 p-3 transition hover:border-red-500 has-[:checked]:border-red-700 has-[:checked]:bg-red-50';
+      const input = document.createElement('input');
+      input.type = 'radio';
+      input.name = 'rhema-payment-method';
+      input.value = option.value;
+      input.required = true;
+      input.className = 'mt-1 h-4 w-4 accent-red-700';
+      const copy = document.createElement('span');
+      copy.className = 'block';
+      const title = document.createElement('span');
+      title.className = 'block text-sm font-bold text-slate-900';
+      title.textContent = option.title;
+      const detail = document.createElement('span');
+      detail.className = 'mt-0.5 block text-xs text-slate-600';
+      detail.textContent = option.description;
+      copy.append(title, detail);
+      label.append(input, copy);
+      methodFieldset.append(label);
+      return input;
+    });
+    methodFieldset.prepend(methodLegend);
+
+    const phoneField = document.createElement('div');
+    phoneField.className = 'space-y-2';
+    phoneField.hidden = true;
     const phoneLabel = document.createElement('label');
     phoneLabel.className = 'block text-sm font-bold text-slate-800';
     phoneLabel.htmlFor = 'rhema-payment-phone';
@@ -96,16 +139,26 @@ function requestPaymentPhone(checkout: FlutterwaveInlineCheckout): Promise<strin
     phoneInput.type = 'tel';
     phoneInput.inputMode = 'tel';
     phoneInput.autocomplete = 'tel';
-    phoneInput.required = true;
+    phoneInput.required = false;
     phoneInput.maxLength = 20;
     phoneInput.placeholder = '+260…';
     phoneInput.value = checkout.customer.phone_number ?? '';
     phoneInput.className = 'mt-2 w-full rounded-xl border border-slate-300 px-3 py-3 text-base font-medium outline-none transition focus:border-red-700 focus:ring-2 focus:ring-red-100';
     phoneLabel.append(phoneInput);
+    phoneField.append(phoneLabel);
+
+    const updatePhoneVisibility = () => {
+      const method = methodInputs.find((input) => input.checked)?.value;
+      phoneField.hidden = method !== 'mobile_money';
+      phoneInput.required = method === 'mobile_money';
+      if (method === 'card') phoneInput.setCustomValidity('');
+      error.classList.add('hidden');
+    };
+    methodInputs.forEach((input) => input.addEventListener('change', updatePhoneVisibility));
 
     const helper = document.createElement('p');
     helper.className = 'text-xs leading-5 text-slate-600';
-    helper.textContent = 'Continue to Flutterwave’s secure payment window to select your method and complete any wallet or bank verification. Enter any OTP there; Rhema will never ask you to share it in this form.';
+    helper.textContent = 'Your selected method will be opened securely by Flutterwave. Enter any card or wallet verification code in Flutterwave’s secure window; Rhema will never ask you to share it in this form.';
 
     const error = document.createElement('p');
     error.className = 'hidden rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-800';
@@ -122,14 +175,14 @@ function requestPaymentPhone(checkout: FlutterwaveInlineCheckout): Promise<strin
     continueButton.className = 'rounded-xl bg-red-700 px-4 py-3 text-sm font-black text-white transition hover:bg-red-800';
     continueButton.textContent = 'Continue securely';
     actions.append(cancel, continueButton);
-    form.append(amountPanel, phoneLabel, helper, error, actions);
+    form.append(amountPanel, methodFieldset, phoneField, helper, error, actions);
     panel.append(header, form);
     dialog.append(panel);
     dialog.setAttribute('aria-labelledby', heading.id);
     document.body.append(dialog);
 
     let settled = false;
-    const finish = (phone: string | null) => {
+    const finish = (details: PaymentDetails | null) => {
       if (settled) return;
       settled = true;
       dialog.removeEventListener('cancel', handleCancel);
@@ -137,7 +190,7 @@ function requestPaymentPhone(checkout: FlutterwaveInlineCheckout): Promise<strin
       form.removeEventListener('submit', handleSubmit);
       cancel.removeEventListener('click', handleCancel);
       dialog.remove();
-      resolve(phone);
+      resolve(details);
     };
     const handleCancel = () => {
       if (dialog.open) dialog.close();
@@ -146,22 +199,34 @@ function requestPaymentPhone(checkout: FlutterwaveInlineCheckout): Promise<strin
     const handleClose = () => finish(null);
     const handleSubmit = (event: SubmitEvent) => {
       event.preventDefault();
+      const method = methodInputs.find((input) => input.checked)?.value as PaymentMethod | undefined;
+      if (!method) {
+        error.textContent = 'Choose Mobile Money or Bank card to continue.';
+        error.classList.remove('hidden');
+        methodFieldset.focus();
+        return;
+      }
+      if (method === 'card') {
+        finish({ method });
+        return;
+      }
       const normalizedPhone = phoneInput.value.replace(/[()\s.-]/g, '');
       if (!/^\+?\d{8,15}$/.test(normalizedPhone)) {
-        error.textContent = 'Enter a valid phone number with country code if required.';
+        error.textContent = 'Enter a valid Mobile Money phone number with country code if required.';
         error.classList.remove('hidden');
         phoneInput.focus();
         return;
       }
-      finish(normalizedPhone);
+      finish({ method, phone: normalizedPhone });
     };
 
     dialog.addEventListener('cancel', handleCancel);
     dialog.addEventListener('close', handleClose);
     form.addEventListener('submit', handleSubmit);
     cancel.addEventListener('click', handleCancel);
+    methodFieldset.tabIndex = -1;
     dialog.showModal();
-    phoneInput.focus();
+    methodInputs[0].focus();
   });
 }
 
@@ -206,8 +271,8 @@ export async function openFlutterwaveInlineCheckout(
     throw new Error('The payment amount must be greater than zero.');
   }
 
-  const enteredPhone = await requestPaymentPhone(checkout);
-  if (!enteredPhone) {
+  const paymentDetails = await requestPaymentDetails(checkout);
+  if (!paymentDetails) {
     onClose();
     return;
   }
@@ -218,7 +283,8 @@ export async function openFlutterwaveInlineCheckout(
   }
 
   let callbackReceived = false;
-  checkout.customer.phone_number = enteredPhone;
+  if (paymentDetails.phone) checkout.customer.phone_number = paymentDetails.phone;
+  checkout.payment_options = paymentDetails.method === 'card' ? 'card' : 'mobilemoneyzambia';
   window.FlutterwaveCheckout({
     public_key: checkout.public_key,
     tx_ref: checkout.reference,

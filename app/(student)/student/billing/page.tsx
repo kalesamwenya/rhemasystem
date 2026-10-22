@@ -21,6 +21,9 @@ type BillingTransaction = {
   receipt_path?: string | null;
   created_at: string;
   liability_type?: 'tuition' | 'missed_audio' | 'assignment' | 'quiz' | 'exam' | 'other_penalty' | null;
+  liability_charge_id?: number | null;
+  outstanding_amount?: number;
+  pending_amount?: number;
 };
 
 type StudentBilling = {
@@ -30,6 +33,9 @@ type StudentBilling = {
   total_charges: number;
   total_paid: number;
   amount_due: number;
+  liabilities_due: number;
+  total_account_due: number;
+  liabilities: BillingTransaction[];
   account_credit: number;
   tuition_configured: boolean;
   flutterwave_enabled: boolean;
@@ -37,6 +43,17 @@ type StudentBilling = {
 };
 
 type BillingResponse = { data: StudentBilling };
+type StudentActivityRequest = {
+  id: number;
+  activity_type: 'quiz' | 'exam' | 'assignment' | 'audio';
+  activity_name: string;
+  reason: string;
+  status: 'pending_finance' | 'pending_it' | 'approved' | 'rejected';
+  amount: number | null;
+  currency: string | null;
+  invoice_reference: string | null;
+  created_at: string;
+};
 
 const money = (amount: number, currency: string) =>
   new Intl.NumberFormat('en-ZM', { style: 'currency', currency, maximumFractionDigits: 2 }).format(amount);
@@ -56,9 +73,11 @@ const liabilityLabel = (transaction: BillingTransaction) => {
 
 export default function StudentBillingPage() {
   const [account, setAccount] = useState<StudentBilling | null>(null);
+  const [activityRequests, setActivityRequests] = useState<StudentActivityRequest[]>([]);
   const [amount, setAmount] = useState('');
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
+  const [payingLiabilityId, setPayingLiabilityId] = useState<number | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -66,8 +85,12 @@ export default function StudentBillingPage() {
 
   const loadBilling = useCallback(async () => {
     setError('');
-    const response = await api.students.myBilling() as BillingResponse;
+    const [response, requestResponse] = await Promise.all([
+      api.students.myBilling() as Promise<BillingResponse>,
+      api.students.myActivityRequests() as Promise<{ data: StudentActivityRequest[] }>,
+    ]);
     setAccount(response.data);
+    setActivityRequests(requestResponse.data);
     return response.data;
   }, []);
 
@@ -80,8 +103,14 @@ export default function StudentBillingPage() {
     let active = true;
     const load = async () => {
       try {
-        const response = await api.students.myBilling() as BillingResponse;
-        if (active) setAccount(response.data);
+        const [response, requestResponse] = await Promise.all([
+          api.students.myBilling() as Promise<BillingResponse>,
+          api.students.myActivityRequests() as Promise<{ data: StudentActivityRequest[] }>,
+        ]);
+        if (active) {
+          setAccount(response.data);
+          setActivityRequests(requestResponse.data);
+        }
       } catch (reason) {
         if (active) setError(reason instanceof Error ? reason.message : 'Unable to load your student account.');
       } finally {
@@ -141,8 +170,8 @@ export default function StudentBillingPage() {
     event.preventDefault();
     if (!account) return;
     const paymentAmount = Number(amount);
-    if (!Number.isFinite(paymentAmount) || paymentAmount <= 0 || paymentAmount > account.amount_due) {
-      setError(`Enter an amount greater than zero and no more than ${money(account.amount_due, account.currency)}.`);
+    if (!Number.isFinite(paymentAmount) || paymentAmount <= 0 || paymentAmount > 100000000) {
+      setError('Enter a payment amount greater than zero and within the transaction limit.');
       return;
     }
 
@@ -182,6 +211,48 @@ export default function StudentBillingPage() {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to start your payment. Please try again.');
       setPaying(false);
+    }
+  };
+
+  const payLiability = async (liability: BillingTransaction) => {
+    if (!account || !liability.outstanding_amount || liability.outstanding_amount <= 0) return;
+    setPayingLiabilityId(liability.id);
+    setError('');
+    setNotice('');
+    try {
+      const response = await api.students.initiateLiabilityPayment(liability.id) as { data: FlutterwaveInlineCheckout };
+      await openFlutterwaveInlineCheckout(response.data, async (transaction) => {
+        const transactionId = String(transaction.transaction_id ?? '');
+        if (!/^\d+$/.test(transactionId) || transaction.tx_ref !== response.data.reference) {
+          setError('Flutterwave returned invalid payment details. The payment has not been confirmed.');
+          setPayingLiabilityId(null);
+          return;
+        }
+        setVerifying(true);
+        setNotice('Confirming your liability payment securely...');
+        try {
+          const verification = await api.students.verifyMyPayment(transactionId, response.data.reference) as { message?: string };
+          setNotice(verification.message || 'Payment confirmed. The liability has been settled.');
+          try {
+            await uploadConfirmedReceipt(response.data.reference, transactionId);
+            setNotice('Payment confirmed. The liability is settled and your receipt is saved.');
+          } catch (reason) {
+            setError(`Payment confirmed, but the receipt PDF could not be saved: ${reason instanceof Error ? reason.message : 'Please try again from your billing activity.'}`);
+          }
+        } catch (reason) {
+          setNotice('');
+          setError(reason instanceof Error ? reason.message : 'We could not confirm this payment. The liability remains outstanding.');
+        } finally {
+          setVerifying(false);
+          setPayingLiabilityId(null);
+        }
+      }, () => {
+        setPayingLiabilityId(null);
+        setNotice('Checkout closed. No payment was confirmed.');
+      });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to start your liability payment.');
+      setPayingLiabilityId(null);
     }
   };
 
@@ -257,9 +328,14 @@ export default function StudentBillingPage() {
           <h1 className="mt-1 text-3xl font-black tracking-tight text-slate-950">Billing &amp; payments</h1>
           <p className="mt-1 text-sm text-slate-500">Review your charges and liabilities, outstanding balance, and payment history.</p>
         </div>
-        <button type="button" onClick={() => { setLoading(true); void loadBilling().catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Unable to refresh your account.')).finally(() => setLoading(false)); }} className="inline-flex items-center justify-center gap-2 self-start rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 sm:self-auto">
-          <RefreshCw className="h-4 w-4" /> Refresh account
-        </button>
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          <a href="#make-payment" className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-900 px-4 py-2.5 text-xs font-black text-white shadow-sm transition hover:bg-slate-900">
+            <CreditCard className="h-4 w-4" /> Make payment
+          </a>
+          <button type="button" onClick={() => { setLoading(true); void loadBilling().catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Unable to refresh your account.')).finally(() => setLoading(false)); }} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-50">
+            <RefreshCw className="h-4 w-4" /> Refresh account
+          </button>
+        </div>
       </header>
 
       {error && <div role="alert" className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />{error}</div>}
@@ -274,9 +350,9 @@ export default function StudentBillingPage() {
               <p className="mt-1 text-xs font-medium text-slate-400">Student ID {account.student.student_id} · Cohort {account.student.cohort}</p>
             </div>
             <div className="rounded-xl border border-white/10 bg-white/5 px-5 py-4 md:min-w-64">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Outstanding liability</p>
-              <p className="mt-1 text-3xl font-black text-white">{money(account.amount_due, account.currency)}</p>
-              <p className="mt-1 text-[11px] text-slate-400">{account.amount_due > 0 ? 'Remaining amount due' : 'No outstanding balance'}</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Total account due</p>
+              <p className="mt-1 text-3xl font-black text-white">{money(account.total_account_due, account.currency)}</p>
+              <p className="mt-1 text-[11px] text-slate-400">Tuition {money(account.amount_due, account.currency)} · Other liabilities {money(account.liabilities_due, account.currency)}</p>
             </div>
           </div>
         </section>
@@ -299,7 +375,7 @@ export default function StudentBillingPage() {
           })}
         </section>
 
-        <section className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+        <section id="make-payment" className="scroll-mt-6 grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
           <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
             <div className="flex items-start gap-3">
               <span className="rounded-xl bg-blue-50 p-3 text-blue-900"><CreditCard className="h-5 w-5" /></span>
@@ -308,26 +384,25 @@ export default function StudentBillingPage() {
                 <p className="mt-1 text-xs leading-5 text-slate-500">Pay all or part of your outstanding student account balance securely with Flutterwave.</p>
               </div>
             </div>
-            {account.amount_due <= 0 && !account.tuition_configured ? (
+            {!account.tuition_configured ? (
               <p className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-900">Tuition pricing has not been set for cohort {account.student.cohort}. Please contact the school office to update the fee settings.</p>
-            ) : !account.flutterwave_enabled && account.amount_due > 0 ? (
+            ) : !account.flutterwave_enabled ? (
               <p className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-900">Flutterwave checkout is not configured on the server yet. Your balance is shown above; please contact the school office until online payments are enabled.</p>
-            ) : account.amount_due <= 0 ? (
-              <p className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-xs leading-5 text-emerald-800">Your account has no outstanding balance to pay at this time.</p>
             ) : (
               <form onSubmit={(event) => void startPayment(event)} className="mt-5 space-y-4">
+                <p className="text-xs leading-5 text-slate-500">Pay part or all of your tuition, or make an additional payment. Any amount above tuition charges is recorded as account credit.</p>
                 <label className="block">
                   <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Payment amount ({account.currency})</span>
                   <div className="mt-1 flex overflow-hidden rounded-xl border border-slate-200 focus-within:border-blue-900">
                     <span className="flex items-center border-r border-slate-200 bg-slate-50 px-3 text-sm font-bold text-slate-500">{account.currency}</span>
-                    <input type="number" required min="1" max={account.amount_due} step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder={account.amount_due.toFixed(2)} className="w-full px-3 py-3 text-sm font-semibold text-slate-900 outline-none" />
+                    <input type="number" required min="0.01" max="100000000" step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder={account.amount_due > 0 ? account.amount_due.toFixed(2) : 'Enter an amount to add credit'} className="w-full px-3 py-3 text-sm font-semibold text-slate-900 outline-none" />
                   </div>
                 </label>
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <button type="button" onClick={() => setAmount(account.amount_due.toFixed(2))} className="text-xs font-bold text-blue-900 hover:underline">Pay full balance</button>
+                  {account.amount_due > 0 && <button type="button" onClick={() => setAmount(account.amount_due.toFixed(2))} className="text-xs font-bold text-blue-900 hover:underline">Pay tuition balance</button>}
                   <button type="submit" disabled={paying || verifying} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-900 px-5 py-3 text-xs font-black uppercase tracking-wider text-white shadow-sm transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-60">
                     {paying || verifying ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
-                    {paying ? 'Connecting to Flutterwave...' : 'Continue to payment'}
+                    {paying ? 'Connecting to Flutterwave...' : 'Make payment'}
                   </button>
                 </div>
                 <p className="text-[10px] leading-4 text-slate-400">Your account is credited only after the payment provider confirms the transaction.</p>
@@ -346,6 +421,27 @@ export default function StudentBillingPage() {
             </dl>
           </article>
         </section>
+
+        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-100 p-5"><h2 className="text-base font-black text-slate-950">Other liabilities</h2><p className="mt-1 text-xs text-slate-500">Pay each invoice separately. Payment is marked settled only after Flutterwave verifies it.</p></div>
+          {account.liabilities.length ? <div className="divide-y divide-slate-100">{account.liabilities.map((liability) => {
+            const outstanding = liability.outstanding_amount || 0;
+            const pending = liability.pending_amount || 0;
+            const settled = outstanding <= 0;
+            return <article key={liability.id} className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
+              <div><p className="font-bold text-slate-900">{liability.description}</p><p className="mt-1 text-xs text-slate-500">{liabilityLabel(liability)} · {liability.term} · Invoice {liability.reference}</p><p className="mt-1 text-xs text-slate-600">Invoiced {money(liability.amount, liability.currency)} · Paid {money(liability.amount - outstanding, liability.currency)}</p></div>
+              <div className="flex flex-wrap items-center gap-3"><span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${settled ? 'bg-emerald-50 text-emerald-700' : pending > 0 ? 'bg-amber-50 text-amber-800' : 'bg-rose-50 text-rose-700'}`}>{settled ? 'Paid & verified' : pending > 0 ? 'Payment pending' : 'Outstanding'}</span>{!settled && pending <= 0 && <button type="button" onClick={() => void payLiability(liability)} disabled={payingLiabilityId !== null || verifying} className="inline-flex items-center gap-2 rounded-lg bg-blue-900 px-3 py-2 text-xs font-black text-white disabled:opacity-60">{payingLiabilityId === liability.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CreditCard className="h-3.5 w-3.5" />}{payingLiabilityId === liability.id ? 'Starting payment…' : `Pay now · ${money(outstanding, liability.currency)}`}</button>}</div>
+            </article>;
+          })}</div> : <p className="p-6 text-sm text-slate-500">No other outstanding liabilities.</p>}
+        </section>
+
+        {activityRequests.length > 0 && <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-100 p-5"><h2 className="text-base font-black text-slate-950">Activity access requests</h2><p className="mt-1 text-xs text-slate-500">Track Finance invoicing and IT access decisions.</p></div>
+          <div className="divide-y divide-slate-100">{activityRequests.map((request) => <article key={request.id} className="flex flex-col gap-2 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div><p className="font-bold text-slate-900">{request.activity_name}</p><p className="mt-1 text-xs text-slate-500">{request.activity_type} · Requested {new Date(request.created_at).toLocaleDateString()}{request.invoice_reference ? ` · Invoice ${request.invoice_reference}` : ''}</p>{request.amount !== null && <p className="mt-1 text-xs font-semibold text-slate-600">Invoice amount {money(request.amount, request.currency || account.currency)}</p>}</div>
+            <span className={`w-fit rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${request.status === 'approved' ? 'bg-emerald-50 text-emerald-700' : request.status === 'rejected' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-800'}`}>{request.status.replace('_', ' ')}</span>
+          </article>)}</div>
+        </section>}
 
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-col justify-between gap-2 border-b border-slate-100 p-5 sm:flex-row sm:items-center">
