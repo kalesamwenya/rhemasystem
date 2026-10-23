@@ -31,7 +31,7 @@ type AudienceId =
   | "other";
 
 type Channel = "sms" | "whatsapp" | "email" | "call";
-type CommunicationsTab = "compose" | "activity" | "dialer" | "followups";
+type CommunicationsTab = "compose" | "activity" | "followups";
 
 type Contact = {
   id: number;
@@ -440,6 +440,10 @@ export default function CommunicationsPage() {
       return;
     }
 
+    const normalizedNumber = cleanNumber.replace(/[^0-9+]/g, "");
+    const callRecipient = selectedContacts.find(
+      (item) => item.phone.replace(/[^0-9+]/g, "") === normalizedNumber,
+    );
     setSaving(true);
 
     setTimeout(() => {
@@ -448,7 +452,7 @@ export default function CommunicationsPage() {
       setHistory((current) => [
         {
           id: Date.now(),
-          contact_name: selectedContacts[0]?.name || "Selected contact",
+          contact_name: callRecipient?.name || cleanNumber,
           channel: "call",
           status: "dialing",
           body: `Call placed to ${cleanNumber}.`,
@@ -478,13 +482,13 @@ export default function CommunicationsPage() {
   };
 
   const execute = async () => {
-    if (!selectedIds.length) {
-      setNotice("Select at least one recipient first.");
+    if (channel === "call") {
+      placeCall();
       return;
     }
 
-    if (channel === "call") {
-      placeCall();
+    if (!selectedIds.length) {
+      setNotice("Select at least one recipient first.");
       return;
     }
 
@@ -546,7 +550,6 @@ export default function CommunicationsPage() {
         {[
           { id: "compose", label: "Compose", icon: Send },
           { id: "activity", label: "Activity history", icon: History },
-          { id: "dialer", label: "Dialer", icon: PhoneCall },
           { id: "followups", label: "Attendance follow-ups", icon: Clock3 },
         ].map(({ id, label, icon: Icon }) => (
           <button key={id} type="button" aria-pressed={activeTab === id} onClick={() => { const nextTab = id as CommunicationsTab; setActiveTab(nextTab); if (nextTab === "followups") { setFollowupsLoading(true); setFollowupError(""); } }} className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-black transition ${activeTab === id ? "bg-slate-950 text-white" : "text-slate-700 hover:bg-slate-100"}`}>
@@ -555,8 +558,8 @@ export default function CommunicationsPage() {
         ))}
       </nav>
 
-      <div className={`grid min-w-0 grid-cols-1 gap-4 xl:gap-6 ${activeTab === "activity" || activeTab === "followups" ? "hidden" : activeTab === "dialer" ? "mx-auto w-full max-w-xl" : "lg:grid-cols-[minmax(17rem,0.85fr)_minmax(0,1.15fr)]"}`}>
-        <section className={`${activeTab === "dialer" ? "hidden" : ""} rounded-3xl border border-slate-200 bg-white p-5 shadow-sm`}>
+      <div className={`grid min-w-0 grid-cols-1 gap-4 xl:gap-6 lg:grid-cols-[minmax(17rem,0.85fr)_minmax(0,1.15fr)] ${activeTab === "compose" ? "" : "hidden"}`}>
+        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <h2 className="inline-flex items-center gap-2 text-lg font-black text-slate-900"><Users className="h-5 w-5 text-red-600" /> Audience groups</h2>
             <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-slate-600">
@@ -636,7 +639,7 @@ export default function CommunicationsPage() {
           {!loading && filtered.length > 0 && <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3"><span className="text-[11px] font-semibold text-slate-400">{(visibleAudiencePage - 1) * audiencePageSize + 1}-{Math.min(visibleAudiencePage * audiencePageSize, filtered.length)} of {filtered.length}</span><div className="flex items-center gap-2"><button type="button" disabled={visibleAudiencePage === 1} onClick={() => setAudiencePage((page) => Math.max(1, page - 1))} className="rounded-lg border border-slate-200 p-1.5 text-slate-600 disabled:opacity-40" aria-label="Previous audience page"><ChevronLeft className="h-3.5 w-3.5" /></button><span className="text-[11px] font-bold text-slate-500">{visibleAudiencePage}/{audiencePageCount}</span><button type="button" disabled={visibleAudiencePage === audiencePageCount} onClick={() => setAudiencePage((page) => Math.min(audiencePageCount, page + 1))} className="rounded-lg border border-slate-200 p-1.5 text-slate-600 disabled:opacity-40" aria-label="Next audience page"><ChevronRight className="h-3.5 w-3.5" /></button></div></div>}
         </section>
 
-        <section className={`${activeTab === "dialer" ? "hidden" : ""} rounded-3xl border border-slate-200 bg-white p-5 shadow-sm`}>
+        <section className="min-w-0 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Message composer</p>
@@ -678,8 +681,77 @@ export default function CommunicationsPage() {
           </div>
 
           {channel === "call" ? (
-            <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
-              Use the dedicated dialer to enter a number and place the call.
+            <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <label className="block text-sm font-bold text-slate-700">
+                Number to call
+                <input
+                  value={dialNumber}
+                  onChange={(event) => setDialNumber(event.target.value.replace(/[^0-9+*#() .-]/g, ""))}
+                  inputMode="tel"
+                  placeholder="+233 20 000 0000"
+                  className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-center text-xl font-black tracking-[0.08em] text-slate-900 outline-none focus:border-red-500"
+                />
+              </label>
+
+              <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
+                {dialKeys.map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => pressDialKey(key)}
+                    aria-label={`Dial ${key}`}
+                    className="h-10 rounded-xl border border-slate-200 bg-white text-lg font-black text-slate-800 shadow-sm hover:border-red-400 hover:bg-red-50"
+                  >
+                    {key}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setDialNumber("")}
+                  aria-label="Clear phone number"
+                  className="flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:border-red-300 hover:bg-red-50"
+                >
+                  <Delete className="h-5 w-5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => pressDialKey("+")}
+                  aria-label="Add plus sign"
+                  className="h-10 rounded-xl border border-slate-200 bg-white text-lg font-black text-slate-800 hover:border-red-400 hover:bg-red-50"
+                >
+                  +
+                </button>
+                <button
+                  type="button"
+                  onClick={removeDialDigit}
+                  aria-label="Delete last digit"
+                  className="flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:border-red-400 hover:bg-red-50"
+                >
+                  <ArrowLeft className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={receiveIncomingCall}
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100"
+                >
+                  <PhoneIncoming className="h-4 w-4" /> Receive incoming call
+                </button>
+                {callActive && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCallActive(false);
+                      setNotice("Dialer ready for the next call.");
+                    }}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100"
+                  >
+                    End / reset call
+                  </button>
+                )}
+              </div>
             </div>
           ) : channel === "email" ? (
             <label className="mt-5 block text-sm font-bold text-slate-700">
@@ -708,107 +780,17 @@ export default function CommunicationsPage() {
           <div className="mt-6 flex items-center justify-between gap-4 border-t border-slate-200 pt-5">
             <div className="text-sm text-slate-500">
               <Clock3 className="mr-1 inline h-4 w-4" />
-              {channel === "call" ? "Use the keypad or type a number to place a call." : "Formal updates can be sent to multiple groups at once."}
+              {channel === "call" ? "Use the keypad or enter a number to place your call." : "Formal updates can be sent to multiple groups at once."}
             </div>
             <button
               type="button"
               onClick={execute}
-              disabled={saving}
+              disabled={saving || (channel === "call" && callActive)}
               className="inline-flex items-center gap-2 rounded-2xl bg-red-600 px-5 py-3 text-sm font-black text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <Send className="h-4 w-4" /> {saving ? "Sending..." : channel === "call" ? "Initiate call" : "Send message"}
+              {channel === "call" ? <PhoneCall className="h-4 w-4" /> : <Send className="h-4 w-4" />} {saving ? channel === "call" ? "Connecting..." : "Sending..." : channel === "call" ? callActive ? "Call in progress" : "Initiate call" : "Send message"}
             </button>
           </div>
-        </section>
-
-        <section className={`${activeTab === "dialer" ? "block" : "hidden"} min-w-0 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6`}>
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.22em] text-red-600">Calling tools</p>
-              <h2 className="mt-1 text-2xl font-black text-slate-900">Dialer</h2>
-            </div>
-            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-red-50 text-red-700" aria-hidden="true"><PhoneCall className="h-5 w-5" /></span>
-          </div>
-
-          <label className="mt-5 block text-sm font-bold text-slate-700">
-            Number to call
-            <input
-              value={dialNumber}
-              onChange={(event) => setDialNumber(event.target.value.replace(/[^0-9+*#() .-]/g, ""))}
-              inputMode="tel"
-              placeholder="+233 20 000 0000"
-              className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-4 text-center text-xl font-black tracking-[0.08em] text-slate-900 outline-none focus:border-red-500 focus:bg-white"
-            />
-          </label>
-
-          <div className="mt-4 grid grid-cols-3 gap-2">
-            {dialKeys.map((key) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => pressDialKey(key)}
-                className="h-11 rounded-xl border border-slate-200 bg-slate-50 text-lg font-black text-slate-800 shadow-sm hover:border-red-400 hover:bg-red-50"
-              >
-                {key}
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => setDialNumber("")}
-              aria-label="Clear phone number"
-              className="flex h-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700 hover:border-red-300 hover:bg-red-50"
-            >
-              <Delete className="h-5 w-5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => pressDialKey("+")}
-              aria-label="Add plus sign"
-              className="h-11 rounded-xl border border-slate-200 bg-slate-50 text-lg font-black text-slate-800 hover:border-red-400 hover:bg-red-50"
-            >
-              +
-            </button>
-            <button
-              type="button"
-              onClick={removeDialDigit}
-              aria-label="Delete last digit"
-              className="flex h-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700 hover:border-red-400 hover:bg-red-50"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </button>
-          </div>
-
-          <div className="mt-4 grid gap-2">
-            <button
-              type="button"
-              onClick={placeCall}
-              disabled={callActive || saving}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-black text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <PhoneCall className="h-4 w-4" /> {saving ? "Connecting..." : callActive ? "Call in progress" : "Call number"}
-            </button>
-            <button
-              type="button"
-              onClick={receiveIncomingCall}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50"
-            >
-              <PhoneIncoming className="h-4 w-4" /> Receive incoming call
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setCallActive(false);
-                setNotice("Dialer ready for the next call.");
-              }}
-              disabled={!callActive}
-              className="rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              End / reset call
-            </button>
-          </div>
-          <p className="mt-4 text-xs leading-5 text-slate-500">
-            Calls can be initiated directly and incoming calls are tracked in the activity log.
-          </p>
         </section>
       </div>
 
