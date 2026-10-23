@@ -14,6 +14,12 @@ type ServiceHour = {
   id: number; student_id: string; name: string; cohort: string; term_id: number; stamp_date: string;
   service_date?: string; hours: number; ministry: string; supervisor: string; comments?: string; source: string;
 };
+type ServiceHourProgress = {
+  student_id: string; name: string; cohort: string; term_id: number;
+  start_date: string | null; end_date: string | null; completed_hours: number;
+  required_hours: number; remaining_hours: number;
+  status: 'completed' | 'overdue' | 'upcoming' | 'in_progress';
+};
 type Entry = {
   student_id: string; cohort: string; term_id: string; stamp_date: string; service_date: string;
   hours: string; ministry: string; supervisor: string; comments: string;
@@ -47,6 +53,8 @@ export default function ServiceHoursPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [terms, setTerms] = useState<Term[]>([]);
   const [records, setRecords] = useState<ServiceHour[]>([]);
+  const [termProgress, setTermProgress] = useState<ServiceHourProgress[]>([]);
+  const [progressPage, setProgressPage] = useState(1);
   const [entry, setEntry] = useState<Entry>(emptyEntry);
   const [bulkText, setBulkText] = useState('');
   const [tab, setTab] = useState<'capture' | 'bulk' | 'reports'>('capture');
@@ -70,13 +78,14 @@ export default function ServiceHoursPage() {
   const load = async () => {
     try {
       const [studentResponse, termResponse, hourResponse] = await Promise.all([api.students.adminRoster(), api.terms.list(), api.serviceHours.list()]) as [
-        { data?: Student[] }, { data?: Term[] }, { data?: ServiceHour[] }
+        { data?: Student[] }, { data?: Term[] }, { data?: ServiceHour[]; term_progress?: ServiceHourProgress[] }
       ];
       const loadedStudents = studentResponse.data || [];
       const loadedTerms = termResponse.data || [];
       setStudents(loadedStudents);
       setTerms(loadedTerms);
       setRecords(hourResponse.data || []);
+      setTermProgress(hourResponse.term_progress || []);
       if (!entry.term_id && loadedTerms[0]) setEntry((current) => ({ ...current, term_id: String(loadedTerms[0].term_id) }));
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load service-hour data.');
@@ -120,6 +129,16 @@ export default function ServiceHoursPage() {
     const query = filters.search.toLowerCase();
     return matchesTerm && matchesCohort && (!query || record.student_id.toLowerCase().includes(query) || record.name.toLowerCase().includes(query));
   }), [records, filters]);
+  const filteredProgress = useMemo(() => termProgress.filter((record) => {
+    const matchesTerm = !filters.term_id || String(record.term_id) === filters.term_id;
+    const matchesCohort = !filters.cohort || record.cohort === filters.cohort;
+    const query = filters.search.toLowerCase();
+    return matchesTerm && matchesCohort && (!query || record.student_id.toLowerCase().includes(query) || record.name.toLowerCase().includes(query));
+  }), [termProgress, filters]);
+  const overdueProgress = filteredProgress.filter((record) => record.status === 'overdue');
+  const progressPageCount = Math.max(1, Math.ceil(filteredProgress.length / 10));
+  const displayedProgressPage = Math.min(progressPage, progressPageCount);
+  const visibleProgress = filteredProgress.slice((displayedProgressPage - 1) * 10, displayedProgressPage * 10);
   const totalHours = filteredRecords.reduce((sum, record) => sum + Number(record.hours), 0);
   const cohorts = Array.from(new Set(students.map((student) => student.class))).sort();
 
@@ -227,11 +246,27 @@ export default function ServiceHoursPage() {
     const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'church-service-hours.csv'; link.click(); URL.revokeObjectURL(link.href);
   };
 
+  const exportProgressReport = () => {
+    const rows = filteredProgress.map((record) => [
+      record.student_id, record.name, record.cohort, record.term_id,
+      record.completed_hours, record.required_hours, record.remaining_hours, record.status,
+    ].map((value) => `"${String(value).replace(/"/g, '""')}"`).join(','));
+    const blob = new Blob([
+      `student_id,name,cohort,term_id,completed_hours,required_hours,remaining_hours,status\n${rows.join('\n')}`,
+    ], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'church-service-hours-term-progress.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   const scannedStudentConfirmation = reviewOpen ? <div className="fixed bottom-5 left-1/2 z-[70] w-[min(92vw,32rem)] -translate-x-1/2 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-2xl"><p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">Student found from scanned ID</p><p className="mt-1 text-lg font-black text-slate-900">{reviewStudent?.name || 'Student not found'}</p><p className="text-sm text-slate-700">ID: {reviewStudent?.student_id || reviewEntry.student_id} · Cohort: {reviewStudent?.class || 'Unknown'}</p><p className="text-sm text-slate-700">Email: {reviewStudent?.email || 'No email on student record'}</p></div> : null;
   return <div className="space-y-6 pb-12">
     {scannedStudentConfirmation}
     <header className="flex flex-col gap-4 border-b border-slate-200 pb-5 md:flex-row md:items-end md:justify-between">
-      <div><p className="text-[11px] font-black uppercase tracking-[0.22em] text-red-600">Student affairs</p><h1 className="mt-2 text-3xl font-black tracking-tight text-slate-900">Church service hours</h1><p className="mt-1 text-sm text-slate-500">Capture, verify, and report ministry service completed by students.</p></div>
+      <div><p className="text-[11px] font-black uppercase tracking-[0.22em] text-red-600">Student affairs</p><h1 className="mt-2 text-3xl font-black tracking-tight text-slate-900">Church service hours</h1><p className="mt-1 text-sm text-slate-500">Capture, verify, and report ministry service linked to student records. Term targets are 20 hours multiplied by the term number.</p></div>
       <div className="flex items-center gap-3"><label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-red-700 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white hover:bg-red-800"><FileImage className="h-4 w-4" />Upload front + back<input type="file" accept="image/*" multiple className="sr-only" disabled={ocrBusy} onChange={(event) => { const files = Array.from(event.target.files || []); if (files.length > 2) setError('Select a maximum of two images: the front and back of the form.'); else scanDocuments(files); event.currentTarget.value = ''; }} /></label><Link href="/admin/student-affairs" className="text-xs font-black uppercase tracking-[0.18em] text-slate-500 hover:text-slate-900">Back</Link></div>
     </header>
 
@@ -260,6 +295,42 @@ export default function ServiceHoursPage() {
 
     {tab === 'bulk' && <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"><div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="text-xl font-black text-slate-900">Bulk import</h2><p className="mt-1 text-sm text-slate-500">Paste CSV data. Every row receives the same student, cohort, term, and stamp-date validation.</p></div><button onClick={() => setBulkText(csvHeaders + '\n')} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-black uppercase tracking-wider text-slate-700"><Download className="h-4 w-4" />Use template</button></div><textarea value={bulkText} onChange={(event) => setBulkText(event.target.value)} rows={12} className="mt-5 w-full rounded-xl border border-slate-200 bg-slate-50 p-4 font-mono text-xs" placeholder={csvHeaders} /><button onClick={parseBulk} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-xs font-black uppercase tracking-wider text-white"><FileUp className="h-4 w-4" />Validate and import rows</button></section>}
 
-    {tab === 'reports' && <section className="space-y-5"><div className="grid gap-4 md:grid-cols-3"><div className="rounded-2xl border border-slate-200 bg-white p-5"><p className="text-xs font-black uppercase tracking-wider text-slate-400">Records</p><p className="mt-2 text-3xl font-black text-slate-900">{filteredRecords.length}</p></div><div className="rounded-2xl border border-slate-200 bg-white p-5"><p className="text-xs font-black uppercase tracking-wider text-slate-400">Total hours</p><p className="mt-2 text-3xl font-black text-slate-900">{totalHours.toFixed(2)}</p></div><div className="rounded-2xl border border-slate-200 bg-white p-5"><p className="text-xs font-black uppercase tracking-wider text-slate-400">Students served</p><p className="mt-2 text-3xl font-black text-slate-900">{new Set(filteredRecords.map((record) => record.student_id)).size}</p></div></div><div className="flex flex-wrap items-center gap-3"><div className="relative"><Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" /><input value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} className="rounded-xl border border-slate-200 py-2.5 pl-9 pr-3 text-sm" placeholder="Search ID or name" /></div><select value={filters.term_id} onChange={(event) => setFilters({ ...filters, term_id: event.target.value })} className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm"><option value="">All terms</option>{terms.map((term) => <option key={term.term_id} value={term.term_id}>Term {term.term_id}</option>)}</select><select value={filters.cohort} onChange={(event) => setFilters({ ...filters, cohort: event.target.value })} className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm"><option value="">All cohorts</option>{cohorts.map((cohort) => <option key={cohort}>{cohort}</option>)}</select><button onClick={exportReport} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2.5 text-xs font-black uppercase tracking-wider text-white"><Download className="h-4 w-4" />Export CSV</button><button onClick={load} className="rounded-xl border border-slate-200 p-2.5" aria-label="Refresh report"><RefreshCw className="h-4 w-4" /></button></div><div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white"><table className="min-w-full text-left text-sm"><thead className="bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500"><tr>{['Student', 'Cohort', 'Term', 'Stamp date', 'Service date', 'Hours', 'Ministry', 'Supervisor', ''].map((heading) => <th key={heading} className="whitespace-nowrap px-4 py-3">{heading}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{filteredRecords.map((record) => <tr key={record.id}><td className="whitespace-nowrap px-4 py-3"><p className="font-black text-slate-900">{record.name}</p><p className="text-xs text-slate-500">{record.student_id}</p></td><td className="px-4 py-3 font-semibold">{record.cohort}</td><td className="px-4 py-3">Term {record.term_id}</td><td className="whitespace-nowrap px-4 py-3">{formatDate(record.stamp_date)}</td><td className="whitespace-nowrap px-4 py-3">{formatDate(record.service_date || '')}</td><td className="px-4 py-3 font-black">{Number(record.hours).toFixed(2)}</td><td className="px-4 py-3">{record.ministry}</td><td className="px-4 py-3">{record.supervisor || '-'}</td><td className="px-4 py-3"><button onClick={async () => { if (await confirmWithApp('Delete this service-hour record?', { title: 'Delete service-hour record?', confirmText: 'Delete', tone: 'danger' })) { await api.serviceHours.remove(record.id); load(); } }} aria-label="Delete service-hour record" className="text-red-600"><Trash2 className="h-4 w-4" /></button></td></tr>)}</tbody></table>{!filteredRecords.length && <p className="p-10 text-center text-sm text-slate-500">No service-hour records match these filters.</p>}</div></section>}
+    {tab === 'reports' && <section className="space-y-5">
+      <div className="grid gap-4 md:grid-cols-4">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5"><p className="text-xs font-black uppercase tracking-wider text-slate-400">Records</p><p className="mt-2 text-3xl font-black text-slate-900">{filteredRecords.length}</p></div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-5"><p className="text-xs font-black uppercase tracking-wider text-slate-400">Total hours</p><p className="mt-2 text-3xl font-black text-slate-900">{totalHours.toFixed(2)}</p></div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-5"><p className="text-xs font-black uppercase tracking-wider text-slate-400">Students served</p><p className="mt-2 text-3xl font-black text-slate-900">{new Set(filteredRecords.map((record) => record.student_id)).size}</p></div>
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5"><p className="text-xs font-black uppercase tracking-wider text-amber-700">Overdue term targets</p><p className="mt-2 text-3xl font-black text-amber-900">{overdueProgress.length}</p></div>
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative"><Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" /><input value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} className="rounded-xl border border-slate-200 py-2.5 pl-9 pr-3 text-sm" placeholder="Search ID or name" /></div>
+        <select value={filters.term_id} onChange={(event) => setFilters({ ...filters, term_id: event.target.value })} className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm"><option value="">All terms</option>{terms.map((term) => <option key={term.term_id} value={term.term_id}>Term {term.term_id}</option>)}</select>
+        <select value={filters.cohort} onChange={(event) => setFilters({ ...filters, cohort: event.target.value })} className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm"><option value="">All cohorts</option>{cohorts.map((cohort) => <option key={cohort}>{cohort}</option>)}</select>
+        <button onClick={exportReport} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2.5 text-xs font-black uppercase tracking-wider text-white"><Download className="h-4 w-4" />Export records</button>
+        <button onClick={exportProgressReport} className="inline-flex items-center gap-2 rounded-xl bg-amber-700 px-3 py-2.5 text-xs font-black uppercase tracking-wider text-white"><Download className="h-4 w-4" />Export progress</button>
+        <button onClick={load} className="rounded-xl border border-slate-200 p-2.5" aria-label="Refresh report"><RefreshCw className="h-4 w-4" /></button>
+      </div>
+      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3"><div><h2 className="font-black text-slate-900">Student term compliance</h2><p className="text-xs text-slate-500">Target: 20 hours multiplied by the term number. Ended terms below target are flagged for communications follow-up.</p></div><span className="text-xs font-bold text-slate-500">{filteredProgress.length} student-term records</span></div>
+        <table className="min-w-full text-left text-sm">
+          <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500"><tr>{['Student', 'Cohort', 'Term', 'Completed', 'Target', 'Remaining', 'Status'].map((heading) => <th key={heading} className="whitespace-nowrap px-4 py-3">{heading}</th>)}</tr></thead>
+          <tbody className="divide-y divide-slate-100">{visibleProgress.map((record) => <tr key={`${record.student_id}-${record.term_id}`}>
+            <td className="whitespace-nowrap px-4 py-3"><p className="font-black text-slate-900">{record.name}</p><p className="text-xs text-slate-500">{record.student_id}</p></td>
+            <td className="px-4 py-3 font-semibold">{record.cohort}</td><td className="px-4 py-3">Term {record.term_id}</td>
+            <td className="px-4 py-3">{Number(record.completed_hours).toFixed(2)} hrs</td><td className="px-4 py-3">{record.required_hours} hrs</td><td className="px-4 py-3">{Number(record.remaining_hours).toFixed(2)} hrs</td>
+            <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${record.status === 'overdue' ? 'bg-red-100 text-red-700' : record.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>{record.status.replace('_', ' ')}</span></td>
+          </tr>)}</tbody>
+        </table>
+        {!filteredProgress.length && <p className="p-8 text-center text-sm text-slate-500">No student term progress matches these filters.</p>}
+        {filteredProgress.length > 10 && <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3"><span className="text-xs text-slate-500">Page {displayedProgressPage} of {progressPageCount}</span><div className="flex gap-2"><button disabled={displayedProgressPage === 1} onClick={() => setProgressPage(displayedProgressPage - 1)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold disabled:opacity-40">Previous</button><button disabled={displayedProgressPage === progressPageCount} onClick={() => setProgressPage(displayedProgressPage + 1)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold disabled:opacity-40">Next</button></div></div>}
+      </div>
+      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+        <div className="border-b border-slate-100 px-4 py-3"><h2 className="font-black text-slate-900">Recorded service history</h2></div>
+        <table className="min-w-full text-left text-sm"><thead className="bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500"><tr>{['Student', 'Cohort', 'Term', 'Stamp date', 'Service date', 'Hours', 'Ministry', 'Supervisor', ''].map((heading) => <th key={heading} className="whitespace-nowrap px-4 py-3">{heading}</th>)}</tr></thead>
+          <tbody className="divide-y divide-slate-100">{filteredRecords.map((record) => <tr key={record.id}><td className="whitespace-nowrap px-4 py-3"><p className="font-black text-slate-900">{record.name}</p><p className="text-xs text-slate-500">{record.student_id}</p></td><td className="px-4 py-3 font-semibold">{record.cohort}</td><td className="px-4 py-3">Term {record.term_id}</td><td className="whitespace-nowrap px-4 py-3">{formatDate(record.stamp_date)}</td><td className="whitespace-nowrap px-4 py-3">{formatDate(record.service_date || '')}</td><td className="px-4 py-3 font-black">{Number(record.hours).toFixed(2)}</td><td className="px-4 py-3">{record.ministry}</td><td className="px-4 py-3">{record.supervisor || '-'}</td><td className="px-4 py-3"><button onClick={async () => { if (await confirmWithApp('Delete this service-hour record?', { title: 'Delete service-hour record?', confirmText: 'Delete', tone: 'danger' })) { await api.serviceHours.remove(record.id); load(); } }} aria-label="Delete service-hour record" className="text-red-600"><Trash2 className="h-4 w-4" /></button></td></tr>)}</tbody>
+        </table>
+        {!filteredRecords.length && <p className="p-10 text-center text-sm text-slate-500">No service-hour records match these filters.</p>}
+      </div>
+    </section>}
   </div>;
 }

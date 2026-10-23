@@ -11,8 +11,6 @@ import {
   Mail,
   MessageCircle,
   PhoneCall,
-  PhoneIncoming,
-  Plus,
   Search,
   Send,
   Smartphone,
@@ -21,27 +19,17 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/api";
 
-type AudienceId =
-  | "customer"
-  | "prospect"
-  | "partner"
-  | "donor"
-  | "newsletter"
-  | "beneficiary"
-  | "other";
+type AudienceId = "students" | "applicants" | "website-contacts" | "followups";
 
 type Channel = "sms" | "whatsapp" | "email" | "call";
 type CommunicationsTab = "compose" | "activity" | "followups";
 
 type Contact = {
-  id: number;
+  id: string;
   student_id?: string;
   name: string;
   organization: string;
   audience: AudienceId;
-  title: string;
-  formal_name: string;
-  preferred_name: string;
   email: string;
   phone: string;
   notes: string;
@@ -79,27 +67,11 @@ type AttendanceFollowup = {
 };
 
 const audienceOptions = [
-  { id: "customer", label: "Customers" },
-  { id: "prospect", label: "Potential Clients" },
-  { id: "partner", label: "Partners" },
-  { id: "donor", label: "Donors" },
-  { id: "newsletter", label: "Newsletter Contacts" },
-  { id: "beneficiary", label: "Beneficiaries" },
-  { id: "other", label: "Other Contacts" },
+  { id: "students", label: "Students" },
+  { id: "applicants", label: "Applicants" },
+  { id: "website-contacts", label: "Website contact messages" },
+  { id: "followups", label: "Student follow-up" },
 ] as const;
-
-const emptyContact: Contact = {
-  id: 0,
-  name: "",
-  organization: "",
-  audience: "partner",
-  title: "",
-  formal_name: "",
-  preferred_name: "",
-  email: "",
-  phone: "",
-  notes: "",
-};
 
 const channels = [
   { id: "sms", label: "SMS", icon: Smartphone },
@@ -109,136 +81,6 @@ const channels = [
 ] as const;
 
 const dialKeys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"];
-
-const initialContacts: Contact[] = [
-  {
-    id: 1,
-    name: "Aisha Mensah",
-    organization: "BrightPath Academy",
-    audience: "prospect",
-    title: "Admissions Lead",
-    formal_name: "Aisha Mensah",
-    preferred_name: "Aisha",
-    email: "aisha@brightpath.edu",
-    phone: "+233 20 123 4567",
-    notes: "Interested in enrolment updates",
-  },
-  {
-    id: 2,
-    name: "Daniel Owusu",
-    organization: "Godfrey Academy",
-    audience: "customer",
-    title: "Parent",
-    formal_name: "Daniel Owusu",
-    preferred_name: "Daniel",
-    email: "daniel.owusu@gmail.com",
-    phone: "+233 24 987 6543",
-    notes: "Prefers SMS updates for school fees",
-  },
-  {
-    id: 3,
-    name: "Naa Dede",
-    organization: "Impact Partners",
-    audience: "partner",
-    title: "Partnership Manager",
-    formal_name: "Naa Dede",
-    preferred_name: "Naa",
-    email: "naa@impactpartners.org",
-    phone: "+233 50 345 6789",
-    notes: "Collaborating on community outreach",
-  },
-  {
-    id: 4,
-    name: "Joseph Kumi",
-    organization: "CareSphere Foundation",
-    audience: "donor",
-    title: "Donor Relations",
-    formal_name: "Joseph Kumi",
-    preferred_name: "Joe",
-    email: "joe@caresphere.org",
-    phone: "+233 30 774 2211",
-    notes: "Large donor for student support programme",
-  },
-  {
-    id: 5,
-    name: "Mariam Afriyie",
-    organization: "Annual Newsletter",
-    audience: "newsletter",
-    title: "Newsletter Subscriber",
-    formal_name: "Mariam Afriyie",
-    preferred_name: "Mariam",
-    email: "mariam@example.com",
-    phone: "+233 57 223 4040",
-    notes: "Receives monthly school updates",
-  },
-  {
-    id: 6,
-    name: "Samuel Tetteh",
-    organization: "Community Outreach",
-    audience: "beneficiary",
-    title: "Parent Support",
-    formal_name: "Samuel Tetteh",
-    preferred_name: "Samuel",
-    email: "samuel@supportcommunity.org",
-    phone: "+233 27 991 8899",
-    notes: "Needs follow-up regarding bursary support",
-  },
-];
-
-const initialHistory: HistoryEntry[] = [
-  {
-    id: 1,
-    contact_name: "Aisha Mensah",
-    channel: "sms",
-    status: "queued",
-    body: "Admission reminders and orientation schedule update.",
-  },
-  {
-    id: 2,
-    contact_name: "Daniel Owusu",
-    channel: "email",
-    status: "sent",
-    body: "School fee statement and payment confirmation details.",
-  },
-  {
-    id: 3,
-    contact_name: "Naa Dede",
-    channel: "whatsapp",
-    status: "delivered",
-    body: "Partnership update on outreach activities.",
-  },
-];
-
-const initialIncomingCalls: IncomingCall[] = [
-  {
-    id: 1,
-    caller_number: "+233 20 444 1100",
-    status: "answered",
-    duration_seconds: 245,
-    created_at: "Today, 09:14 AM",
-  },
-  {
-    id: 2,
-    caller_number: "+233 27 991 8899",
-    status: "missed",
-    created_at: "Yesterday, 04:52 PM",
-  },
-];
-
-const formatAudience = (value: string) => {
-  const normalized = String(value || "other").toLowerCase();
-  const map: Record<string, string> = {
-    customer: "Customer",
-    prospect: "Potential Client",
-    partner: "Partner",
-    donor: "Donor",
-    newsletter: "Newsletter",
-    beneficiary: "Beneficiary",
-    other: "Other",
-  };
-
-  return map[normalized] || normalized.charAt(0).toUpperCase() + normalized.slice(1);
-};
 
 const formatInitials = (name = "") =>
   name
@@ -250,67 +92,118 @@ const formatInitials = (name = "") =>
     .toUpperCase() || "N";
 
 export default function CommunicationsPage() {
-  const [contacts, setContacts] = useState<Contact[]>(initialContacts);
-  const [history, setHistory] = useState<HistoryEntry[]>(initialHistory);
-  const [incomingCalls, setIncomingCalls] = useState<IncomingCall[]>(initialIncomingCalls);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [incomingCalls] = useState<IncomingCall[]>([]);
   const [activeTab, setActiveTab] = useState<CommunicationsTab>("compose");
   const [audiencePage, setAudiencePage] = useState(1);
   const [loading, setLoading] = useState(true);
-  const [selectedIds, setSelectedIds] = useState<number[]>([1, 2]);
+  const [loadErrors, setLoadErrors] = useState<Partial<Record<AudienceId, string>>>({});
+  const [loadWarnings, setLoadWarnings] = useState<string[]>([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [activeAudience, setActiveAudience] = useState<AudienceId>("students");
   const [channel, setChannel] = useState<Channel>("sms");
   const [message, setMessage] = useState("");
   const [dialNumber, setDialNumber] = useState("");
-  const [callActive, setCallActive] = useState(false);
   const [search, setSearch] = useState("");
-  const [contact, setContact] = useState<Contact>({ ...emptyContact });
-  const [selectedAudiences, setSelectedAudiences] = useState<AudienceId[]>([
-    "customer",
-    "prospect",
-    "partner",
-    "donor",
-    "newsletter",
-    "beneficiary",
-    "other",
-  ]);
-  const [showAdd, setShowAdd] = useState(false);
   const [notice, setNotice] = useState("");
-  const [saving, setSaving] = useState(false);
   const [attendanceFollowups, setAttendanceFollowups] = useState<AttendanceFollowup[]>([]);
+  const [followupPage, setFollowupPage] = useState(1);
   const [followupsLoading, setFollowupsLoading] = useState(false);
   const [followupError, setFollowupError] = useState("");
   const [followupSavingId, setFollowupSavingId] = useState<number | null>(null);
   const [followupDates, setFollowupDates] = useState<Record<number, string>>({});
+  const followupPageSize = 5;
+  const followupPageCount = Math.max(1, Math.ceil(attendanceFollowups.length / followupPageSize));
+  const visibleFollowupPage = Math.min(followupPage, followupPageCount);
+  const paginatedFollowups = attendanceFollowups.slice(
+    (visibleFollowupPage - 1) * followupPageSize,
+    visibleFollowupPage * followupPageSize,
+  );
 
   useEffect(() => {
-    Promise.all([api.students.adminRoster(), api.notifications.list()])
-      .then(([studentsResponse, notificationsResponse]: [{ data?: Array<{ student_id: string; name: string; class: string }> }, { data?: Array<{ id: number; student_id?: string; type?: string; message?: string; read_at?: string; created_at?: string }> }]) => {
-        const students = studentsResponse.data ?? [];
-        const studentContacts: Contact[] = students.map((student) => ({
-          id: Number.isNaN(Number(student.student_id)) ? Math.abs([...student.student_id].reduce((hash, character) => ((hash << 5) - hash + character.charCodeAt(0)) | 0, 0)) : Number(student.student_id),
-          student_id: student.student_id,
-          name: student.name,
-          organization: "Rhema Class Register",
-          audience: "customer",
-          title: "Student",
-          formal_name: student.name,
-          preferred_name: student.name.split(" ")[0],
-          email: "",
-          phone: "",
-          notes: `Cohort ${student.class}`,
-        }));
-        setContacts(studentContacts);
-        setSelectedIds(studentContacts.slice(0, 2).map((student) => student.id));
-        const nameByStudentId = new Map(students.map((student) => [String(student.student_id), student.name]));
-        setHistory((notificationsResponse.data ?? []).map((notification) => ({
-          id: notification.id,
-          contact_name: nameByStudentId.get(String(notification.student_id)) ?? "Student audience",
-          channel: (notification.type === "sms" || notification.type === "whatsapp" || notification.type === "call" ? notification.type : "email") as Channel,
-          status: notification.read_at ? "read" : "sent",
-          body: notification.message ?? "",
-        })));
-      })
-      .catch(() => setNotice("Unable to load the communication directory from the database."))
-      .finally(() => setLoading(false));
+    const load = async () => {
+      const [studentResult, applicantResult, contactResult, followupResult] = await Promise.allSettled([
+        api.students.adminRoster() as Promise<{ data?: Array<{ student_id: string; name: string; class: string; email?: string; phone?: string }>; warnings?: string[] }>,
+        api.admissions.list() as Promise<{ data?: Array<{ id: string; applicant_name: string; applicant_email: string; applicant_phone?: string; program?: string; student_id?: string | null }> }>,
+        api.chatbot.contactMessages() as Promise<{ data?: Array<{ id: number; name: string; email: string; phone?: string; enquiry?: string; page_path?: string }> }>,
+        api.students.communicationFollowups() as Promise<{ data?: Array<{ student_id: string; name: string; class: string; reasons: string[] }> }>,
+      ]);
+      const errors: Partial<Record<AudienceId, string>> = {};
+      const errorMessage = (result: PromiseSettledResult<unknown>, fallback: string) => (
+        result.status === "rejected"
+          ? result.reason instanceof Error ? result.reason.message : fallback
+          : ""
+      );
+      errors.students = errorMessage(studentResult, "Unable to load the student roster.");
+      errors.applicants = errorMessage(applicantResult, "Unable to load applicants.");
+      errors["website-contacts"] = errorMessage(contactResult, "Unable to load website contact messages.");
+      errors.followups = errorMessage(followupResult, "Unable to load student follow-up records.");
+
+      const students = studentResult.status === "fulfilled" ? studentResult.value.data ?? [] : [];
+      const studentById = new Map(students.map((student) => [student.student_id, student]));
+      const studentContacts: Contact[] = students.map((student) => ({
+        id: `student:${student.student_id}`,
+        student_id: student.student_id,
+        name: student.name,
+        organization: student.class ? `Cohort ${student.class}` : "Student",
+        audience: "students",
+        email: student.email || "",
+        phone: student.phone || "",
+        notes: "",
+      }));
+      const applicantContacts: Contact[] = applicantResult.status === "fulfilled"
+        ? (applicantResult.value.data ?? [])
+          .filter((applicant) => !applicant.student_id)
+          .map((applicant) => ({
+            id: `applicant:${applicant.id}`,
+            name: applicant.applicant_name,
+            organization: applicant.program || "Applicant",
+            audience: "applicants",
+            email: applicant.applicant_email || "",
+            phone: applicant.applicant_phone || "",
+            notes: "",
+          }))
+        : [];
+      const contactMessages = contactResult.status === "fulfilled" ? contactResult.value.data ?? [] : [];
+      const seenWebsiteContacts = new Set<string>();
+      const websiteLeads = contactMessages.filter((lead) => {
+        const identity = lead.email?.trim().toLowerCase() || lead.phone?.replace(/\D/g, "") || String(lead.id);
+        if (seenWebsiteContacts.has(identity)) return false;
+        seenWebsiteContacts.add(identity);
+        return true;
+      });
+      const websiteContacts: Contact[] = websiteLeads.map((lead) => ({
+        id: `website-contact:${lead.id}`,
+        name: lead.name,
+        organization: lead.page_path ? `Website · ${lead.page_path}` : "Website contact form",
+        audience: "website-contacts",
+        email: lead.email || "",
+        phone: lead.phone || "",
+        notes: lead.enquiry || "",
+      }));
+      const followupContacts: Contact[] = followupResult.status === "fulfilled"
+        ? (followupResult.value.data ?? []).map((student) => {
+          const rosterRecord = studentById.get(student.student_id);
+          return {
+            id: `followup:${student.student_id}`,
+            student_id: student.student_id,
+            name: rosterRecord?.name || student.name,
+            organization: `Cohort ${rosterRecord?.class || student.class || "—"} · ${student.reasons.length} follow-up reason(s)`,
+            audience: "followups",
+            email: rosterRecord?.email || "",
+            phone: rosterRecord?.phone || "",
+            notes: student.reasons.join(" · "),
+          };
+        })
+        : [];
+
+      setContacts([...studentContacts, ...applicantContacts, ...websiteContacts, ...followupContacts]);
+      setLoadErrors(errors);
+      setLoadWarnings(studentResult.status === "fulfilled" ? studentResult.value.warnings ?? [] : []);
+      setLoading(false);
+    };
+    void load();
   }, []);
 
   useEffect(() => {
@@ -318,6 +211,7 @@ export default function CommunicationsPage() {
     (api.attendance.followups() as Promise<{ data: AttendanceFollowup[] }>)
       .then((response) => {
         setAttendanceFollowups(response.data);
+        setFollowupPage(1);
         setFollowupDates(Object.fromEntries(response.data.map((item) => [
           item.id,
           item.followup_at ? item.followup_at.slice(0, 16).replace(" ", "T") : "",
@@ -362,75 +256,29 @@ export default function CommunicationsPage() {
     }
   };
 
-  const filtered = useMemo(() => {
-    return contacts.filter((item) => {
-      const rawAudience = String(item.audience || "other").toLowerCase().replace(/\s+/g, "_");
-      const audience = ["potential_client", "potential_clients", "prospective_client", "prospective_clients"].includes(rawAudience)
-        ? "prospect"
-        : rawAudience;
-
-      const audienceMatch = selectedAudiences.includes(audience as AudienceId);
-      const searchText = `${item.name || ""} ${item.organization || ""} ${item.email || ""} ${item.phone || ""} ${formatAudience(audience)} `.toLowerCase();
-      return audienceMatch && searchText.includes(search.toLowerCase());
-    });
-  }, [contacts, search, selectedAudiences]);
+  const filtered = useMemo(() => contacts.filter((item) => {
+    const searchText = `${item.name} ${item.organization} ${item.email} ${item.phone} ${item.notes}`.toLowerCase();
+    return item.audience === activeAudience && searchText.includes(search.trim().toLowerCase());
+  }), [activeAudience, contacts, search]);
 
   const selectedContacts = contacts.filter((contactItem) => selectedIds.includes(contactItem.id));
+  const validEmailContacts = selectedContacts.filter((item) => item.email);
   const audiencePageSize = 6;
   const audiencePageCount = Math.max(1, Math.ceil(filtered.length / audiencePageSize));
   const visibleAudiencePage = Math.min(audiencePage, audiencePageCount);
   const paginatedContacts = filtered.slice((visibleAudiencePage - 1) * audiencePageSize, visibleAudiencePage * audiencePageSize);
 
-  const toggleAudience = (audienceId: AudienceId) => {
-    setSelectedAudiences((current) =>
-      current.includes(audienceId) ? current.filter((item) => item !== audienceId) : [...current, audienceId]
-    );
-  };
-
-  const toggleContactSelection = (id: number) => {
-    setSelectedIds((current) => {
-      const selected = current.includes(id);
-      if (selected) return current.filter((item) => item !== id);
-
-      const selectedContact = contacts.find((item) => item.id === id);
-      if (selectedContact?.phone) setDialNumber(selectedContact.phone);
-      return [...current, id];
-    });
-  };
-
-  const addContact = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
-    if (!contact.name.trim() || !contact.phone.trim()) {
-      setNotice("Add a contact name and phone number before saving.");
-      return;
-    }
-
-    setSaving(true);
-
-    const studentId = `COM-${Date.now()}`;
-    try {
-      await api.students.create({ student_id: studentId, name: contact.name.trim(), class: contact.audience, payment_status: "Active" });
-    } catch (reason) {
-      setNotice(reason instanceof Error ? reason.message : "Unable to save this contact to the database.");
-      setSaving(false);
-      return;
-    }
-
-    const newContact: Contact = {
-      ...contact,
-      id: Date.now(),
-      student_id: studentId,
-      audience: contact.audience || "partner",
-      organization: contact.organization || "Not specified",
-    };
-
-    setContacts((current) => [newContact, ...current]);
-    setSelectedIds((current) => [newContact.id, ...current]);
-    setContact({ ...emptyContact });
-    setShowAdd(false);
-    setNotice("Contact saved to the student directory and added to the communication list.");
-    setSaving(false);
+  const toggleContactSelection = (id: string) => {
+    const selectedContact = contacts.find((item) => item.id === id);
+    if (!selectedContact || selectedContact.audience !== activeAudience) return;
+    const wasSelected = selectedIds.includes(id);
+    const nextSelectedIds = wasSelected
+      ? selectedIds.filter((selectedId) => selectedId !== id)
+      : [...selectedIds, id];
+    setSelectedIds(nextSelectedIds);
+    const nextDialContact = contacts.find((item) => item.id === nextSelectedIds[nextSelectedIds.length - 1]);
+    setDialNumber(nextDialContact?.phone || "");
+    setNotice("");
   };
 
   const placeCall = () => {
@@ -444,51 +292,28 @@ export default function CommunicationsPage() {
     const callRecipient = selectedContacts.find(
       (item) => item.phone.replace(/[^0-9+]/g, "") === normalizedNumber,
     );
-    setSaving(true);
-
-    setTimeout(() => {
-      setCallActive(true);
-      setNotice(`Call initiated to ${cleanNumber}.`);
-      setHistory((current) => [
-        {
-          id: Date.now(),
-          contact_name: callRecipient?.name || cleanNumber,
-          channel: "call",
-          status: "dialing",
-          body: `Call placed to ${cleanNumber}.`,
-        },
-        ...current,
-      ]);
-      setSaving(false);
-    }, 500);
-  };
-
-  const receiveIncomingCall = () => {
-    const number = dialNumber.trim() || "+233 20 555 1234";
-
-    setIncomingCalls((current) => [
+    setHistory((current) => [
       {
         id: Date.now(),
-        caller_number: number,
-        status: "received",
-        duration_seconds: 180,
-        created_at: "Just now",
+        contact_name: callRecipient?.name || cleanNumber,
+        channel: "call",
+        status: "dialer opened",
+        body: `Call prepared for ${cleanNumber}.`,
       },
       ...current,
     ]);
-
-    setCallActive(false);
-    setNotice(`Incoming call received from ${number}.`);
+    setNotice(`Opening your phone dialer for ${cleanNumber}.`);
+    window.open(`tel:${normalizedNumber}`, "_self");
   };
 
-  const execute = async () => {
+  const execute = () => {
     if (channel === "call") {
       placeCall();
       return;
     }
 
-    if (!selectedIds.length) {
-      setNotice("Select at least one recipient first.");
+    if (!selectedContacts.length) {
+      setNotice("Select at least one contact from the active group first.");
       return;
     }
 
@@ -497,25 +322,41 @@ export default function CommunicationsPage() {
       return;
     }
 
-    setSaving(true);
-
-    const recipientNames = selectedContacts.map((item) => item.name).join(", ");
-
-    try {
-      await Promise.all(selectedContacts.map((recipient) => api.notifications.save({
-        student_id: recipient.student_id,
-        type: channel,
-        title: `${channel.toUpperCase()} communication`,
-        message: message.trim() || "Email template sent to selected recipients.",
-      })));
-      setHistory((current) => [{ id: Date.now(), contact_name: recipientNames || "Selected contacts", channel, status: "sent", body: message.trim() || "Email template sent to selected recipients." }, ...current]);
-      setNotice(`${channel.toUpperCase()} message has been recorded for ${selectedIds.length} contact(s).`);
-      setMessage("");
-    } catch (reason) {
-      setNotice(reason instanceof Error ? reason.message : "Unable to save this communication.");
-    } finally {
-      setSaving(false);
+    const hasMultipleRecipients = selectedContacts.length > 1;
+    if (channel !== "email" && hasMultipleRecipients) {
+      setNotice(`Select one contact at a time to open a ${channel === "whatsapp" ? "WhatsApp" : "SMS"} draft.`);
+      return;
     }
+    const recipient = selectedContacts[0];
+    const encodedMessage = encodeURIComponent(message.trim());
+    let destination = "";
+    if (channel === "email") {
+      const emailAddresses = validEmailContacts.map((item) => item.email).filter(Boolean);
+      if (emailAddresses.length !== selectedContacts.length) {
+        setNotice("Every selected contact needs an email address before opening an email draft.");
+        return;
+      }
+      destination = `mailto:?bcc=${encodeURIComponent(emailAddresses.join(","))}&subject=${encodeURIComponent("Message from Rhema Zambia")}&body=${encodedMessage}`;
+    } else {
+      const number = recipient.phone.replace(/[^\d+]/g, "");
+      if (!number) {
+        setNotice("The selected contact has no phone number on record.");
+        return;
+      }
+      destination = channel === "whatsapp"
+        ? `https://wa.me/${number.replace(/^\+/, "")}?text=${encodedMessage}`
+        : `sms:${number}?body=${encodedMessage}`;
+    }
+
+    setHistory((current) => [{
+      id: Date.now(),
+      contact_name: channel === "email" ? `${validEmailContacts.length} selected contact(s)` : recipient.name,
+      channel,
+      status: "draft opened",
+      body: message.trim() || "Email draft opened.",
+    }, ...current]);
+    setNotice(`Opening a ${channel.toUpperCase()} draft for ${channel === "email" ? `${validEmailContacts.length} selected contact(s)` : recipient.name}.`);
+    window.open(destination, channel === "whatsapp" ? "_blank" : "_self", "noopener,noreferrer");
   };
 
   const pressDialKey = (key: string) => setDialNumber((current) => `${current}${key}`);
@@ -528,16 +369,9 @@ export default function CommunicationsPage() {
           <p className="text-xs font-black uppercase tracking-[0.22em] text-amber-300">Communications hub</p>
           <h1 className="mt-2 text-3xl font-black">Audience contact centre</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
-            Send formal updates by SMS, WhatsApp, email, or voice call to your customers, partners, donors, beneficiaries, and other important stakeholders from one secure workspace.
+            Contact students, applicants, website contacts, or students needing follow-up. Select one group at a time to keep recipients separate.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowAdd(true)}
-          className="inline-flex items-center gap-2 rounded-2xl bg-amber-400 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-amber-300"
-        >
-          <Plus className="h-4 w-4" /> Add contact
-        </button>
       </header>
 
       {notice && (
@@ -548,11 +382,11 @@ export default function CommunicationsPage() {
 
       <nav className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm" aria-label="Communication workspace tabs">
         {[
-          { id: "compose", label: "Compose", icon: Send },
-          { id: "activity", label: "Activity history", icon: History },
-          { id: "followups", label: "Attendance follow-ups", icon: Clock3 },
+          { id: "compose" as const, label: "Compose", icon: Send },
+          { id: "activity" as const, label: "Activity history", icon: History },
+          { id: "followups" as const, label: "Attendance follow-ups", icon: Clock3 },
         ].map(({ id, label, icon: Icon }) => (
-          <button key={id} type="button" aria-pressed={activeTab === id} onClick={() => { const nextTab = id as CommunicationsTab; setActiveTab(nextTab); if (nextTab === "followups") { setFollowupsLoading(true); setFollowupError(""); } }} className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-black transition ${activeTab === id ? "bg-slate-950 text-white" : "text-slate-700 hover:bg-slate-100"}`}>
+          <button key={id} type="button" aria-pressed={activeTab === id} onClick={() => { setActiveTab(id); if (id === "followups") { setFollowupsLoading(true); setFollowupError(""); setFollowupPage(1); } }} className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-black transition ${activeTab === id ? "bg-slate-950 text-white" : "text-slate-700 hover:bg-slate-100"}`}>
             <Icon className="h-4 w-4" /> {label}
           </button>
         ))}
@@ -562,19 +396,26 @@ export default function CommunicationsPage() {
         <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <h2 className="inline-flex items-center gap-2 text-lg font-black text-slate-900"><Users className="h-5 w-5 text-red-600" /> Audience groups</h2>
-            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-slate-600">
-              {selectedAudiences.length} active
-            </span>
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-slate-600">One group at a time</span>
           </div>
 
           <div className="mt-4 grid grid-cols-2 gap-2">
             {audienceOptions.map((item) => {
-              const active = selectedAudiences.includes(item.id);
+              const active = activeAudience === item.id;
               return (
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => toggleAudience(item.id)}
+                  aria-pressed={active}
+                  onClick={() => {
+                    if (activeAudience === item.id) return;
+                    setActiveAudience(item.id);
+                    setSelectedIds([]);
+                    setDialNumber("");
+                    setMessage("");
+                    setAudiencePage(1);
+                    setNotice("");
+                  }}
                   className={`flex items-center justify-between rounded-2xl border px-3 py-2.5 text-sm font-bold transition ${
                     active ? "border-slate-900 bg-slate-950 text-white" : "border-slate-200 bg-slate-50 text-slate-700 hover:border-red-200 hover:bg-red-50"
                   }`}
@@ -596,10 +437,12 @@ export default function CommunicationsPage() {
             />
           </div>
 
+          {loadErrors[activeAudience] && <div role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{loadErrors[activeAudience]}</div>}
+          {activeAudience === "students" && loadWarnings.map((warning) => <div key={warning} role="status" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">{warning}</div>)}
           <div className="mt-5 space-y-2">
-            {loading ? <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">Loading student directory...</div> : filtered.length === 0 ? (
+            {loading ? <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">Loading {audienceOptions.find((item) => item.id === activeAudience)?.label.toLowerCase()}...</div> : filtered.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">
-                No contacts match the current filters.
+                {loadErrors[activeAudience] ? "The contact list could not be loaded." : "No contacts match this group and search."}
               </div>
             ) : (
               paginatedContacts.map((item) => {
@@ -619,10 +462,9 @@ export default function CommunicationsPage() {
                     <span className="min-w-0 flex-1">
                       <strong className="block truncate">{item.name}</strong>
                       <small className="block truncate text-xs opacity-75">{item.organization || "No organisation"}</small>
+                      {activeAudience === "followups" && <small className="block truncate text-xs opacity-75">{item.notes}</small>}
                     </span>
-                    <span className="rounded-full bg-white/10 px-2 py-1 text-[10px] font-black uppercase tracking-wide">
-                      {formatAudience(item.audience || "other")}
-                    </span>
+                    <span className="rounded-full bg-white/10 px-2 py-1 text-[10px] font-black uppercase tracking-wide">{audienceOptions.find((group) => group.id === item.audience)?.label}</span>
                     <span
                       className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${
                         selected ? "border-emerald-300 bg-emerald-500 text-white" : "border-slate-300 text-transparent"
@@ -670,8 +512,12 @@ export default function CommunicationsPage() {
             <div className="mt-3 flex flex-wrap gap-2">
               {selectedContacts.length ? (
                 selectedContacts.map((item) => (
-                  <span key={item.id} className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-xs font-bold text-slate-700">
+                  <span key={item.id} className="flex flex-col rounded-xl border border-slate-300 bg-white px-2.5 py-1 text-xs font-bold text-slate-700">
                     {item.name}
+                    <span className="font-normal text-slate-500">
+                      {channel === "email" ? item.email || "No email on record" : item.phone || "No phone number on record"}
+                    </span>
+                    {activeAudience === "followups" && <span className="mt-1 max-w-64 text-left font-normal text-slate-500">{item.notes}</span>}
                   </span>
                 ))
               ) : (
@@ -731,27 +577,7 @@ export default function CommunicationsPage() {
                 </button>
               </div>
 
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={receiveIncomingCall}
-                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100"
-                >
-                  <PhoneIncoming className="h-4 w-4" /> Receive incoming call
-                </button>
-                {callActive && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCallActive(false);
-                      setNotice("Dialer ready for the next call.");
-                    }}
-                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100"
-                  >
-                    End / reset call
-                  </button>
-                )}
-              </div>
+              <p className="mt-3 text-xs text-slate-500">Selecting a contact fills this number from their record when available.</p>
             </div>
           ) : channel === "email" ? (
             <label className="mt-5 block text-sm font-bold text-slate-700">
@@ -780,15 +606,14 @@ export default function CommunicationsPage() {
           <div className="mt-6 flex items-center justify-between gap-4 border-t border-slate-200 pt-5">
             <div className="text-sm text-slate-500">
               <Clock3 className="mr-1 inline h-4 w-4" />
-              {channel === "call" ? "Use the keypad or enter a number to place your call." : "Formal updates can be sent to multiple groups at once."}
+              {channel === "call" ? "Use the keypad or enter a number to open your phone dialer." : channel === "whatsapp" || channel === "sms" ? "Choose one contact to open a pre-addressed message draft." : "Email drafts are addressed only to selected contacts in this group."}
             </div>
             <button
               type="button"
               onClick={execute}
-              disabled={saving || (channel === "call" && callActive)}
               className="inline-flex items-center gap-2 rounded-2xl bg-red-600 px-5 py-3 text-sm font-black text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {channel === "call" ? <PhoneCall className="h-4 w-4" /> : <Send className="h-4 w-4" />} {saving ? channel === "call" ? "Connecting..." : "Sending..." : channel === "call" ? callActive ? "Call in progress" : "Initiate call" : "Send message"}
+              {channel === "call" ? <PhoneCall className="h-4 w-4" /> : <Send className="h-4 w-4" />} {channel === "call" ? "Open phone dialer" : channel === "email" ? "Open email draft" : channel === "whatsapp" ? "Open WhatsApp draft" : "Open SMS draft"}
             </button>
           </div>
         </section>
@@ -851,7 +676,7 @@ export default function CommunicationsPage() {
           <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">There are no missed-session follow-ups to review.</div>
         ) : (
           <div className="space-y-3">
-            {attendanceFollowups.map((item) => (
+            {paginatedFollowups.map((item) => (
               <article key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
@@ -884,122 +709,40 @@ export default function CommunicationsPage() {
                 {item.followup_at && <p className="mt-2 text-xs text-blue-800">Scheduled: {new Date(item.followup_at.replace(" ", "T")).toLocaleString()}</p>}
               </article>
             ))}
+            {attendanceFollowups.length > followupPageSize && (
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
+                <span className="text-xs font-semibold text-slate-500">
+                  Showing {(visibleFollowupPage - 1) * followupPageSize + 1}–{Math.min(visibleFollowupPage * followupPageSize, attendanceFollowups.length)} of {attendanceFollowups.length} follow-ups
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={visibleFollowupPage === 1}
+                    onClick={() => setFollowupPage((page) => Math.max(1, page - 1))}
+                    className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+                    aria-label="Previous missed-session follow-ups page"
+                  >
+                    <ChevronLeft className="h-4 w-4" /> Previous
+                  </button>
+                  <span className="min-w-12 text-center text-xs font-bold text-slate-600">
+                    {visibleFollowupPage} / {followupPageCount}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={visibleFollowupPage === followupPageCount}
+                    onClick={() => setFollowupPage((page) => Math.min(followupPageCount, page + 1))}
+                    className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+                    aria-label="Next missed-session follow-ups page"
+                  >
+                    Next <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </section>
 
-      {showAdd && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
-          <div className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-2xl font-black text-slate-900">Add contact</h2>
-              <button type="button" onClick={() => setShowAdd(false)} className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm font-bold text-slate-600">
-                Close
-              </button>
-            </div>
-
-            <form onSubmit={addContact} className="mt-5 grid gap-4 md:grid-cols-2">
-              <label className="text-sm font-bold text-slate-700">
-                Full name
-                <input
-                  required
-                  value={contact.name}
-                  onChange={(event) => setContact({ ...contact, name: event.target.value })}
-                  className="mt-2 w-full rounded-xl bg-slate-50 px-3 py-2.5 text-sm ring-1 ring-slate-200"
-                />
-              </label>
-
-              <label className="text-sm font-bold text-slate-700">
-                Official title
-                <input
-                  value={contact.title}
-                  onChange={(event) => setContact({ ...contact, title: event.target.value })}
-                  className="mt-2 w-full rounded-xl bg-slate-50 px-3 py-2.5 text-sm ring-1 ring-slate-200"
-                />
-              </label>
-
-              <label className="text-sm font-bold text-slate-700">
-                Formal name
-                <input
-                  value={contact.formal_name}
-                  onChange={(event) => setContact({ ...contact, formal_name: event.target.value })}
-                  className="mt-2 w-full rounded-xl bg-slate-50 px-3 py-2.5 text-sm ring-1 ring-slate-200"
-                />
-              </label>
-
-              <label className="text-sm font-bold text-slate-700">
-                Preferred name
-                <input
-                  value={contact.preferred_name}
-                  onChange={(event) => setContact({ ...contact, preferred_name: event.target.value })}
-                  className="mt-2 w-full rounded-xl bg-slate-50 px-3 py-2.5 text-sm ring-1 ring-slate-200"
-                />
-              </label>
-
-              <label className="text-sm font-bold text-slate-700">
-                Organisation
-                <input
-                  value={contact.organization}
-                  onChange={(event) => setContact({ ...contact, organization: event.target.value })}
-                  className="mt-2 w-full rounded-xl bg-slate-50 px-3 py-2.5 text-sm ring-1 ring-slate-200"
-                />
-              </label>
-
-              <label className="text-sm font-bold text-slate-700">
-                Audience category
-                <select
-                  value={contact.audience}
-                  onChange={(event) => setContact({ ...contact, audience: event.target.value as AudienceId })}
-                  className="mt-2 w-full rounded-xl bg-slate-50 px-3 py-2.5 text-sm ring-1 ring-slate-200"
-                >
-                  {audienceOptions.map((item) => (
-                    <option key={item.id} value={item.id}>{item.label}</option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="text-sm font-bold text-slate-700 md:col-span-2">
-                Email
-                <input
-                  type="email"
-                  value={contact.email}
-                  onChange={(event) => setContact({ ...contact, email: event.target.value })}
-                  className="mt-2 w-full rounded-xl bg-slate-50 px-3 py-2.5 text-sm ring-1 ring-slate-200"
-                />
-              </label>
-
-              <label className="text-sm font-bold text-slate-700 md:col-span-2">
-                Phone number
-                <input
-                  required
-                  value={contact.phone}
-                  onChange={(event) => setContact({ ...contact, phone: event.target.value })}
-                  className="mt-2 w-full rounded-xl bg-slate-50 px-3 py-2.5 text-sm ring-1 ring-slate-200"
-                />
-              </label>
-
-              <label className="text-sm font-bold text-slate-700 md:col-span-2">
-                Notes
-                <textarea
-                  value={contact.notes}
-                  onChange={(event) => setContact({ ...contact, notes: event.target.value })}
-                  rows={3}
-                  className="mt-2 w-full rounded-xl bg-slate-50 px-3 py-2.5 text-sm ring-1 ring-slate-200"
-                />
-              </label>
-
-              <div className="md:col-span-2 flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => setShowAdd(false)} className="rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700">
-                  Cancel
-                </button>
-                <button type="submit" disabled={saving} className="rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-black text-white disabled:opacity-60">
-                  {saving ? "Saving..." : "Save contact"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </main>
   );
 }

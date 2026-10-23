@@ -411,18 +411,20 @@ export default function MessageCenter({ compact = false }: { compact?: boolean }
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       stream = mediaStream;
-      const recorder = new MediaRecorder(mediaStream);
+      const preferredType = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg;codecs=opus']
+        .find((type) => MediaRecorder.isTypeSupported(type));
+      const recorder = new MediaRecorder(mediaStream, preferredType ? { mimeType: preferredType } : undefined);
       recordedChunks.current = [];
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) recordedChunks.current.push(event.data);
       };
       recorder.onstop = () => {
-        const blob = new Blob(recordedChunks.current, { type: recorder.mimeType || 'audio/webm' });
+        const blob = new Blob(recordedChunks.current, { type: recorder.mimeType || preferredType || 'audio/webm' });
         const extension = blob.type.includes('ogg') ? 'ogg' : blob.type.includes('mp4') ? 'm4a' : 'webm';
-        setAttachment(new File([blob], `voice-note.${extension}`, { type: blob.type }));
+        if (mounted.current) setAttachment(new File([blob], `voice-note.${extension}`, { type: blob.type }));
         mediaStream.getTracks().forEach((track) => track.stop());
         mediaRecorder.current = null;
-        setRecording(false);
+        if (mounted.current) setRecording(false);
       };
       mediaRecorder.current = recorder;
       recorder.start();

@@ -16,7 +16,8 @@ import {
   X,
   Music,
   MessageSquare,
-  Bell
+  Bell,
+  Clock3,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -36,6 +37,7 @@ const studentLinks: NavItem[] = [
   { title: 'Assignments', href: '/student/assignments', icon: FileText },
   { title: 'Grades', href: '/student/grades', icon: FileSpreadsheet },
   { title: 'Schedule', href: '/student/schedule', icon: CalendarDays },
+  { title: 'Church service hours', href: '/student/service-hours', icon: Clock3 },
   { title: 'Billing', href: '/student/billing', icon: CreditCard },
   { title: 'Library', href: '/book-library', icon: Library },
   { title: 'Guild', href: '/student/guild', icon: UserCheck },
