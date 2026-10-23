@@ -90,7 +90,7 @@ export default function FacultyPage() {
             <p className="text-[11px] font-black uppercase tracking-[0.2em] text-blue-800">Learn with Rhema</p>
             <h2 className="mt-2 text-2xl font-black tracking-tight text-[#10283a]">Explore the training program.</h2>
           </div>
-          <Link href="/offered-programs" className="inline-flex w-fit items-center gap-2 rounded-full bg-[#0645a5] px-5 py-3 text-sm font-black text-white transition hover:bg-blue-900">
+          <Link href="/offered-programs" className="inline-flex w-fit items-center gap-2 rounded-full bg-rhema-blue px-5 py-3 text-sm font-black text-white transition hover:bg-blue-900">
             Explore academics <ArrowRight size={16} />
           </Link>
         </div>

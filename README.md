@@ -24,6 +24,10 @@ The portal reads local Next.js settings from `.env.local`; start with `.env.exam
 
 The PHP API reads its settings from the PHP hosting environment, not from a `.env` file. Use `../php-api/.env.example` as the variable checklist and configure values in PHP-FPM, Apache, or the deployment platform. Do not commit production credentials.
 
+## Brand colors
+
+The shared brand palette is defined in `app/globals.css` as `--rhema-red` (`#c8102e`), `--rhema-blue` (`#003da5`), and `--rhema-accent` (`#f2b544`, warm gold). Update those variables to adjust the palette across the application. Tailwind blue and indigo utility shades are derived from the shared blue token; branded calls to action, public headers and footers, and the admin, lecturer, and student sidebars use the shared brand tokens. Red alert/error utilities remain distinct for status feedback.
+
 The admin Configuration & billing page stores academic terms, cohort names, fee schedules, and payment preferences in the `school_system_settings` database table; academic term dates are also synchronized to `academic_terms`. Existing `php-api/data/sys_config.json` settings are imported into the database automatically the first time the API loads settings. If the PHP host does not run the application database initializer, import `../php-api/config/createSchoolSettingsTable.sql`. Flutterwave keys remain server environment variables and are never stored with school settings.
 
 ## Chat and account notifications

@@ -50,7 +50,8 @@ interface AdminSidebarProps {
   closeSidebar: () => void;
   closeMobileSidebar: () => void;
   sidebarWidth: number;
-  onMouseDownResize: (e: React.MouseEvent) => void;
+  onResizePointerDown: (e: React.PointerEvent<HTMLDivElement>) => void;
+  onResizeKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => void;
   isDragging: boolean;
   admin: AdminProfile;
   onSignOut: () => Promise<void>;
@@ -154,7 +155,8 @@ export default function AdminSidebar({
   closeSidebar,
   closeMobileSidebar,
   sidebarWidth,
-  onMouseDownResize,
+  onResizePointerDown,
+  onResizeKeyDown,
   isDragging,
   admin,
   onSignOut,
@@ -180,19 +182,19 @@ export default function AdminSidebar({
     <aside
       id="admin-navigation"
       style={{ '--sidebar-width': `${sidebarWidth}px` } as React.CSSProperties}
-      className={`fixed inset-y-0 left-0 z-50 flex h-screen w-64 shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white text-slate-900 transition-transform duration-300 ease-in-out md:z-30 md:w-[var(--sidebar-width)] ${isMobileOpen ? 'translate-x-0' : '-translate-x-full'} ${isDesktopOpen ? 'md:translate-x-0' : 'md:-translate-x-full'}`}
+      className={`fixed inset-y-0 left-0 z-50 flex h-screen w-[min(85vw,320px)] shrink-0 flex-col overflow-hidden border-r border-white/15 bg-rhema-red text-white transition-transform duration-300 ease-in-out md:z-30 md:w-[var(--sidebar-width)] ${isMobileOpen ? 'translate-x-0' : '-translate-x-full'} ${isDesktopOpen ? 'md:translate-x-0' : 'md:-translate-x-full'}`}
     >
-      <div className="flex h-16 shrink-0 items-center justify-between border-b border-slate-100 bg-white px-4">
+      <div className="flex h-16 shrink-0 items-center justify-between border-b border-white/15 bg-rhema-red px-4">
         <div className="flex items-center gap-3 overflow-hidden">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#fbe9e7] text-red-700"><GraduationCap className="h-5 w-5" /></div>
-          <div className="flex flex-col truncate"><span className="text-xs font-black uppercase leading-tight tracking-wider text-slate-950">Rhema</span><span className="mt-0.5 text-[9px] font-bold uppercase tracking-widest text-slate-400">Admin workspace</span></div>
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-rhema-red"><GraduationCap className="h-5 w-5" /></div>
+          <div className="flex flex-col truncate"><span className="text-xs font-black uppercase leading-tight tracking-wider text-white">Rhema</span><span className="mt-0.5 text-[9px] font-bold uppercase tracking-widest text-white/70">Admin workspace</span></div>
         </div>
-        <button type="button" onClick={closeSidebar} className="rounded-lg border border-slate-200 p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900" aria-label="Close admin navigation"><X className="h-4 w-4" /></button>
+        <button type="button" onClick={closeSidebar} className="rounded-lg border border-white/20 p-1.5 text-white/80 transition-colors hover:bg-white/10 hover:text-white md:hidden" aria-label="Close admin navigation"><X className="h-4 w-4" /></button>
       </div>
 
-      <div className="mb-2 flex flex-col items-center text-center gap-3 rounded-xl bg-slate-50 px-3 py-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#fbe9e7] text-sm font-black text-red-700" aria-label={`${admin.name} avatar`}>{getInitials(admin.name)}</div>
-          <div className="min-w-0 flex-1"><p className="truncate text-xs font-black text-slate-900">{admin.name}</p><p className="mt-0.5 truncate text-[10px] font-semibold capitalize text-[#31584c]">{formatRole(admin.admin_role)}</p><p className="truncate text-[9px] text-slate-500">{admin.department}</p></div>
+      <div className="mb-2 flex flex-col items-center gap-3 rounded-xl bg-white/10 px-3 py-3 text-center">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white text-sm font-black text-rhema-red" aria-label={`${admin.name} avatar`}>{getInitials(admin.name)}</div>
+          <div className="min-w-0 flex-1"><p className="truncate text-xs font-black text-white">{admin.name}</p><p className="mt-0.5 truncate text-[10px] font-semibold capitalize text-rhema-accent">{formatRole(admin.admin_role)}</p><p className="truncate text-[9px] text-white/70">{admin.department}</p></div>
       </div>
 
       <nav className="scrollbar-none flex-1 space-y-2 overflow-y-auto px-3 py-4" aria-label="Administrator navigation" style={{ msOverflowStyle: 'none', scrollbarWidth: 'none' }}>
@@ -203,15 +205,15 @@ export default function AdminSidebar({
           const expanded = expandedGroups[group.title] ?? isCurrentGroup;
           return (
             <section key={group.title} className="rounded-xl">
-              <button type="button" aria-expanded={expanded} onClick={() => setExpandedGroups((previous) => ({ ...previous, [group.title]: !expanded }))} className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.14em] text-slate-400 transition hover:bg-slate-50 hover:text-slate-700">
+              <button type="button" aria-expanded={expanded} onClick={() => setExpandedGroups((previous) => ({ ...previous, [group.title]: !expanded }))} className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.14em] text-white/70 transition hover:bg-white/10 hover:text-white">
                 <span>{group.title}</span><ChevronDown size={14} className={`transition-transform ${expanded ? 'rotate-180' : ''}`} />
               </button>
               {expanded && <div className="mt-1 space-y-1">{visibleItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = pathname === item.href || (item.href !== '/admin' && pathname.startsWith(`${item.href}/`));
-                return <Link key={item.href} href={item.href} onClick={closeMobileSidebar} aria-current={isActive ? 'page' : undefined} className={`group flex items-center justify-between rounded-xl px-3 py-2.5 text-xs font-semibold tracking-wide transition-all ${isActive ? 'bg-[#173b3a] text-white shadow-sm' : 'text-slate-600 hover:bg-[#f3f6f4] hover:text-[#173b3a]'}`}>
-                  <span className="flex min-w-0 items-center gap-3"><Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-[#173b3a]'}`} /><span className="truncate">{item.title}</span></span>
-                  {item.badge && <span className={`ml-2 rounded-md px-2 py-0.5 text-[9px] font-black uppercase tracking-wider ${isActive ? 'bg-white/15 text-white' : 'bg-[#fbe9e7] text-red-700'}`}>{item.badge}</span>}
+                return <Link key={item.href} href={item.href} onClick={closeMobileSidebar} aria-current={isActive ? 'page' : undefined} className={`group flex items-center justify-between rounded-xl px-3 py-2.5 text-xs font-semibold tracking-wide transition-all ${isActive ? 'bg-white text-rhema-red shadow-sm' : 'text-white/90 hover:bg-white/10 hover:text-white'}`}>
+                  <span className="flex min-w-0 items-center gap-3"><Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-rhema-red' : 'text-white/70 group-hover:text-rhema-accent'}`} /><span className="truncate">{item.title}</span></span>
+                  {item.badge && <span className={`ml-2 rounded-md px-2 py-0.5 text-[9px] font-black uppercase tracking-wider ${isActive ? 'bg-rhema-red/10 text-rhema-red' : 'bg-white/15 text-rhema-accent'}`}>{item.badge}</span>}
                 </Link>;
               })}</div>}
             </section>
@@ -219,13 +221,24 @@ export default function AdminSidebar({
         })}
       </nav>
 
-      <div className="shrink-0 border-t border-slate-200 p-3">
-        {signOutError && <p role="alert" className="mb-2 rounded-lg bg-red-50 px-3 py-2 text-[11px] text-red-700">{signOutError}</p>}
+      <div className="shrink-0 border-t border-white/15 p-3">
+        {signOutError && <p role="alert" className="mb-2 rounded-lg bg-white px-3 py-2 text-[11px] font-medium text-rhema-red">{signOutError}</p>}
         
-         <button type="button" onClick={() => void signOut()} disabled={signingOut} className="group flex w-full items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-xs font-bold uppercase tracking-wide text-slate-500 transition-all hover:border-red-100 hover:bg-red-50 hover:text-red-700 disabled:opacity-60"><LogOut className="h-4 w-4 shrink-0 transition-transform group-hover:-translate-x-0.5" /><span className="truncate">{signingOut ? 'Signing out...' : 'Sign out'}</span></button>
+         <button type="button" onClick={() => void signOut()} disabled={signingOut} className="group flex w-full items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-xs font-bold uppercase tracking-wide text-white/80 transition-all hover:border-white/20 hover:bg-white/10 hover:text-white disabled:opacity-60"><LogOut className="h-4 w-4 shrink-0 transition-transform group-hover:-translate-x-0.5 group-hover:text-rhema-accent" /><span className="truncate">{signingOut ? 'Signing out...' : 'Sign out'}</span></button>
       </div>
 
-      <div onMouseDown={onMouseDownResize} className={`absolute bottom-0 right-0 top-0 z-50 hidden w-1 cursor-col-resize transition-all hover:bg-[#31584c] md:block ${isDragging ? 'w-1.5 bg-red-600' : ''}`} />
+      <div
+        role="separator"
+        aria-label="Resize administrator sidebar"
+        aria-orientation="vertical"
+        aria-valuemin={220}
+        aria-valuemax={Math.max(220, Math.min(420, typeof window === 'undefined' ? 420 : window.innerWidth * 0.4, typeof window === 'undefined' ? 420 : window.innerWidth - 320))}
+        aria-valuenow={sidebarWidth}
+        tabIndex={0}
+        onPointerDown={onResizePointerDown}
+        onKeyDown={onResizeKeyDown}
+        className={`absolute bottom-0 right-0 top-0 z-50 hidden w-2 touch-none cursor-col-resize transition-all hover:bg-rhema-accent/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-rhema-accent md:block ${isDragging ? 'bg-rhema-accent/70' : ''}`}
+      />
     </aside>
   );
 }

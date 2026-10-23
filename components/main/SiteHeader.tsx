@@ -100,7 +100,7 @@ export default function SiteHeader() {
 
   return (
     <header ref={headerRef} className={`${isSolid ? "fixed bg-white text-slate-900 shadow-md shadow-slate-950/5" : "absolute bg-transparent text-white"} inset-x-0 top-0 z-50 transition-[background-color,box-shadow] duration-300`}>
-      <div className="h-6 bg-[#c8102e] text-white">
+      <div className="h-6 bg-rhema-red text-white">
         <div className="mx-auto flex h-full max-w-7xl items-center justify-between px-4 text-[10px] font-semibold sm:px-6 lg:px-8">
           <span>Rhema Bible Training Center Zambia · Lusaka</span>
           <div className="flex items-center gap-3">
@@ -115,7 +115,7 @@ export default function SiteHeader() {
           <Link href="/" aria-label="Rhema Zambia home" className="flex shrink-0 items-center gap-2.5">
             <Image src="/logo.png" alt="" width={52} height={56} priority className="h-11 w-auto object-contain sm:h-12" />
             <span className="hidden leading-tight sm:block">
-              <span className={`block text-sm font-black ${isSolid ? "text-[#c8102e]" : transparentOnDarkHero ? "text-white" : "text-[#c8102e]"}`}>Rhema Zambia</span>
+              <span className={`block text-sm font-black ${isSolid ? "text-rhema-red" : transparentOnDarkHero ? "text-white" : "text-rhema-red"}`}>Rhema Zambia</span>
               <span className={`mt-0.5 block text-[9px] font-bold uppercase tracking-[0.12em] ${isSolid ? "text-slate-500" : transparentOnDarkHero ? "text-white/85" : "text-slate-500"}`}>Bible Training Center</span>
             </span>
           </Link>
@@ -129,13 +129,13 @@ export default function SiteHeader() {
                 });
                 return (
                   <details key={item.label} className="group relative">
-                    <summary className={`flex cursor-pointer list-none items-center gap-1 rounded-full px-3.5 py-3 text-sm font-bold transition hover:bg-slate-100/90 ${isSolid ? active ? "text-[#c8102e]" : linkTone : `${active && transparentOnDarkHero ? "text-white" : linkTone} ${transparentOnDarkHero ? "hover:text-slate-900" : "hover:text-[#c8102e]"}`}`}>
+                    <summary className={`flex cursor-pointer list-none items-center gap-1 rounded-full px-3.5 py-3 text-sm font-bold transition hover:bg-slate-100/90 ${isSolid ? active ? "text-rhema-red" : linkTone : `${active && transparentOnDarkHero ? "text-white" : linkTone} ${transparentOnDarkHero ? "hover:text-slate-900" : "hover:text-rhema-red"}`}`}>
                       {item.label}
                       <ChevronDown size={14} className="transition group-open:rotate-180" />
                     </summary>
                     <div className="absolute left-0 top-full z-50 mt-2 w-64 rounded-2xl border border-slate-200 bg-white p-2 text-slate-800 shadow-xl shadow-slate-950/10">
                       {item.links.map((link) => (
-                        <Link key={link.href} href={link.href} onClick={(event) => event.currentTarget.closest("details")?.removeAttribute("open")} className="block rounded-xl px-4 py-3 text-sm font-semibold transition hover:bg-slate-50 hover:text-[#c8102e]">
+                        <Link key={link.href} href={link.href} onClick={(event) => event.currentTarget.closest("details")?.removeAttribute("open")} className="block rounded-xl px-4 py-3 text-sm font-semibold transition hover:bg-slate-50 hover:text-rhema-red">
                           {link.label}
                         </Link>
                       ))}
@@ -145,7 +145,7 @@ export default function SiteHeader() {
               }
               const active = isActive(pathname, item.href);
               return (
-                <Link key={item.href} href={item.href} className={`rounded-full px-3.5 py-3 text-sm font-bold transition hover:bg-slate-100/90 ${active ? "text-[#c8102e]" : linkTone} ${!isSolid ? transparentOnDarkHero ? "hover:text-slate-900" : "hover:text-[#c8102e]" : ""}`}>
+                <Link key={item.href} href={item.href} className={`rounded-full px-3.5 py-3 text-sm font-bold transition hover:bg-slate-100/90 ${active ? "text-rhema-red" : linkTone} ${!isSolid ? transparentOnDarkHero ? "hover:text-slate-900" : "hover:text-rhema-red" : ""}`}>
                   {item.label}
                 </Link>
               );
@@ -156,7 +156,7 @@ export default function SiteHeader() {
             <Link href="/login" className={`rounded-full border px-4 py-2.5 text-xs font-bold transition ${isSolid ? "border-slate-200 text-slate-800 hover:bg-slate-50" : "border-white/60 text-white hover:bg-white/10"}`}>
               Student login
             </Link>
-            <Link href="/apply" className="rounded-full bg-[#f28b24] px-4 py-2.5 text-xs font-black text-slate-950 shadow-lg shadow-orange-900/10 transition hover:bg-orange-300">
+            <Link href="/apply" className="rounded-full bg-rhema-accent px-4 py-2.5 text-xs font-black text-slate-950 shadow-lg shadow-orange-900/10 transition hover:brightness-95">
               Apply now
             </Link>
           </div>
@@ -176,7 +176,7 @@ export default function SiteHeader() {
               </summary>
               <div className="pb-2 pl-3">
                 {item.links.map((link) => (
-                  <Link key={link.href} href={link.href} onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-[#c8102e]">
+                  <Link key={link.href} href={link.href} onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-rhema-red">
                     {link.label}
                   </Link>
                 ))}
@@ -187,7 +187,7 @@ export default function SiteHeader() {
               {item.label}
             </Link>
           ))}
-          <Link href="/apply" onClick={() => setMobileOpen(false)} className="mt-3 block rounded-full bg-[#f28b24] px-5 py-3 text-center text-sm font-black text-slate-950">
+          <Link href="/apply" onClick={() => setMobileOpen(false)} className="mt-3 block rounded-full bg-rhema-accent px-5 py-3 text-center text-sm font-black text-slate-950">
             Apply now
           </Link>
         </nav>

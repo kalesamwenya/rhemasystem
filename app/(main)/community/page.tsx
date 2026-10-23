@@ -52,7 +52,7 @@ export default function CommunityPage() {
           <p className="text-[11px] font-black uppercase tracking-[0.2em] text-blue-800">{content.partnerships_badge}</p>
           <h2 className="mt-3 max-w-2xl whitespace-pre-line text-3xl font-black leading-tight tracking-tight text-[#10283a] sm:text-4xl">{content.partnerships_title}</h2>
           <p className="mt-4 max-w-2xl whitespace-pre-line text-sm leading-7 text-slate-700">{content.partnerships_description}</p>
-          <Link href="/contact#contact-details" className="mt-5 inline-flex items-center gap-2 rounded-full bg-[#c8102e] px-5 py-3 text-xs font-black text-white shadow-md shadow-red-900/10 transition hover:bg-red-800">Partnership details <ArrowRight size={14} /></Link>
+          <Link href="/contact#contact-details" className="mt-5 inline-flex items-center gap-2 rounded-full bg-rhema-red px-5 py-3 text-xs font-black text-white shadow-md shadow-red-900/10 transition hover:bg-rhema-red-dark">Partnership details <ArrowRight size={14} /></Link>
         </div>
         <aside className="h-fit rounded-2xl border border-slate-200 bg-white p-5">
           <h2 className="text-lg font-black text-[#10283a]">{content.links_title}</h2>
@@ -72,7 +72,7 @@ export default function CommunityPage() {
             <p className="text-[11px] font-black uppercase tracking-[0.2em] text-blue-800">{content.events_badge}</p>
             <h2 className="mt-2 text-3xl font-black tracking-tight text-[#10283a]">{content.events_title}</h2>
           </div>
-          <Link href="/events" className="inline-flex w-fit items-center gap-2 rounded-full bg-[#0645a5] px-5 py-3 text-sm font-black text-white transition hover:bg-blue-900">View events <ArrowRight size={16} /></Link>
+          <Link href="/events" className="inline-flex w-fit items-center gap-2 rounded-full bg-rhema-blue px-5 py-3 text-sm font-black text-white transition hover:bg-blue-900">View events <ArrowRight size={16} /></Link>
         </div>
       </section>
     </div>

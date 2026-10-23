@@ -127,7 +127,7 @@ export default function ContactPage() {
             Website
             <input tabIndex={-1} autoComplete="off" value={website} onChange={(event) => setWebsite(event.target.value)} />
           </label>
-          <button type="submit" disabled={submitting} className="mt-5 rounded-full bg-[#c8102e] px-5 py-3 text-sm font-black text-white shadow-md shadow-red-900/10 transition hover:bg-red-800 disabled:cursor-wait disabled:opacity-60">{submitting ? "Sending..." : "Send enquiry"}</button>
+          <button type="submit" disabled={submitting} className="mt-5 rounded-full bg-rhema-red px-5 py-3 text-sm font-black text-white shadow-md shadow-red-900/10 transition hover:bg-rhema-red-dark disabled:cursor-wait disabled:opacity-60">{submitting ? "Sending..." : "Send enquiry"}</button>
           {status.message && <div className="mt-4"><CustomAlert type={status.type} title={status.title} message={status.message} onClose={() => setStatus({ type: "", title: "", message: "" })} /></div>}
         </form>
       </section>

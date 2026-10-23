@@ -9,7 +9,7 @@ export default function SiteFooter() {
 
   if (isLoading || error || !content) {
     return (
-      <footer className="bg-[#0645a5] px-4 py-10 text-white sm:px-6 lg:px-8">
+      <footer className="bg-rhema-blue px-4 py-10 text-white sm:px-6 lg:px-8">
         <div className="mx-auto flex max-w-7xl items-center gap-4">
           <Image src="/logo.png" alt="Rhema Zambia Bible Training Center" width={48} height={52} className="h-12 w-auto rounded bg-white p-1 object-contain" />
           <p role={error ? "alert" : "status"} className="text-sm text-blue-100">
@@ -21,7 +21,7 @@ export default function SiteFooter() {
   }
 
   return (
-    <footer className="bg-[#0645a5] text-white">
+    <footer className="bg-rhema-blue text-white">
       <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
         <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-[1.4fr_0.8fr_1fr_1.2fr]">
           <div>

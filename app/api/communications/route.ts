@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 const PRODUCTION_API_URL = "https://firebrick-snail-772746.hostingersite.com";
 const DEVELOPMENT_API_URL = "http://localruntest.com";
-const GET_ACTIONS = new Set(["bootstrap", "contacts", "messages", "attachment"]);
+const GET_ACTIONS = new Set(["bootstrap", "contacts", "messages", "searchMessages", "attachment"]);
 const SESSION_COOKIE_NAMES = new Set([
   "rhema_admin_session",
   "rhema_lecturer_session",

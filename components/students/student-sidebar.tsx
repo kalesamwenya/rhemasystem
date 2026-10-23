@@ -60,27 +60,27 @@ export default function StudentSidebar({ isOpen, onClose }: SidebarProps) {
       )}
 
       <aside className={`
-        fixed inset-y-0 left-0 z-[60] flex shrink-0 flex-col border-r border-slate-200 bg-white transition-all duration-300 ease-in-out
+        fixed inset-y-0 left-0 z-[60] flex shrink-0 flex-col border-r border-white/15 bg-rhema-red text-white transition-all duration-300 ease-in-out
         md:sticky md:z-30 h-screen overflow-hidden
         ${isOpen 
           ? 'w-64 translate-x-0' 
           : '-translate-x-full md:translate-x-0 md:w-20 lg:w-64'
         }
       `}>
-        <div className="flex h-16 shrink-0 items-center justify-between border-b border-slate-100 px-4 lg:px-5">
+        <div className="flex h-16 shrink-0 items-center justify-between border-b border-white/15 px-4 lg:px-5">
           <div className="flex items-center gap-3 overflow-hidden">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-900 text-white shadow-sm">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-rhema-red shadow-sm">
               <GraduationCap className="h-5 w-5" />
             </div>
             <div className={`flex origin-left flex-col transition-all duration-200 ${!isOpen ? 'md:scale-0 md:opacity-0 lg:scale-100 lg:opacity-100' : 'scale-100 opacity-100'}`}>
-              <span className="text-sm font-black leading-tight tracking-tight text-slate-900">Rhema</span>
-              <span className="mt-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-400">Student portal</span>
+              <span className="text-sm font-black leading-tight tracking-tight text-white">Rhema</span>
+              <span className="mt-0.5 text-[9px] font-bold uppercase tracking-wider text-white/70">Student portal</span>
             </div>
           </div>
 
           <button 
             onClick={onClose}
-            className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-900 md:hidden"
+            className="rounded-lg p-1.5 text-white/80 transition-colors hover:bg-white/10 hover:text-white md:hidden"
             aria-label="Close navigation"
           >
             <X className="h-4 w-4" />
@@ -100,11 +100,11 @@ export default function StudentSidebar({ isOpen, onClose }: SidebarProps) {
                 aria-current={isActive ? 'page' : undefined}
                 className={`group relative flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium transition-all duration-200 ${
                   isActive
-                    ? 'bg-blue-50 text-blue-900'
-                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950'
+                    ? 'bg-white text-rhema-red'
+                    : 'text-white/90 hover:bg-white/10 hover:text-white'
                 }`}
               >
-                <Icon className={`h-4 w-4 shrink-0 transition-colors duration-200 ${isActive ? 'text-amber-500' : 'text-slate-400 group-hover:text-amber-500'}`} />
+                <Icon className={`h-4 w-4 shrink-0 transition-colors duration-200 ${isActive ? 'text-rhema-red' : 'text-white/70 group-hover:text-rhema-accent'}`} />
                 <span className={`transition-all duration-200 whitespace-nowrap truncate ${!isOpen ? 'md:opacity-0 lg:opacity-100 md:w-0 lg:w-auto' : 'opacity-100'}`}>
                   {item.title}
                 </span>
@@ -119,12 +119,12 @@ export default function StudentSidebar({ isOpen, onClose }: SidebarProps) {
           })}
         </nav>
 
-        <div className="shrink-0 border-t border-slate-100 p-4">
-          <div className={`flex items-center gap-3 rounded-xl bg-slate-50 p-3 ${!isOpen ? 'md:justify-center md:px-1 lg:justify-start lg:px-3' : ''}`}>
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-blue-900 shadow-sm"><GraduationCap className="h-4 w-4" /></span>
+        <div className="shrink-0 border-t border-white/15 p-4">
+          <div className={`flex items-center gap-3 rounded-xl bg-white/10 p-3 ${!isOpen ? 'md:justify-center md:px-1 lg:justify-start lg:px-3' : ''}`}>
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-rhema-red shadow-sm"><GraduationCap className="h-4 w-4" /></span>
             <span className={`min-w-0 ${!isOpen ? 'md:hidden lg:block' : ''}`}>
-              <span className="block truncate text-[11px] font-bold text-slate-700">Learning workspace</span>
-              <span className="mt-0.5 block truncate text-[10px] text-slate-400">Your studies, in one place</span>
+              <span className="block truncate text-[11px] font-bold text-white">Learning workspace</span>
+              <span className="mt-0.5 block truncate text-[10px] text-white/70">Your studies, in one place</span>
             </span>
           </div>
         </div>

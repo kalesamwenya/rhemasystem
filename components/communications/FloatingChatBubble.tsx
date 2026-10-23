@@ -13,10 +13,10 @@ export default function FloatingChatBubble() {
   const { snapshot } = useCommunications();
   const rolePath = pathname.startsWith('/admin') ? '/admin' : pathname.startsWith('/lecturer') ? '/lecturer' : '/student';
 
-  if (pathname.startsWith('/admin/communications')) return null;
+  if (/^\/(admin|lecturer|student)\/messages(?:\/|$)/.test(pathname)) return null;
 
   return (
-    <div className="fixed bottom-3 right-3 z-[60] sm:bottom-5 sm:right-5">
+    <div className="fixed bottom-3 right-3 z-[60] hidden md:block sm:bottom-5 sm:right-5">
       {open && <section
         role="dialog"
         aria-label="Quick messages"

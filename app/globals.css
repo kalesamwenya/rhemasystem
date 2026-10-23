@@ -1,18 +1,59 @@
 @import "tailwindcss";
 
 :root {
+  --rhema-red: #c8102e;
+  --rhema-red-dark: color-mix(in srgb, var(--rhema-red), black 15%);
+  --rhema-blue: #003da5;
+  --rhema-accent: #f2b544;
+  --rhema-blue-50: color-mix(in srgb, var(--rhema-blue), white 97%);
+  --rhema-blue-100: color-mix(in srgb, var(--rhema-blue), white 94%);
+  --rhema-blue-200: color-mix(in srgb, var(--rhema-blue), white 84%);
+  --rhema-blue-300: color-mix(in srgb, var(--rhema-blue), white 66%);
+  --rhema-blue-400: color-mix(in srgb, var(--rhema-blue), white 40%);
+  --rhema-blue-500: color-mix(in srgb, var(--rhema-blue), white 15%);
+  --rhema-blue-600: var(--rhema-blue);
+  --rhema-blue-700: color-mix(in srgb, var(--rhema-blue), black 15%);
+  --rhema-blue-800: color-mix(in srgb, var(--rhema-blue), black 30%);
+  --rhema-blue-900: color-mix(in srgb, var(--rhema-blue), black 45%);
+  --rhema-blue-950: color-mix(in srgb, var(--rhema-blue), black 60%);
   --background: #f6f7f4;
   --foreground: #17201d;
   --admin-ink: #17201d;
   --admin-muted: #68746e;
   --admin-line: #dce3de;
   --admin-paper: #ffffff;
-  --admin-teal: #0f766e;
+  --admin-teal: var(--rhema-blue);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-rhema-red: var(--rhema-red);
+  --color-rhema-red-dark: var(--rhema-red-dark);
+  --color-rhema-blue: var(--rhema-blue);
+  --color-rhema-accent: var(--rhema-accent);
+  --color-blue-50: var(--rhema-blue-50);
+  --color-blue-100: var(--rhema-blue-100);
+  --color-blue-200: var(--rhema-blue-200);
+  --color-blue-300: var(--rhema-blue-300);
+  --color-blue-400: var(--rhema-blue-400);
+  --color-blue-500: var(--rhema-blue-500);
+  --color-blue-600: var(--rhema-blue-600);
+  --color-blue-700: var(--rhema-blue-700);
+  --color-blue-800: var(--rhema-blue-800);
+  --color-blue-900: var(--rhema-blue-900);
+  --color-blue-950: var(--rhema-blue-950);
+  --color-indigo-50: var(--rhema-blue-50);
+  --color-indigo-100: var(--rhema-blue-100);
+  --color-indigo-200: var(--rhema-blue-200);
+  --color-indigo-300: var(--rhema-blue-300);
+  --color-indigo-400: var(--rhema-blue-400);
+  --color-indigo-500: var(--rhema-blue-500);
+  --color-indigo-600: var(--rhema-blue-600);
+  --color-indigo-700: var(--rhema-blue-700);
+  --color-indigo-800: var(--rhema-blue-800);
+  --color-indigo-900: var(--rhema-blue-900);
+  --color-indigo-950: var(--rhema-blue-950);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }

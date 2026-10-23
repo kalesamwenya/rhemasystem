@@ -25,7 +25,7 @@ export default function FeeStructurePage() {
           <CircleDollarSign size={30} className="text-blue-800" />
           <h2 className="mt-4 text-2xl font-black text-[#10283a]">{content.contact_title}</h2>
           <p className="mt-3 text-sm leading-7 text-slate-600">{content.contact_description}</p>
-          <Link href="/contact" className="mt-6 inline-flex items-center gap-2 rounded-full bg-[#0645a5] px-5 py-3 text-sm font-black text-white transition hover:bg-blue-900">{content.contact_link_label} <ArrowRight size={16} /></Link>
+          <Link href="/contact" className="mt-6 inline-flex items-center gap-2 rounded-full bg-rhema-blue px-5 py-3 text-sm font-black text-white transition hover:bg-blue-900">{content.contact_link_label} <ArrowRight size={16} /></Link>
         </div>
       </section>
     </div>

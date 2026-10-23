@@ -118,7 +118,7 @@ export default function OfferedProgramsPage() {
         <div className="rounded-3xl bg-[#f6f0e9] p-7 sm:p-10">
           <h2 className="text-3xl font-black tracking-tight text-[#10283a]">{content.cta_title}</h2>
           <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-700">{content.cta_description}</p>
-          <Link href="/apply" className="mt-6 inline-flex items-center gap-2 rounded-full bg-[#0645a5] px-5 py-3 text-sm font-black text-white transition hover:bg-blue-900">{content.cta_link_label} <ArrowRight size={16} /></Link>
+          <Link href="/apply" className="mt-6 inline-flex items-center gap-2 rounded-full bg-rhema-blue px-5 py-3 text-sm font-black text-white transition hover:bg-blue-900">{content.cta_link_label} <ArrowRight size={16} /></Link>
         </div>
       </section>
     </div>

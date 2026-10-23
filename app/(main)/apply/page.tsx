@@ -42,11 +42,11 @@ export default function ApplyPage() {
           <ol className="mt-6 space-y-3">
             {steps.map((step, index) => (
               <li key={step.title} className="flex gap-4 rounded-2xl border border-slate-200 bg-white p-5 transition hover:border-blue-200 hover:shadow-sm sm:p-6">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#c8102e] text-sm font-black text-white">{index + 1}</span>
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-rhema-red text-sm font-black text-white">{index + 1}</span>
                 <div className="min-w-0">
                   <h3 className="text-lg font-black leading-snug text-[#10283a]">{step.title}</h3>
                   <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{step.description}</p>
-                  {step.action && <Link href="/application" className="mt-3 inline-flex items-center gap-2 rounded-full bg-[#c8102e] px-4 py-2.5 text-xs font-black text-white shadow-md shadow-red-900/10 transition hover:bg-red-800">{content.application_link_label} <ArrowRight size={14} /></Link>}
+                  {step.action && <Link href="/application" className="mt-3 inline-flex items-center gap-2 rounded-full bg-rhema-red px-4 py-2.5 text-xs font-black text-white shadow-md shadow-red-900/10 transition hover:bg-rhema-red-dark">{content.application_link_label} <ArrowRight size={14} /></Link>}
                 </div>
               </li>
             ))}
@@ -86,7 +86,7 @@ export default function ApplyPage() {
       </section>
 
       <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
-        <div className="relative overflow-hidden rounded-3xl bg-[#0645a5] px-7 py-10 text-white sm:px-10 sm:py-12">
+        <div className="relative overflow-hidden rounded-3xl bg-rhema-blue px-7 py-10 text-white sm:px-10 sm:py-12">
           <div className="absolute -right-14 -top-28 h-72 w-72 rounded-full border-[32px] border-white/10" />
           <div className="relative max-w-2xl">
             <p className="text-[11px] font-black uppercase tracking-[0.2em] text-sky-100">{content.help_badge}</p>

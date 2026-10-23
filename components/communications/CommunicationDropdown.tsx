@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Bell, MessageSquare, RotateCw, Volume2, VolumeX } from 'lucide-react';
 import { isChatNotification, useCommunications } from './CommunicationProvider';
 
@@ -15,16 +16,24 @@ export default function CommunicationDropdown({
   onToggle: () => void;
   rolePath: '/admin' | '/lecturer' | '/student';
 }) {
+  const router = useRouter();
   const { snapshot, loading, soundsEnabled, error, retry, markNotificationRead, toggleSounds } = useCommunications();
   const messages = kind === 'messages';
   const notifications = snapshot.notifications.filter((item) => !isChatNotification(item));
   const unread = messages ? snapshot.unread_messages : snapshot.unread_notifications;
   const href = `${rolePath}/${messages ? 'messages' : 'notifications'}`;
   const Icon = messages ? MessageSquare : Bell;
+  const handleToggle = () => {
+    if (window.matchMedia('(max-width: 767px)').matches) {
+      router.push(href);
+      return;
+    }
+    onToggle();
+  };
 
   return (
     <div className="relative">
-      <button type="button" onClick={onToggle} aria-label={messages ? 'Open messages' : 'Open notifications'} aria-expanded={isOpen} className={`relative rounded-xl border border-transparent p-2.5 text-slate-500 transition-colors hover:bg-slate-50 ${isOpen ? 'border-slate-200 bg-slate-50 text-slate-900' : ''}`}>
+      <button type="button" onClick={handleToggle} aria-label={messages ? 'Open messages' : 'Open notifications'} aria-expanded={isOpen} className={`relative rounded-xl border border-transparent p-2.5 text-slate-500 transition-colors hover:bg-slate-50 ${isOpen ? 'border-slate-200 bg-slate-50 text-slate-900' : ''}`}>
         <Icon className="h-5 w-5" />
         {unread > 0 && <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-rose-600 px-1 text-[10px] font-bold leading-4 text-white">{unread > 99 ? '99+' : unread}</span>}
       </button>

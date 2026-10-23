@@ -34,9 +34,29 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(260);
   const [isDragging, setIsDragging] = useState(false);
-  
   const minWidth = 220;
-  const maxWidth = 400;
+  const maxWidth = 420;
+
+  const getMaxSidebarWidth = useCallback(() => (
+    Math.max(minWidth, Math.min(maxWidth, window.innerWidth * 0.4, window.innerWidth - 320))
+  ), []);
+
+  const clampSidebarWidth = useCallback((width: number) => (
+    Math.min(getMaxSidebarWidth(), Math.max(minWidth, width))
+  ), [getMaxSidebarWidth]);
+
+  useEffect(() => {
+    const initialWidthLoad = window.setTimeout(() => {
+      const savedWidth = Number(window.localStorage.getItem('rhema_admin_sidebar_width'));
+      if (Number.isFinite(savedWidth) && savedWidth > 0) setSidebarWidth(clampSidebarWidth(savedWidth));
+    }, 0);
+    const handleResize = () => setSidebarWidth((width) => clampSidebarWidth(width));
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.clearTimeout(initialWidthLoad);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [clampSidebarWidth]);
 
   useEffect(() => {
     let active = true;
@@ -93,23 +113,30 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     setIsDragging(false);
   }, []);
 
-  const resize = useCallback((e: MouseEvent) => {
-    if (isDragging) {
-      const newWidth = e.clientX;
-      if (newWidth >= minWidth && newWidth <= maxWidth) {
-        setSidebarWidth(newWidth);
-      }
+  const resize = useCallback((e: PointerEvent) => {
+    const newWidth = clampSidebarWidth(e.clientX);
+    setSidebarWidth(newWidth);
+    try {
+      window.localStorage.setItem('rhema_admin_sidebar_width', String(newWidth));
+    } catch (error) {
+      console.error('Unable to save administrator sidebar width.', error);
     }
-  }, [isDragging]);
+  }, [clampSidebarWidth]);
 
   useEffect(() => {
     if (isDragging) {
-      window.addEventListener('mousemove', resize);
-      window.addEventListener('mouseup', stopResizing);
+      window.addEventListener('pointermove', resize);
+      window.addEventListener('pointerup', stopResizing);
+      window.addEventListener('pointercancel', stopResizing);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
     }
     return () => {
-      window.removeEventListener('mousemove', resize);
-      window.removeEventListener('mouseup', stopResizing);
+      window.removeEventListener('pointermove', resize);
+      window.removeEventListener('pointerup', stopResizing);
+      window.removeEventListener('pointercancel', stopResizing);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
     };
   }, [isDragging, resize, stopResizing]);
 
@@ -120,10 +147,26 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     }
   }, [adminProfile, pathname, router]);
 
-  const startResizing = useCallback((e: React.MouseEvent) => {
+  const startResizing = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(true);
   }, []);
+
+  const resizeWithKeyboard = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'Home' && e.key !== 'End') return;
+    e.preventDefault();
+    const nextWidth = e.key === 'Home'
+      ? minWidth
+      : e.key === 'End'
+        ? getMaxSidebarWidth()
+        : clampSidebarWidth(sidebarWidth + (e.key === 'ArrowRight' ? 16 : -16));
+    setSidebarWidth(nextWidth);
+    try {
+      window.localStorage.setItem('rhema_admin_sidebar_width', String(nextWidth));
+    } catch (error) {
+      console.error('Unable to save administrator sidebar width.', error);
+    }
+  }, [clampSidebarWidth, getMaxSidebarWidth, sidebarWidth]);
 
   if (!authChecked || !adminProfile) {
     if (authError) {
@@ -166,7 +209,8 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         closeSidebar={closeSidebar}
         closeMobileSidebar={() => setIsMobileSidebarOpen(false)}
         sidebarWidth={sidebarWidth}
-        onMouseDownResize={startResizing}
+        onResizePointerDown={startResizing}
+        onResizeKeyDown={resizeWithKeyboard}
         isDragging={isDragging}
         admin={adminProfile}
         onSignOut={signOut}

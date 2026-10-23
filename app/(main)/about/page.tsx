@@ -244,7 +244,7 @@ export default function AboutPage() {
       )}
 
       <section className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
-        <div className="rounded-3xl bg-[#0645a5] px-7 py-10 text-white sm:px-10 sm:py-12">
+        <div className="rounded-3xl bg-rhema-blue px-7 py-10 text-white sm:px-10 sm:py-12">
           <p className="text-[11px] font-black uppercase tracking-[0.2em] text-sky-100">Explore academics</p>
           <h2 className="mt-3 max-w-2xl text-3xl font-black leading-tight sm:text-4xl">See what you can learn at Rhema.</h2>
           <p className="mt-3 max-w-2xl text-sm leading-6 text-white/90">Explore the two-year program and courses designed to build a strong foundation for life and ministry.</p>

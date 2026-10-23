@@ -76,7 +76,7 @@ export default function HomePage() {
             {page.home_hero_description}
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <Link href="/apply" className="inline-flex items-center gap-2 rounded-full bg-[#f28b24] px-6 py-3 text-sm font-black text-slate-950 transition hover:bg-orange-300">
+            <Link href="/apply" className="inline-flex items-center gap-2 rounded-full bg-rhema-accent px-6 py-3 text-sm font-black text-slate-950 transition hover:brightness-95">
               Apply to Rhema <ArrowRight size={17} />
             </Link>
             <Link href="/offered-programs" className="inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/10 px-6 py-3 text-sm font-bold text-white transition hover:bg-white/20">
@@ -225,7 +225,7 @@ export default function HomePage() {
       )}
 
       <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
-        <div className="overflow-hidden rounded-3xl bg-[#0645a5] px-7 py-12 text-white sm:px-12 sm:py-14">
+        <div className="overflow-hidden rounded-3xl bg-rhema-blue px-7 py-12 text-white sm:px-12 sm:py-14">
           <p className="text-xs font-black uppercase tracking-[0.18em] text-sky-100">{page.motto_title}</p>
           <h2 className="mt-3 max-w-2xl text-4xl font-black leading-tight sm:text-5xl">{page.motto_text}</h2>
           <p className="mt-4 max-w-2xl text-sm leading-6 text-white/90">{page.community_text}</p>

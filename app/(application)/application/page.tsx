@@ -591,7 +591,7 @@ export default function ApplicationPage() {
                 setStatus({ type: "", title: "", message: "" });
                 setIsFormOpen(true);
               }}
-              className="mt-6 inline-flex items-center gap-2 rounded-full bg-[#c8102e] px-6 py-3 text-sm font-bold text-white transition hover:bg-red-800"
+              className="mt-6 inline-flex items-center gap-2 rounded-full bg-rhema-red px-6 py-3 text-sm font-bold text-white transition hover:bg-rhema-red-dark"
             >
               {savedDraftAvailable ? "Continue application" : "Start application"}
               <ArrowRight size={16} />

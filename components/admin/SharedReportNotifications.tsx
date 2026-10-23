@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { Bell, FileText } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -15,6 +16,7 @@ interface ReportNotification {
 }
 
 export default function SharedReportNotifications() {
+  const router = useRouter();
   const [notifications, setNotifications] = useState<ReportNotification[]>([]);
   const [open, setOpen] = useState(false);
   const [error, setError] = useState('');
@@ -52,12 +54,19 @@ export default function SharedReportNotifications() {
   };
 
   const unreadCount = notifications.filter((notification) => !notification.read_at).length;
+  const toggleNotifications = () => {
+    if (window.matchMedia('(max-width: 767px)').matches) {
+      router.push('/admin/notifications');
+      return;
+    }
+    setOpen((current) => !current);
+  };
 
   return (
     <div className="relative">
       <button
         type="button"
-        onClick={() => setOpen((current) => !current)}
+        onClick={toggleNotifications}
         aria-label={`Shared report notifications${unreadCount ? `, ${unreadCount} unread` : ''}`}
         aria-expanded={open}
         className={`relative rounded-xl border border-transparent p-2.5 text-slate-500 transition-colors hover:bg-slate-50 ${open ? 'border-slate-200 bg-slate-50 text-slate-900' : ''}`}
