@@ -1,6 +1,8 @@
 import type { MetadataRoute } from "next";
 import { getPublishedPublicEvents, SITE_ORIGIN } from "@/lib/site-seo";
 
+export const dynamic = "force-dynamic";
+
 const publicPages = [
   "",
   "about",
