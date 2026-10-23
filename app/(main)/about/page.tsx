@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { Compass, Eye, Quote, Users } from "lucide-react";
+import { ArrowLeft, ArrowRight, Compass, Eye, Quote, Users } from "lucide-react";
 import SectionHeading from "@/components/main/SectionHeading";
 import MainPageSkeleton from "@/components/main/MainPageSkeleton";
 import { assetUrl } from "@/lib/api";
@@ -18,6 +18,11 @@ function getInitials(name: string): string {
 export default function AboutPage() {
   const [pageContent, setPageContent] = useState<AboutPageContent | null>(null);
   const [loadError, setLoadError] = useState("");
+  const testimonialsRef = useRef<HTMLDivElement>(null);
+  const scrollTestimonials = (direction: -1 | 1) => {
+    const track = testimonialsRef.current;
+    track?.scrollBy({ left: direction * track.clientWidth, behavior: "smooth" });
+  };
 
   useEffect(() => {
     loadAboutContent()
@@ -187,10 +192,37 @@ export default function AboutPage() {
       {testimonials.length > 0 && (
         <section id="testimonies" className="scroll-mt-28 bg-[#0b1737] py-20 text-white">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <SectionHeading eyebrow="Testimonies" title="Stories from our community" />
-            <div className="mt-12 grid gap-8 md:grid-cols-2 xl:grid-cols-3">
+            <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+              <SectionHeading eyebrow="Testimonies" title="Stories from our community" />
+              {testimonials.length > 1 && (
+                <div className="flex shrink-0 gap-3 sm:pb-1">
+                  <button
+                    type="button"
+                    aria-label="Show previous testimonies"
+                    onClick={() => scrollTestimonials(-1)}
+                    className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-600 text-white transition hover:border-white hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                  >
+                    <ArrowLeft size={20} aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Show more testimonies"
+                    onClick={() => scrollTestimonials(1)}
+                    className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-600 text-white transition hover:border-white hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                  >
+                    <ArrowRight size={20} aria-hidden="true" />
+                  </button>
+                </div>
+              )}
+            </div>
+            <div
+              ref={testimonialsRef}
+              role="region"
+              aria-label="Community testimonies"
+              className="mt-12 flex snap-x snap-mandatory gap-6 overflow-x-auto scroll-smooth pb-4"
+            >
               {testimonials.map((testimonial) => (
-                <figure key={testimonial.id} className="rounded-3xl border border-slate-700 bg-slate-900/80 p-7">
+                <figure key={testimonial.id} className="min-w-0 w-full shrink-0 snap-start rounded-3xl border border-slate-700 bg-slate-900/80 p-7 md:w-[calc((100%-1.5rem)/2)] xl:w-[calc((100%-3rem)/3)]">
                   <div className="flex items-center gap-3">
                     {testimonial.avatar_url ? (
                       <div className="h-12 w-12 rounded-full bg-cover bg-center ring-2 ring-orange-400" role="img" aria-label={testimonial.author_name} style={{ backgroundImage: `url("${assetUrl(testimonial.avatar_url)}")` }} />

@@ -224,20 +224,17 @@ export function CommunicationProvider({ children, enabled = true }: { children: 
     let active = true;
     const poll = async () => {
       if (!active) return;
-      if (communicationsFailures.current >= 3) return;
       if (document.visibilityState === 'visible') {
         await refresh();
       }
-      if (communicationsFailures.current >= 3) return;
       const failures = communicationsFailures.current;
       const delay = failures
-        ? Math.min(10000 * (2 ** Math.min(failures - 1, 5)), 300000)
+        ? Math.min(10000 * (2 ** Math.min(failures - 1, 3)), 60000)
         : 30000;
       timer = window.setTimeout(() => void poll(), delay);
     };
     const onVisibilityChange = () => {
-      if (document.visibilityState !== 'visible' || !active
-        || communicationsFailures.current >= 3) return;
+      if (document.visibilityState !== 'visible' || !active) return;
       window.clearTimeout(timer);
       timer = window.setTimeout(() => void poll(), 0);
     };
