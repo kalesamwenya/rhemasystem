@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { EventsProvider } from "@/components/events/EventsContext";
 import AlertProvider from "@/components/ui/AlertProvider";
+import { SITE_DESCRIPTION, SITE_NAME, SITE_ORIGIN } from "@/lib/site-seo";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -15,8 +16,29 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Rhema Zambia | Bible Training Center",
-  description: "Training labourers for the harvest fields of the world at Rhema Bible Training Center Zambia.",
+  metadataBase: new URL(SITE_ORIGIN),
+  title: {
+    default: SITE_NAME,
+    template: "%s | Rhema Zambia",
+  },
+  description: SITE_DESCRIPTION,
+  applicationName: SITE_NAME,
+  category: "education",
+  openGraph: {
+    type: "website",
+    siteName: SITE_NAME,
+    title: SITE_NAME,
+    description: SITE_DESCRIPTION,
+    locale: "en_ZM",
+    url: SITE_ORIGIN,
+    images: [{ url: "/api/seo/og-image", width: 1200, height: 630, alt: `${SITE_NAME} homepage` }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_NAME,
+    description: SITE_DESCRIPTION,
+    images: ["/api/seo/og-image"],
+  },
 };
 
 export default function RootLayout({
