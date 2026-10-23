@@ -34,23 +34,24 @@ export default function CommunicationDropdown({
           <button
             type="button"
             onClick={toggleSounds}
-            aria-pressed={soundsEnabled}
+            role="switch"
+            aria-checked={soundsEnabled}
             aria-label={`${soundsEnabled ? 'Mute' : 'Enable'} notification and chat sounds`}
             title={`${soundsEnabled ? 'Mute' : 'Enable'} notification and chat sounds`}
-            className={`inline-flex shrink-0 items-center gap-2 rounded-xl border px-2.5 py-2 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1 ${
-              soundsEnabled
-                ? 'border-indigo-100 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
-                : 'border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100'
-            }`}
+            className="group inline-flex shrink-0 items-center gap-2.5 rounded-xl px-2 py-1.5 text-left transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1"
           >
-            <span className={`flex h-7 w-7 items-center justify-center rounded-lg ${
-              soundsEnabled ? 'bg-white text-indigo-600 shadow-sm' : 'bg-slate-200 text-slate-500'
+            <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${
+              soundsEnabled ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-500'
             }`}>
-              {soundsEnabled ? <Volume2 className="h-4 w-4" strokeWidth={2.25} /> : <VolumeX className="h-4 w-4" strokeWidth={2.25} />}
+              {soundsEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
             </span>
-            <span className="flex flex-col leading-tight">
-              <span className="text-[10px] font-bold uppercase tracking-wide">Sound</span>
-              <span className="mt-0.5 text-[10px] font-semibold opacity-75">{soundsEnabled ? 'On' : 'Off'}</span>
+            <span className="text-xs font-semibold text-slate-700">Sound</span>
+            <span className={`relative h-5 w-9 rounded-full transition-colors ${
+              soundsEnabled ? 'bg-indigo-600' : 'bg-slate-300'
+            }`}>
+              <span className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+                soundsEnabled ? 'translate-x-4' : 'translate-x-0'
+              }`} />
             </span>
           </button>
         </div>
