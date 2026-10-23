@@ -8,12 +8,14 @@ const SESSION_COOKIE_NAMES = new Set([
   "rhema_lecturer_session",
   "rhema_student_session",
 ]);
+const UPSTREAM_TIMEOUT_MS = 20_000;
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 function getApiBaseUrl() {
-  const configuredUrl = process.env.NEXT_PUBLIC_API_URL
+  const configuredUrl = process.env.COMMUNICATIONS_API_URL
+    || process.env.NEXT_PUBLIC_API_URL
     || (process.env.NODE_ENV === "production" ? PRODUCTION_API_URL : DEVELOPMENT_API_URL);
   const parsedUrl = new URL(configuredUrl.trim());
 
@@ -34,6 +36,7 @@ function getSessionCookies(cookieHeader: string | null) {
 }
 
 async function handleCommunicationsRequest(request: Request) {
+  const requestId = randomUUID();
   const requestUrl = new URL(request.url);
   if (request.method === "GET") {
     const action = requestUrl.searchParams.get("action") || "bootstrap";
@@ -62,6 +65,7 @@ async function handleCommunicationsRequest(request: Request) {
     });
     if (authorization) headers.set("Authorization", authorization);
     if (sessionCookies.length > 0) headers.set("Cookie", sessionCookies.join("; "));
+    headers.set("X-Request-ID", requestId);
 
     const contentType = request.headers.get("content-type");
     if (contentType) headers.set("Content-Type", contentType);
@@ -71,14 +75,23 @@ async function handleCommunicationsRequest(request: Request) {
       headers,
       body: request.method === "POST" ? await request.arrayBuffer() : undefined,
       cache: "no-store",
+      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
     });
     const responseHeaders = new Headers({
       "Cache-Control": "private, no-store",
       "X-Content-Type-Options": "nosniff",
+      "X-Request-ID": requestId,
     });
     for (const headerName of ["content-type", "content-disposition"]) {
       const value = response.headers.get(headerName);
       if (value) responseHeaders.set(headerName, value);
+    }
+
+    if (response.status >= 500) {
+      console.error("Communications upstream returned a server error.", {
+        requestId,
+        status: response.status,
+      });
     }
 
     return new Response(await response.arrayBuffer(), {
@@ -86,14 +99,22 @@ async function handleCommunicationsRequest(request: Request) {
       headers: responseHeaders,
     });
   } catch (error) {
-    console.error(`Communications proxy request failed [${errorReference}].`, error);
+    console.error("Communications proxy request failed.", { requestId, error });
     return Response.json(
       {
         success: false,
         message: "The communications service could not complete the request.",
         error_reference: errorReference,
+        request_id: requestId,
       },
-      { status: 502 },
+      {
+        status: 502,
+        headers: {
+          "Cache-Control": "private, no-store",
+          "X-Content-Type-Options": "nosniff",
+          "X-Request-ID": requestId,
+        },
+      },
     );
   }
 }

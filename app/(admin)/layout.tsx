@@ -191,7 +191,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     <AdminAudioPlayerProvider>
     <div
       style={{ '--sidebar-width': `${sidebarWidth}px` } as React.CSSProperties}
-      className="admin-shell relative h-screen overflow-hidden bg-[#f3f3f3] text-[#17201d] antialiased"
+      className="admin-shell relative h-screen overflow-hidden bg-[#f6f7f4] text-[#17201d] antialiased"
     >
       
       {/* Mobile Drawer Dim Overlay Backdrop */}

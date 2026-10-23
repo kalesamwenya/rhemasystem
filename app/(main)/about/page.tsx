@@ -21,7 +21,8 @@ export default function AboutPage() {
   const testimonialsRef = useRef<HTMLDivElement>(null);
   const scrollTestimonials = (direction: -1 | 1) => {
     const track = testimonialsRef.current;
-    track?.scrollBy({ left: direction * track.clientWidth, behavior: "smooth" });
+    if (!track) return;
+    track.scrollBy({ left: direction * track.clientWidth, behavior: "smooth" });
   };
 
   useEffect(() => {
@@ -190,17 +191,21 @@ export default function AboutPage() {
         </section>
 
       {testimonials.length > 0 && (
-        <section id="testimonies" className="scroll-mt-28 bg-[#0b1737] py-20 text-white">
+        <section id="testimonies" className="scroll-mt-28 bg-white py-20 text-slate-900">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
-              <SectionHeading eyebrow="Testimonies" title="Stories from our community" />
+              <div className="max-w-2xl">
+                <span className="inline-flex rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-rhema-red">Testimonies</span>
+                <h2 className="mt-4 text-3xl font-black tracking-tight text-slate-950 md:text-4xl">Stories from our community</h2>
+                <p className="mt-3 max-w-xl text-sm leading-6 text-slate-600">Hear how learning and fellowship at Rhema have shaped our community.</p>
+              </div>
               {testimonials.length > 1 && (
                 <div className="flex shrink-0 gap-3 sm:pb-1">
                   <button
                     type="button"
                     aria-label="Show previous testimonies"
                     onClick={() => scrollTestimonials(-1)}
-                    className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-600 text-white transition hover:border-white hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                    className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-300 text-rhema-blue transition hover:border-rhema-blue hover:bg-rhema-blue/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rhema-blue"
                   >
                     <ArrowLeft size={20} aria-hidden="true" />
                   </button>
@@ -208,7 +213,7 @@ export default function AboutPage() {
                     type="button"
                     aria-label="Show more testimonies"
                     onClick={() => scrollTestimonials(1)}
-                    className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-600 text-white transition hover:border-white hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                    className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-300 text-rhema-blue transition hover:border-rhema-blue hover:bg-rhema-blue/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rhema-blue"
                   >
                     <ArrowRight size={20} aria-hidden="true" />
                   </button>
@@ -219,23 +224,22 @@ export default function AboutPage() {
               ref={testimonialsRef}
               role="region"
               aria-label="Community testimonies"
-              className="mt-12 flex snap-x snap-mandatory gap-6 overflow-x-auto scroll-smooth pb-4"
+              className="mt-10 flex snap-x snap-mandatory gap-5 overflow-x-auto scroll-smooth pb-4 sm:mt-12 sm:gap-6"
             >
               {testimonials.map((testimonial) => (
-                <figure key={testimonial.id} className="min-w-0 w-full shrink-0 snap-start rounded-3xl border border-slate-700 bg-slate-900/80 p-7 md:w-[calc((100%-1.5rem)/2)] xl:w-[calc((100%-3rem)/3)]">
-                  <div className="flex items-center gap-3">
+                <figure key={testimonial.id} className="flex min-h-[390px] min-w-0 w-full shrink-0 snap-start flex-col items-center rounded-3xl border border-slate-200 bg-white px-6 py-8 text-center shadow-sm transition-shadow hover:shadow-md sm:min-h-[410px] sm:w-[calc((100%-1.25rem)/2)] sm:px-8 md:w-[calc((100%-1.5rem)/2)] lg:w-[calc((100%-4.5rem)/4)]">
+                  <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border-4 border-rhema-red bg-slate-100 text-xl font-black text-rhema-blue shadow-sm sm:h-24 sm:w-24">
                     {testimonial.avatar_url ? (
-                      <div className="h-12 w-12 rounded-full bg-cover bg-center ring-2 ring-orange-400" role="img" aria-label={testimonial.author_name} style={{ backgroundImage: `url("${assetUrl(testimonial.avatar_url)}")` }} />
+                      <div className="h-full w-full bg-cover bg-center" role="img" aria-label={`${testimonial.author_name} portrait`} style={{ backgroundImage: `url("${assetUrl(testimonial.avatar_url)}")` }} />
                     ) : (
-                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-950 text-sm font-black text-amber-300 ring-2 ring-orange-400" aria-hidden="true">{getInitials(testimonial.author_name)}</div>
+                      <span aria-hidden="true">{getInitials(testimonial.author_name)}</span>
                     )}
-                    <Quote size={24} className="text-red-300" aria-hidden="true" />
                   </div>
-                  <blockquote className="mt-5 whitespace-pre-line text-sm leading-7 text-slate-200">{testimonial.quote_text}</blockquote>
-                  <figcaption className="mt-6 border-t border-slate-700 pt-4">
-                    <p className="font-bold">{testimonial.author_name}</p>
-                    {testimonial.author_role && <p className="mt-1 text-xs text-slate-400">{testimonial.author_role}</p>}
+                  <figcaption className="mt-5">
+                    <p className="text-lg font-black text-slate-950">{testimonial.author_name}</p>
+                    {testimonial.author_role && <p className="mt-1 text-xs font-semibold text-rhema-blue">{testimonial.author_role}</p>}
                   </figcaption>
+                  <blockquote className="mt-3 whitespace-pre-line text-sm leading-7 text-slate-600">{testimonial.quote_text}</blockquote>
                 </figure>
               ))}
             </div>
