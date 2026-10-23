@@ -32,7 +32,34 @@ function getSessionCookies(cookieHeader: string | null) {
   return (cookieHeader || "")
     .split(";")
     .map((cookie) => cookie.trim())
-    .filter((cookie) => SESSION_COOKIE_NAMES.has(cookie.split("=", 1)[0]));
+    .filter((cookie) => {
+      const separator = cookie.indexOf("=");
+      return separator > 0
+        && SESSION_COOKIE_NAMES.has(cookie.slice(0, separator))
+        && /^[a-f0-9]{64}$/i.test(cookie.slice(separator + 1));
+    });
+}
+
+function getAuthenticationAttempts(request: Request) {
+  const attempts: Array<{ authorization?: string; cookie?: string }> = [];
+  const seenTokens = new Set<string>();
+  const addBearerToken = (value: string | null) => {
+    if (!value) return;
+    const token = value.replace(/^Bearer\s+/i, "").trim();
+    if (!/^[a-f0-9]{64}$/i.test(token) || seenTokens.has(token.toLowerCase())) return;
+    seenTokens.add(token.toLowerCase());
+    attempts.push({ authorization: `Bearer ${token}` });
+  };
+
+  addBearerToken(request.headers.get("authorization"));
+  addBearerToken(request.headers.get("x-auth-token"));
+  for (const cookie of getSessionCookies(request.headers.get("cookie"))) {
+    const token = cookie.slice(cookie.indexOf("=") + 1);
+    if (seenTokens.has(token.toLowerCase())) continue;
+    seenTokens.add(token.toLowerCase());
+    attempts.push({ cookie });
+  }
+  return attempts;
 }
 
 async function handleCommunicationsRequest(request: Request) {
@@ -47,9 +74,8 @@ async function handleCommunicationsRequest(request: Request) {
     return Response.json({ success: false, message: "Method not allowed." }, { status: 405 });
   }
 
-  const authorization = request.headers.get("authorization");
-  const sessionCookies = getSessionCookies(request.headers.get("cookie"));
-  if (!authorization && sessionCookies.length === 0) {
+  const authenticationAttempts = getAuthenticationAttempts(request);
+  if (authenticationAttempts.length === 0) {
     return Response.json({ success: false, message: "Sign-in is required." }, { status: 401 });
   }
 
@@ -63,20 +89,29 @@ async function handleCommunicationsRequest(request: Request) {
       Accept: request.headers.get("accept") || "application/json",
       Origin: new URL(apiBaseUrl).origin,
     });
-    if (authorization) headers.set("Authorization", authorization);
-    if (sessionCookies.length > 0) headers.set("Cookie", sessionCookies.join("; "));
     headers.set("X-Request-ID", requestId);
 
     const contentType = request.headers.get("content-type");
     if (contentType) headers.set("Content-Type", contentType);
 
-    const response = await fetch(upstreamUrl, {
-      method: request.method,
-      headers,
-      body: request.method === "POST" ? await request.arrayBuffer() : undefined,
-      cache: "no-store",
-      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
-    });
+    const body = request.method === "POST" ? await request.arrayBuffer() : undefined;
+    let response: Response | undefined;
+    for (const attempt of authenticationAttempts) {
+      const attemptHeaders = new Headers(headers);
+      if (attempt.authorization) attemptHeaders.set("Authorization", attempt.authorization);
+      if (attempt.cookie) attemptHeaders.set("Cookie", attempt.cookie);
+
+      response = await fetch(upstreamUrl, {
+        method: request.method,
+        headers: attemptHeaders,
+        body,
+        cache: "no-store",
+        signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+      });
+      if (response.status !== 401 || attempt === authenticationAttempts[authenticationAttempts.length - 1]) break;
+      await response.body?.cancel();
+    }
+    if (!response) throw new Error("No communications authentication attempt was made.");
     const responseHeaders = new Headers({
       "Cache-Control": "private, no-store",
       "X-Content-Type-Options": "nosniff",
