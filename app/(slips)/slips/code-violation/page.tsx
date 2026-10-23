@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, Loader2, ShieldCheck } from 'lucide-react';
 import { api } from '@/lib/api';
 import SlipFeedbackAlert from '@/components/slips/SlipFeedbackAlert';
+import { usePublicSlipStudent } from '@/components/slips/usePublicSlipStudent';
 
 const violationOptions = [
   'DISORDERLY/NOISY',
@@ -65,6 +66,18 @@ export default function CodeViolationSlipPage() {
   const [saving, setSaving] = useState(false);
   const [loadingOptions, setLoadingOptions] = useState(true);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
+
+  const fillStudentDetails = useCallback((student: { name: string; email: string; class: string }) => {
+    const nameParts = student.name.trim().split(/\s+/);
+    setFirstName(nameParts[0] || '');
+    setLastName(nameParts.length > 1 ? nameParts[nameParts.length - 1] : '');
+    const matchingCohort = cohorts.find(
+      (option) => option.trim().toLowerCase() === student.class.trim().toLowerCase(),
+    );
+    setCohort(matchingCohort || '');
+    setEmail(student.email || '');
+  }, [cohorts]);
+  const studentLookup = usePublicSlipStudent(studentId, fillStudentDetails);
 
   useEffect(() => {
     let active = true;
@@ -200,9 +213,13 @@ export default function CodeViolationSlipPage() {
               <p className="mt-1 text-sm text-slate-500">Enter the student information and when the incident occurred.</p>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
+              <label className={labelClass}>Student number <span className="text-red-600">*</span><input required maxLength={50} autoComplete="off" value={studentId} onChange={(event) => { setStudentId(event.target.value); setFirstName(''); setLastName(''); setEmail(''); setCohort(''); }} className={inputClass} />
+                {studentLookup.state === 'loading' && <span className="mt-1 block text-xs font-medium text-slate-500">Looking up student…</span>}
+                {studentLookup.state === 'found' && <span className="mt-1 block text-xs font-medium text-emerald-700">Student record found. Details filled in.</span>}
+                {(studentLookup.state === 'not-found' || studentLookup.state === 'error') && <span role="status" className="mt-1 block text-xs font-medium text-red-700">{studentLookup.error}</span>}
+              </label>
               <label className={labelClass}>First name <span className="text-red-600">*</span><input required maxLength={120} autoComplete="given-name" value={firstName} onChange={(event) => setFirstName(event.target.value)} className={inputClass} /></label>
               <label className={labelClass}>Last name <span className="text-red-600">*</span><input required maxLength={120} autoComplete="family-name" value={lastName} onChange={(event) => setLastName(event.target.value)} className={inputClass} /></label>
-              <label className={labelClass}>Student number <span className="text-red-600">*</span><input required maxLength={50} autoComplete="off" value={studentId} onChange={(event) => setStudentId(event.target.value)} className={inputClass} /></label>
               <label className={labelClass}>Cohort <span className="text-red-600">*</span>
                 <select required value={cohort} onChange={(event) => setCohort(event.target.value)} disabled={loadingOptions || cohorts.length === 0} className={inputClass}>
                   <option value="">{loadingOptions ? 'Loading cohorts…' : 'Please select'}</option>

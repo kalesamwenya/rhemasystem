@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, Clock3, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import SlipFeedbackAlert from '@/components/slips/SlipFeedbackAlert';
+import { usePublicSlipStudent } from '@/components/slips/usePublicSlipStudent';
 
 const steps = ['Student details', 'Reason & audio', 'Authorization'];
 const inputClass = 'mt-2 w-full rounded-xl border border-slate-300 bg-white px-3.5 py-3 text-sm font-medium text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-red-600 focus:ring-4 focus:ring-red-100';
@@ -63,6 +64,14 @@ export default function LateSlipPage() {
   const [loadingSession, setLoadingSession] = useState(true);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
+
+  const fillStudentDetails = useCallback((student: { name: string; email: string }) => {
+    const nameParts = student.name.trim().split(/\s+/);
+    setFirstName(nameParts[0] || '');
+    setLastName(nameParts.length > 1 ? nameParts[nameParts.length - 1] : '');
+    setEmail(student.email || '');
+  }, []);
+  const studentLookup = usePublicSlipStudent(studentId, fillStudentDetails);
 
   useEffect(() => {
     const clock = window.setInterval(() => setArrivalTime(localTime()), 30000);
@@ -223,9 +232,13 @@ export default function LateSlipPage() {
                   <p className="mt-1 text-sm text-slate-500">Enter the details that match your active student record.</p>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
+                  <label className={labelClass}>Student number <span className="text-red-600">*</span><input required maxLength={50} autoComplete="off" value={studentId} onChange={(event) => { setStudentId(event.target.value); setFirstName(''); setLastName(''); setEmail(''); }} className={inputClass} />
+                    {studentLookup.state === 'loading' && <span className="mt-1 block text-xs font-medium text-slate-500">Looking up student…</span>}
+                    {studentLookup.state === 'found' && <span className="mt-1 block text-xs font-medium text-emerald-700">Student record found. Details filled in.</span>}
+                    {(studentLookup.state === 'not-found' || studentLookup.state === 'error') && <span role="status" className="mt-1 block text-xs font-medium text-red-700">{studentLookup.error}</span>}
+                  </label>
                   <label className={labelClass}>Surname <span className="text-red-600">*</span><input required maxLength={120} autoComplete="family-name" value={lastName} onChange={(event) => setLastName(event.target.value)} className={inputClass} /></label>
                   <label className={labelClass}>First name <span className="text-red-600">*</span><input required maxLength={120} autoComplete="given-name" value={firstName} onChange={(event) => setFirstName(event.target.value)} className={inputClass} /></label>
-                  <label className={labelClass}>Student number <span className="text-red-600">*</span><input required maxLength={50} autoComplete="off" value={studentId} onChange={(event) => setStudentId(event.target.value)} className={inputClass} /></label>
                   <label className={labelClass}>Email <span className="text-red-600">*</span><input required type="email" maxLength={255} autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} className={inputClass} /></label>
                 </div>
               </section>
