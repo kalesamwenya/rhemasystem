@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowDown, ArrowLeft, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardCheck, Copy, CreditCard, Eye, Filter, RefreshCw, Search, ShieldCheck } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from 'react';
+import { ArrowDown, ArrowLeft, Ban, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardCheck, Copy, CreditCard, Eye, Filter, Mail, RefreshCw, Search, ShieldCheck, X } from 'lucide-react';
 import { api, assetUrl } from '@/lib/api';
 
 type Recommendation = {
@@ -24,6 +24,20 @@ type RecommendationInvite = {
   expires_at: string;
 } | null;
 
+type ApplicationDocument = {
+  id: number;
+  document_type: 'nrc_or_passport' | 'birth_certificate' | 'results_certificate' | 'passport_photo';
+  file_name: string;
+  mime_type: string;
+  file_size: number;
+};
+
+type DocumentPreview = {
+  url: string;
+  fileName: string;
+  mimeType: string;
+};
+
 type ApplicationRecord = {
   id: string;
   applicant_name: string;
@@ -37,6 +51,7 @@ type ApplicationRecord = {
   created_at: string;
   recommendations: { pastoral: Recommendation; personal: Recommendation };
   recommendation_invites: { pastoral: RecommendationInvite; personal: RecommendationInvite };
+  documents: ApplicationDocument[];
 };
 
 type ApiResponse<T> = { success?: boolean; message?: string; data?: T };
@@ -46,18 +61,36 @@ const applicationStatuses = ['Submitted', 'Recommendations pending', 'Payment pe
 const pageSize = 10;
 
 const detailSections: { title: string; fields: string[] }[] = [
-  { title: 'Personal information', fields: ['studentName', 'dateOfBirth', 'gender', 'nationality', 'homeAddress', 'phone', 'email', 'program', 'startTerm'] },
-  { title: 'Education and qualifications', fields: ['currentSchool', 'qualifications', 'examResults', 'previousSchoolAddress', 'supportNeeds'] },
-  { title: 'Parent / guardian', fields: ['guardianName', 'guardianPhone', 'guardianEmail', 'guardianRelation'] },
-  { title: 'Next of kin', fields: ['nextOfKinName', 'nextOfKinPhone', 'nextOfKinEmail', 'nextOfKinAddress', 'nextOfKinRelation'] },
-  { title: 'Pastoral recommender details', fields: ['recommendationPastoralName', 'recommendationPastoralPhone', 'recommendationPastoralEmail', 'recommendationPastoralChurch', 'recommendationPastoralPosition', 'recommendationPastoralAddress'] },
-  { title: 'Personal reference details', fields: ['personalReferenceName', 'personalReferenceEmail', 'personalReferencePhone', 'personalReferenceAddress', 'personalReferenceRelation', 'personalReferenceDuration'] },
-  { title: 'Supporting documents', fields: ['passportPhoto', 'birthCertificate', 'reportCard', 'idDocument'] },
+  { title: 'Applicant details', fields: ['firstName', 'lastName', 'dateOfBirth', 'nrcPassportNumber', 'nationality', 'phone', 'email', 'confirmEmail', 'yearApplyingFor', 'preferredClass', 'addressLine1', 'addressLine2', 'city', 'province', 'postalCode', 'country'] },
+  { title: 'Education', fields: ['hasFiveOLevelCredits', 'highSchoolAttended', 'secondarySchool', 'collegeAttended', 'diplomaEarned', 'collegeCompletionYear', 'currentSchool', 'qualifications', 'examResults', 'previousSchoolAddress', 'supportNeeds'] },
+  { title: 'Pastoral recommender details', fields: ['pastoralRecommenderName', 'recommendationPastoralName', 'recommendationPastoralPhone', 'recommendationPastoralEmail', 'recommendationPastoralChurch', 'recommendationPastoralPosition', 'recommendationPastoralAddress'] },
+  { title: 'Personal recommender details', fields: ['personalReferenceName', 'personalReferenceEmail', 'personalReferencePhone', 'personalReferenceAddress', 'personalReferenceRelation', 'personalReferenceDuration'] },
+  { title: 'Emergency contact', fields: ['emergencyContactName', 'emergencyContactRelationship', 'emergencyContactPhone', 'emergencyContactEmail', 'emergencyContactAddress', 'guardianName', 'guardianPhone', 'guardianEmail', 'guardianRelation', 'nextOfKinName', 'nextOfKinPhone', 'nextOfKinEmail', 'nextOfKinAddress', 'nextOfKinRelation'] },
+  { title: 'Spiritual background', fields: ['salvationDate', 'baptismDate', 'churchAffiliation', 'pastorName', 'churchAttendanceDuration', 'ministryExperience'] },
+  { title: 'Declarations', fields: ['declarationAccuracy', 'declarationRecommenders'] },
 ];
 
+const reviewTabs = [
+  { id: 'applicant', label: 'Applicant & education', sections: ['Applicant details', 'Education'] },
+  { id: 'references', label: 'Recommendations', sections: ['Pastoral recommender details', 'Personal recommender details'] },
+  { id: 'background', label: 'Background & contacts', sections: ['Emergency contact', 'Spiritual background'] },
+  { id: 'documents', label: 'Documents', sections: [] },
+  { id: 'other', label: 'Other information', sections: ['Declarations'] },
+] as const;
+
+const legacyDocumentFields = [
+  ['passportPhoto', 'Passport photo'],
+  ['birthCertificate', 'Birth certificate'],
+  ['reportCard', 'Academic report / transcript'],
+  ['idDocument', 'Identification document'],
+] as const;
+
 const fieldLabels: Record<string, string> = {
+  firstName: 'First name',
+  lastName: 'Last name',
   studentName: 'Full name',
   dateOfBirth: 'Date of birth',
+  nrcPassportNumber: 'NRC / passport number',
   gender: 'Gender',
   nationality: 'Nationality',
   homeAddress: 'Home address',
@@ -65,6 +98,20 @@ const fieldLabels: Record<string, string> = {
   email: 'Email',
   program: 'Programme',
   startTerm: 'Preferred start term',
+  yearApplyingFor: 'Year applying for',
+  preferredClass: 'Preferred class',
+  addressLine1: 'Address line 1',
+  addressLine2: 'Address line 2',
+  city: 'City / town',
+  province: 'Province / region',
+  postalCode: 'Postal code',
+  country: 'Country',
+  hasFiveOLevelCredits: 'Five O-level credits',
+  highSchoolAttended: 'High / secondary school attended',
+  secondarySchool: 'Secondary school completed',
+  collegeAttended: 'College / university attended',
+  diplomaEarned: 'Diploma / degree earned',
+  collegeCompletionYear: 'College / university completion year',
   currentSchool: 'Current / previous school',
   qualifications: 'Academic qualifications',
   examResults: 'Exam results / grades',
@@ -79,6 +126,20 @@ const fieldLabels: Record<string, string> = {
   nextOfKinEmail: 'Next of kin email',
   nextOfKinAddress: 'Next of kin address',
   nextOfKinRelation: 'Relationship',
+  emergencyContactName: 'Full name',
+  emergencyContactRelationship: 'Relationship',
+  emergencyContactPhone: 'Phone number',
+  emergencyContactEmail: 'Email address',
+  emergencyContactAddress: 'Address',
+  salvationDate: 'Date you accepted Christ',
+  baptismDate: 'Baptism date',
+  churchAffiliation: 'Current church affiliation',
+  pastorName: 'Pastor / minister',
+  churchAttendanceDuration: 'Church attendance duration',
+  ministryExperience: 'Ministry experience',
+  declarationAccuracy: 'Accuracy declaration accepted',
+  declarationRecommenders: 'Recommender contact permission accepted',
+  pastoralRecommenderName: 'Pastor’s full name',
   recommendationPastoralName: 'Recommender name',
   recommendationPastoralPhone: 'Phone',
   recommendationPastoralEmail: 'Email',
@@ -135,6 +196,14 @@ export default function AdmissionsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [documentPreview, setDocumentPreview] = useState<DocumentPreview | null>(null);
+  const [activeReviewTab, setActiveReviewTab] = useState<(typeof reviewTabs)[number]['id']>('applicant');
+  const [resendingRecommendation, setResendingRecommendation] = useState<'pastoral' | 'personal' | null>(null);
+
+  useEffect(() => {
+    if (!documentPreview) return;
+    return () => URL.revokeObjectURL(documentPreview.url);
+  }, [documentPreview]);
 
   const loadApplications = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
@@ -182,7 +251,14 @@ export default function AdmissionsPage() {
   const selected = applications.find((item) => item.id === selectedId);
   const recommendationsComplete = Boolean(selected?.recommendations.pastoral && selected.recommendations.personal);
   const applicantData = selected?.application_data || {};
-  const knownFields = new Set(detailSections.flatMap((section) => section.fields));
+  const knownFields = new Set([
+    ...detailSections.flatMap((section) => section.fields),
+    ...legacyDocumentFields.map(([field]) => field),
+    'studentName',
+    'email',
+    'phone',
+    'program',
+  ]);
   const additionalFields = Object.entries(applicantData).filter(([key, value]) => !knownFields.has(key) && formatFieldValue(value));
   const photoValue = formatFieldValue(applicantData.passportPhoto);
   const avatarUrl = photoValue && (photoValue.startsWith('http://') || photoValue.startsWith('https://') || photoValue.includes('/'))
@@ -194,8 +270,9 @@ export default function AdmissionsPage() {
     setPage(1);
   };
 
-  const updateStatus = async (status: 'Under review' | 'Interview scheduled') => {
+  const updateStatus = async (status: 'Under review' | 'Interview scheduled' | 'Rejected') => {
     if (!selected) return;
+    if (status === 'Rejected' && !window.confirm(`Reject ${selected.applicant_name}'s application? This decision cannot be changed later.`)) return;
     setSaving(true);
     setError('');
     setNotice('');
@@ -208,6 +285,23 @@ export default function AdmissionsPage() {
       setError(cause instanceof Error ? cause.message : 'Unable to update the application.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const resendRecommendation = async (type: 'pastoral' | 'personal') => {
+    if (!selected) return;
+    setResendingRecommendation(type);
+    setError('');
+    setNotice('');
+    try {
+      const response = await api.admissions.resendRecommendation(selected.id, type) as ApiResponse<unknown>;
+      if (!response.success) throw new Error(response.message ?? 'Unable to resend the recommendation email.');
+      await loadApplications(true);
+      setNotice(`The ${type} recommendation email was sent.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to resend the recommendation email.');
+    } finally {
+      setResendingRecommendation(null);
     }
   };
 
@@ -245,6 +339,7 @@ export default function AdmissionsPage() {
 
   const openApplication = (id: string) => {
     setSelectedId(id);
+    setActiveReviewTab('applicant');
     setCohort('');
     setCredentials(null);
     setNotice('');
@@ -267,6 +362,40 @@ export default function AdmissionsPage() {
       setError('');
     } catch (cause) {
       setError(cause instanceof Error ? `Could not copy credentials: ${cause.message}` : 'Could not copy credentials. Select and copy them manually.');
+    }
+  };
+
+  const viewDocument = async (document: ApplicationDocument) => {
+    setError('');
+    try {
+      const file = await api.admissions.getDocument(document.id) as Blob;
+      if (!['application/pdf', 'image/jpeg', 'image/png'].includes(file.type)) {
+        throw new Error('This document format cannot be previewed in the application.');
+      }
+      setDocumentPreview({
+        url: URL.createObjectURL(file),
+        fileName: document.file_name,
+        mimeType: file.type,
+      });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to open this application document.');
+    }
+  };
+
+  const viewLegacyDocument = async (applicationId: string, field: string, fileName: string) => {
+    setError('');
+    try {
+      const file = await api.admissions.getLegacyDocument(applicationId, field) as Blob;
+      if (!['application/pdf', 'image/jpeg', 'image/png'].includes(file.type)) {
+        throw new Error('This document format cannot be previewed in the application.');
+      }
+      setDocumentPreview({
+        url: URL.createObjectURL(file),
+        fileName,
+        mimeType: file.type,
+      });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to open this legacy application document.');
     }
   };
 
@@ -324,11 +453,12 @@ export default function AdmissionsPage() {
         {loading ? <div className="p-8 text-sm text-[#68746e]">Loading applications...</div>
           : filtered.length === 0 ? <div className="p-8 text-center text-sm text-[#68746e]"><Filter className="mx-auto mb-2 h-5 w-5" />No applications match the current search and filters.</div>
             : <div className="overflow-x-auto">
-              <table className="w-full min-w-[850px] text-left">
-                <thead><tr className="border-b border-[#dce3de] bg-[#f6f7f4] text-[10px] font-black uppercase tracking-wider text-[#68746e]"><th className="px-4 py-3">Applicant</th><th className="px-4 py-3">Programme</th><th className="px-4 py-3">Submitted</th><th className="px-4 py-3">Application status</th><th className="px-4 py-3">Fee</th><th className="px-4 py-3 text-right">Review</th></tr></thead>
+              <table className="w-full min-w-[980px] text-left">
+                <thead><tr className="border-b border-[#dce3de] bg-[#f6f7f4] text-[10px] font-black uppercase tracking-wider text-[#68746e]"><th className="px-4 py-3">Applicant</th><th className="px-4 py-3">Year applying</th><th className="px-4 py-3">Preferred class</th><th className="px-4 py-3">Submitted</th><th className="px-4 py-3">Application status</th><th className="px-4 py-3">Fee</th><th className="px-4 py-3 text-right">Review</th></tr></thead>
                 <tbody className="divide-y divide-[#e7ece8]">{visibleApplications.map((item) => <tr key={item.id} className="text-xs hover:bg-[#f8faf8]">
                   <td className="px-4 py-3"><p className="font-bold text-slate-900">{item.applicant_name}</p><p className="mt-1 text-[10px] text-slate-500">{item.applicant_email} · {item.applicant_phone}</p><p className="mt-1 font-mono text-[9px] text-[#0f766e]">{item.id}</p></td>
-                  <td className="px-4 py-3 font-semibold text-slate-700">{item.program || 'Programme pending'}</td>
+                  <td className="px-4 py-3 font-semibold text-slate-700">{formatFieldValue(item.application_data.yearApplyingFor) || '—'}</td>
+                  <td className="px-4 py-3 font-semibold text-slate-700">{formatFieldValue(item.application_data.preferredClass) || item.program || 'Not specified'}</td>
                   <td className="px-4 py-3 text-slate-600">{new Date(item.created_at).toLocaleDateString()}</td>
                   <td className="px-4 py-3"><span className="rounded-full bg-[#eef7f4] px-2.5 py-1 text-[9px] font-black uppercase text-[#0f766e]">{item.status}</span></td>
                   <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase ${item.payment_status === 'Paid' || item.payment_status === 'Not required' ? 'bg-emerald-50 text-emerald-700' : item.payment_status === 'Failed' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-800'}`}>{item.payment_status}</span></td>
@@ -362,43 +492,125 @@ export default function AdmissionsPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {detailSections.map((section) => {
-          const fields = section.fields
-            .map((key) => ({ key, value: formatFieldValue(applicantData[key]) }))
-            .filter((field) => field.value);
-          if (section.title === 'Personal information') {
-            return <div key={section.title} className="admin-paper p-5">
-              <p className="admin-kicker">{section.title}</p>
-              <div className="mt-3 space-y-3">
-                <DetailField label="Full name" value={selected.applicant_name} />
-                <DetailField label="Email" value={selected.applicant_email} />
-                <DetailField label="Phone" value={selected.applicant_phone} />
-                {fields.filter((field) => !['studentName', 'email', 'phone', 'program'].includes(field.key)).map((field) => <DetailField key={field.key} label={formatFieldLabel(field.key)} value={field.value} />)}
+      <section className="admin-paper overflow-hidden">
+        <div className="overflow-x-auto border-b border-[#dce3de] bg-[#f6f7f4]">
+          <div aria-label="Application review sections" className="flex min-w-max gap-1 px-3 pt-2" role="tablist">
+            {reviewTabs.map((tab) => (
+              <button
+                key={tab.id}
+                id={`application-tab-${tab.id}`}
+                type="button"
+                role="tab"
+                aria-selected={activeReviewTab === tab.id}
+                aria-controls="application-review-panel"
+                tabIndex={activeReviewTab === tab.id ? 0 : -1}
+                onClick={() => setActiveReviewTab(tab.id)}
+                onKeyDown={(event: KeyboardEvent<HTMLButtonElement>) => {
+                  const currentIndex = reviewTabs.findIndex((item) => item.id === tab.id);
+                  let nextIndex = currentIndex;
+                  if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % reviewTabs.length;
+                  else if (event.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + reviewTabs.length) % reviewTabs.length;
+                  else if (event.key === 'Home') nextIndex = 0;
+                  else if (event.key === 'End') nextIndex = reviewTabs.length - 1;
+                  else return;
+                  event.preventDefault();
+                  const tabButtons = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]');
+                  tabButtons?.[nextIndex]?.focus();
+                  setActiveReviewTab(reviewTabs[nextIndex].id);
+                }}
+                className={`rounded-t-lg border border-b-0 px-4 py-2.5 text-sm font-medium transition ${
+                  activeReviewTab === tab.id
+                    ? 'border-[#dce3de] bg-white text-[#0f766e] shadow-[0_-1px_0_rgba(15,118,110,0.12)]'
+                    : 'border-transparent text-[#68746e] hover:bg-white/70 hover:text-slate-900'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div
+          id="application-review-panel"
+          role="tabpanel"
+          aria-labelledby={`application-tab-${activeReviewTab}`}
+          className="space-y-5 p-5 sm:p-6"
+        >
+          {activeReviewTab === 'documents' ? (
+            <div>
+              <p className="admin-kicker">Supporting documents</p>
+              {selected.documents?.length || legacyDocumentFields.some(([field]) => formatFieldValue(applicantData[field]))
+                ? <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {selected.documents?.map((document) => (
+                    <article key={`uploaded-${document.id}`} className="rounded-xl border border-[#dce3de] bg-white p-4">
+                      <p className="text-sm font-bold text-slate-900">{formatDocumentType(document.document_type)}</p>
+                      <p className="mt-1 break-all text-xs text-[#68746e]">{document.file_name}</p>
+                      <p className="mt-1 text-xs text-[#68746e]">{(document.file_size / (1024 * 1024)).toFixed(2)} MB</p>
+                      <button type="button" onClick={() => void viewDocument(document)} className="mt-3 inline-flex items-center gap-2 rounded-lg bg-[#0f766e] px-3 py-2 text-xs font-bold text-white hover:bg-[#115e59]">
+                        <Eye className="h-4 w-4" /> View document
+                      </button>
+                    </article>
+                  ))}
+                  {legacyDocumentFields.map(([field, label]) => {
+                    const fileName = formatFieldValue(applicantData[field]);
+                    if (!fileName) return null;
+                    const isUrl = fileName.startsWith('https://') || fileName.startsWith('http://') || fileName.startsWith('/');
+                    return <article key={`legacy-${field}`} className="rounded-xl border border-[#dce3de] bg-white p-4">
+                      <p className="text-sm font-bold text-slate-900">{label}</p>
+                      <p className="mt-1 break-all text-xs text-[#68746e]">{fileName}</p>
+                      {isUrl
+                        ? <a href={assetUrl(fileName)} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 rounded-lg bg-[#0f766e] px-3 py-2 text-xs font-bold text-white hover:bg-[#115e59]"><Eye className="h-4 w-4" /> View document</a>
+                        : <button type="button" onClick={() => void viewLegacyDocument(selected.id, field, fileName)} className="mt-3 inline-flex items-center gap-2 rounded-lg bg-[#0f766e] px-3 py-2 text-xs font-bold text-white hover:bg-[#115e59]"><Eye className="h-4 w-4" /> View document</button>}
+                    </article>;
+                  })}
+                </div>
+                : <p className="mt-3 text-sm text-[#68746e]">No uploaded application documents are available.</p>}
+            </div>
+          ) : activeReviewTab === 'references' ? (
+            <>
+              {renderReviewSections(reviewTabs.find((tab) => tab.id === activeReviewTab)?.sections ?? [], detailSections, applicantData)}
+              <p className="text-xs text-[#68746e]">Resending creates a fresh secure link and invalidates the previous invitation.</p>
+              <div className="grid gap-5 md:grid-cols-2">
+                <RecommendationCard
+                  title="Pastoral recommendation"
+                  recommendation={selected.recommendations.pastoral}
+                  invite={selected.recommendation_invites?.pastoral}
+                  onResend={() => void resendRecommendation('pastoral')}
+                  resending={resendingRecommendation === 'pastoral'}
+                  applicationClosed={['Approved', 'Rejected'].includes(selected.status)}
+                />
+                <RecommendationCard
+                  title="Personal recommendation"
+                  recommendation={selected.recommendations.personal}
+                  invite={selected.recommendation_invites?.personal}
+                  onResend={() => void resendRecommendation('personal')}
+                  resending={resendingRecommendation === 'personal'}
+                  applicationClosed={['Approved', 'Rejected'].includes(selected.status)}
+                />
               </div>
-            </div>;
-          }
-          return fields.length ? <div key={section.title} className="admin-paper p-5">
-            <p className="admin-kicker">{section.title}</p>
-            <div className="mt-3 space-y-3">{fields.map((field) => {
-              const isDocument = ['passportPhoto', 'birthCertificate', 'reportCard', 'idDocument'].includes(field.key);
-              const isUrl = field.value.startsWith('https://') || field.value.startsWith('http://') || field.value.startsWith('/');
-              return <DetailField key={field.key} label={formatFieldLabel(field.key)} value={field.value} documentUrl={isDocument && isUrl ? assetUrl(field.value) : undefined} />;
-            })}</div>
-          </div> : null;
-        })}
-        {additionalFields.length > 0 && <div className="admin-paper p-5">
-          <p className="admin-kicker">Additional application information</p>
-          <div className="mt-3 space-y-3">{additionalFields.map(([key, value]) => <DetailField key={key} label={formatFieldLabel(key)} value={formatFieldValue(value)} />)}</div>
-        </div>}
-      </div>
-
-      <div className="grid gap-5 md:grid-cols-2">
-        <RecommendationCard title="Pastoral recommendation" recommendation={selected.recommendations.pastoral} invite={selected.recommendation_invites?.pastoral} />
-        <RecommendationCard title="Personal recommendation" recommendation={selected.recommendations.personal} invite={selected.recommendation_invites?.personal} />
-      </div>
+            </>
+          ) : activeReviewTab === 'other' ? (
+            <div className="space-y-5">
+              {renderReviewSections(reviewTabs.find((tab) => tab.id === activeReviewTab)?.sections ?? [], detailSections, applicantData)}
+              {additionalFields.length
+                ? <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  {additionalFields.map(([key, value]) => <div key={key} className="admin-paper p-5"><p className="admin-kicker">{formatFieldLabel(key)}</p><p className="mt-3 whitespace-pre-wrap break-words text-sm font-semibold text-slate-900">{formatFieldValue(value)}</p></div>)}
+                </div>
+                : <p className="text-sm text-[#68746e]">No additional application information was provided.</p>}
+            </div>
+          ) : (
+            renderReviewSections(reviewTabs.find((tab) => tab.id === activeReviewTab)?.sections ?? [], detailSections, applicantData)
+          )}
+        </div>
+      </section>
 
       <div className="admin-paper space-y-4 p-6">
+        {['Approved', 'Rejected'].includes(selected.status) ? (
+          <>
+            <div><p className="admin-kicker">Final decision</p><h3 className="mt-2 text-xl font-black">Application {selected.status.toLowerCase()}</h3></div>
+            {selected.student_id && <p className="rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-900">Student account created: {selected.student_id}</p>}
+          </>
+        ) : (
+          <>
         <div><p className="admin-kicker">Decision and placement</p><h3 className="mt-2 text-xl font-black">Assign the student’s class/cohort</h3><p className="mt-2 text-sm text-[#68746e]">The selected class will be saved to the student record and determines which courses they can access.</p></div>
         <label className="block max-w-sm text-sm font-semibold">Class / cohort
           <select value={cohort} onChange={(event) => setCohort(event.target.value as (typeof cohorts)[number] | '')} className="mt-2 w-full rounded-xl border border-[#dce3de] bg-white px-3 py-3 text-sm">
@@ -408,12 +620,56 @@ export default function AdmissionsPage() {
         </label>
         {!recommendationsComplete && <p className="rounded-xl bg-amber-50 p-3 text-sm font-semibold text-amber-800">Approval is disabled until both the pastoral and personal recommendations have been submitted.</p>}
         <div className="flex flex-wrap gap-3">
-          <button type="button" disabled={saving} onClick={() => void updateStatus('Interview scheduled')} className="inline-flex items-center gap-2 rounded-xl bg-[#17201d] px-4 py-3 text-xs font-black uppercase tracking-[0.12em] text-white disabled:opacity-50"><CalendarDays className="h-4 w-4" /> Schedule interview</button>
-          <button type="button" disabled={saving} onClick={() => void updateStatus('Under review')} className="inline-flex items-center gap-2 rounded-xl border border-[#dce3de] bg-white px-4 py-3 text-xs font-black uppercase tracking-[0.12em] text-[#17201d] disabled:opacity-50"><ClipboardCheck className="h-4 w-4" /> Mark under review</button>
-          <button type="button" onClick={() => void approveApplication()} disabled={saving || selected.status === 'Approved' || !recommendationsComplete || !cohort} className="inline-flex items-center gap-2 rounded-xl bg-[#0f766e] px-4 py-3 text-xs font-black uppercase tracking-[0.12em] text-white disabled:cursor-not-allowed disabled:opacity-50"><CheckCircle2 className="h-4 w-4" /> {saving ? 'Saving...' : 'Approve and create student'}</button>
+          <button type="button" disabled={saving || ['Approved', 'Rejected'].includes(selected.status)} onClick={() => void updateStatus('Interview scheduled')} className="inline-flex items-center gap-2 rounded-xl bg-[#17201d] px-4 py-3 text-xs font-black uppercase tracking-[0.12em] text-white disabled:opacity-50"><CalendarDays className="h-4 w-4" /> Schedule interview</button>
+          <button type="button" disabled={saving || ['Approved', 'Rejected'].includes(selected.status)} onClick={() => void updateStatus('Under review')} className="inline-flex items-center gap-2 rounded-xl border border-[#dce3de] bg-white px-4 py-3 text-xs font-black uppercase tracking-[0.12em] text-[#17201d] disabled:opacity-50"><ClipboardCheck className="h-4 w-4" /> Mark under review</button>
+          <button type="button" onClick={() => void approveApplication()} disabled={saving || ['Approved', 'Rejected'].includes(selected.status) || !recommendationsComplete || !cohort} className="inline-flex items-center gap-2 rounded-xl bg-[#0f766e] px-4 py-3 text-xs font-black uppercase tracking-[0.12em] text-white disabled:cursor-not-allowed disabled:opacity-50"><CheckCircle2 className="h-4 w-4" /> {saving ? 'Saving...' : 'Approve and create student'}</button>
+          <button type="button" disabled={saving || ['Approved', 'Rejected'].includes(selected.status)} onClick={() => void updateStatus('Rejected')} className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-black uppercase tracking-[0.12em] text-red-800 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"><Ban className="h-4 w-4" /> Reject application</button>
         </div>
+          </>
+        )}
       </div>
     </section>}
+    {documentPreview && <div
+      className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/75 p-3 sm:p-6"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) setDocumentPreview(null);
+      }}
+    >
+      <section
+        aria-labelledby="application-document-preview-title"
+        aria-modal="true"
+        className="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+        role="dialog"
+      >
+        <header className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 px-4 py-3 sm:px-6">
+          <div className="min-w-0">
+            <p className="text-xs font-bold uppercase tracking-wide text-[#68746e]">Application document</p>
+            <h2 id="application-document-preview-title" className="truncate text-base font-black text-slate-950">{documentPreview.fileName}</h2>
+          </div>
+          <button
+            aria-label="Close document preview"
+            className="rounded-lg p-2 text-slate-600 hover:bg-slate-100"
+            onClick={() => setDocumentPreview(null)}
+            type="button"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </header>
+        <div className="min-h-0 flex-1 overflow-auto bg-slate-100 p-2 sm:p-4">
+          {documentPreview.mimeType === 'application/pdf'
+            ? <iframe title={documentPreview.fileName} src={documentPreview.url} className="h-[75vh] min-h-[24rem] w-full rounded-lg bg-white" />
+            : <div className="flex min-h-[50vh] items-center justify-center">
+              <img src={documentPreview.url} alt={documentPreview.fileName} className="max-h-[75vh] max-w-full rounded-lg object-contain shadow" />
+            </div>}
+        </div>
+        <footer className="flex shrink-0 justify-end border-t border-slate-200 px-4 py-3 sm:px-6">
+          <a href={documentPreview.url} download={documentPreview.fileName} className="rounded-lg bg-[#0f766e] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#115e59]">
+            Download document
+          </a>
+        </footer>
+      </section>
+    </div>}
   </div>;
 }
 
@@ -421,16 +677,68 @@ function SummaryCard({ label, value }: { label: string; value: number }) {
   return <article className="admin-paper p-4"><p className="admin-kicker">{label}</p><p className="mt-2 text-2xl font-black text-slate-950">{value}</p></article>;
 }
 
-function DetailField({ label, value, documentUrl }: { label: string; value: string; documentUrl?: string }) {
+function formatDocumentType(type: ApplicationDocument['document_type']) {
+  if (type === 'nrc_or_passport') return 'NRC or passport';
+  if (type === 'birth_certificate') return 'Birth certificate';
+  if (type === 'results_certificate') return 'Student results / Grade 12 certificate';
+  return 'Passport-size photo';
+}
+
+function renderReviewSections(
+  sectionTitles: readonly string[],
+  sections: typeof detailSections,
+  applicantData: Record<string, unknown>,
+) {
+  const visibleSections = sections.filter((section) => sectionTitles.includes(section.title));
+  return <div className="grid gap-4 md:grid-cols-2">
+    {visibleSections.map((section) => {
+      const fields = section.fields
+        .map((key) => ({ key, value: formatFieldValue(applicantData[key]) }))
+        .filter((field) => field.value);
+      if (!fields.length && section.title !== 'Applicant details') return null;
+      return <section key={section.title} className="admin-paper p-5">
+        <p className="admin-kicker">{section.title}</p>
+        <div className="mt-3 space-y-3">
+          {section.title === 'Applicant details' && <>
+            <DetailField label="Full name" value={formatFieldValue(applicantData.studentName) || `${formatFieldValue(applicantData.firstName)} ${formatFieldValue(applicantData.lastName)}`.trim()} />
+            <DetailField label="Email" value={formatFieldValue(applicantData.email)} />
+            <DetailField label="Phone" value={formatFieldValue(applicantData.phone)} />
+          </>}
+          {fields
+            .filter(({ key }) => section.title !== 'Applicant details' || !['studentName', 'firstName', 'lastName', 'email', 'phone'].includes(key))
+            .map((field) => <DetailField key={field.key} label={formatFieldLabel(field.key)} value={field.value} />)}
+        </div>
+      </section>;
+    })}
+  </div>;
+}
+
+function DetailField({ label, value, documentUrl, onView }: { label: string; value: string; documentUrl?: string; onView?: () => void }) {
   return <div className="border-b border-[#edf0ed] pb-2 last:border-0 last:pb-0">
     <p className="text-[10px] font-bold uppercase tracking-wide text-[#68746e]">{label}</p>
     {documentUrl
       ? <a href={documentUrl} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 text-sm font-semibold text-[#0f766e] underline">{value}<ArrowDown className="h-3 w-3" /></a>
+      : onView
+        ? <button type="button" onClick={onView} className="mt-1 inline-flex items-center gap-1 text-sm font-semibold text-[#0f766e] underline"><Eye className="h-3.5 w-3.5" />{value}</button>
       : <p className="mt-1 whitespace-pre-wrap break-words text-sm font-semibold text-slate-900">{value}</p>}
   </div>;
 }
 
-function RecommendationCard({ title, recommendation, invite }: { title: string; recommendation: Recommendation; invite: RecommendationInvite }) {
+function RecommendationCard({
+  title,
+  recommendation,
+  invite,
+  onResend,
+  resending,
+  applicationClosed,
+}: {
+  title: string;
+  recommendation: Recommendation;
+  invite: RecommendationInvite;
+  onResend: () => void;
+  resending: boolean;
+  applicationClosed: boolean;
+}) {
   const submitted = Boolean(recommendation) || invite?.delivery_status === 'submitted';
   const statusLabel = submitted ? 'Submitted' : invite?.delivery_status === 'sent' ? 'Email sent' : invite?.delivery_status === 'failed' ? 'Send failed' : invite?.last_channel ? `Prepared via ${invite.last_channel}` : 'Not sent';
   return <div className="admin-paper p-5">
@@ -442,6 +750,14 @@ function RecommendationCard({ title, recommendation, invite }: { title: string; 
       {invite.sent_at && <p className="text-xs text-[#68746e]">Email sent {new Date(invite.sent_at).toLocaleString()}</p>}
       <p className="text-xs text-[#68746e]">Invitation expires {new Date(invite.expires_at).toLocaleDateString()}</p>
     </div>}
+    {!submitted && invite && invite.recommender_email && !applicationClosed && <button
+      type="button"
+      onClick={onResend}
+      disabled={resending}
+      className="mt-4 inline-flex items-center gap-2 rounded-lg border border-[#0f766e]/20 bg-[#eef7f4] px-3 py-2 text-xs font-bold text-[#0f766e] transition hover:bg-[#dff1ea] disabled:cursor-wait disabled:opacity-60"
+    >
+      <Mail className="h-4 w-4" />{resending ? 'Sending email…' : 'Resend recommendation email'}
+    </button>}
     {recommendation && <div className="mt-3 space-y-2 border-t border-[#dce3de] pt-3 text-sm">
       <p><strong>Email:</strong> {recommendation.recommender_email}</p>
       {recommendation.relationship && <p><strong>Relationship:</strong> {recommendation.relationship}</p>}

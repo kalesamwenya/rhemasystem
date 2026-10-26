@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { EventsProvider } from "@/components/events/EventsContext";
 import AlertProvider from "@/components/ui/AlertProvider";
+import ActivityTracker from "@/components/ActivityTracker";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_ORIGIN } from "@/lib/site-seo";
 
 const geistSans = Geist({
@@ -54,6 +55,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <EventsProvider>
           {children}
+          <ActivityTracker />
           <AlertProvider />
         </EventsProvider>
       </body>

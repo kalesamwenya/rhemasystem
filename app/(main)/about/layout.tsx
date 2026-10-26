@@ -2,7 +2,7 @@ import { publicPageMetadata } from "@/lib/site-seo";
 
 export const metadata = publicPageMetadata(
   "/about",
-  "About Rhema Zambia",
+  "About",
   "Discover Rhema Zambia’s mission, vision, history, values, faculty and testimonies at our Bible Training Center in Lusaka.",
 );
 

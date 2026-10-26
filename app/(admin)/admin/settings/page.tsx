@@ -20,6 +20,12 @@ type CohortFeePlan = {
 };
 
 type SettingsState = {
+  admissions: {
+    enrollmentOpen: boolean;
+    applicationFeeRequired: boolean;
+    applicationFeeAmount: number;
+    applicationYears: number[];
+  };
   cohorts: Record<string, string>;
   terms: Record<string, TermDates>;
   cohortPricing: Record<string, CohortFeePlan>;
@@ -68,6 +74,12 @@ const defaultAssessmentPricing: SettingsState['assessmentPricing'] = {
 };
 
 const initialState: SettingsState = {
+  admissions: {
+    enrollmentOpen: false,
+    applicationFeeRequired: false,
+    applicationFeeAmount: 0,
+    applicationYears: [2026, 2027, 2028],
+  },
   cohorts: defaultCohorts,
   terms: defaultTerms,
   cohortPricing: defaultPricing,
@@ -133,6 +145,7 @@ export default function SettingsHub() {
   const [messageIsError, setMessageIsError] = useState(false);
 
   const navItems = [
+    { name: 'Admissions', icon: GraduationCap },
     { name: 'Academic', icon: GraduationCap },
     { name: 'Finance', icon: Wallet },
     { name: 'Payments', icon: CreditCard },
@@ -147,6 +160,17 @@ export default function SettingsHub() {
         const data = body?.data ?? {};
         const cohorts = normalizeCohorts(data.cohorts);
         setSettings({
+          admissions: {
+            enrollmentOpen: data.admissions?.enrollmentOpen === true,
+            applicationFeeRequired: data.admissions?.applicationFeeRequired === true,
+            applicationFeeAmount: Number(data.admissions?.applicationFeeAmount ?? 0),
+            applicationYears: Array.isArray(data.admissions?.applicationYears)
+              ? Array.from(new Set(data.admissions.applicationYears
+                .map(Number)
+                .filter((year) => Number.isInteger(year) && year >= 2000 && year <= 2100)))
+                .sort((left, right) => left - right)
+              : [2026, 2027, 2028],
+          },
           cohorts,
           terms: normalizeTerms(data.terms),
           cohortPricing: normalizePricing(data.cohortPricing, cohorts),
@@ -246,6 +270,7 @@ export default function SettingsHub() {
 
     try {
       await api.config.save({
+          admissions: settings.admissions,
           cohorts: settings.cohorts,
           terms: settings.terms,
           cohortPricing: settings.cohortPricing,
@@ -263,6 +288,137 @@ export default function SettingsHub() {
       setIsSaving(false);
     }
   };
+
+  const renderAdmissions = () => (
+    <section className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Enrollment availability</p>
+          <h3 className="mt-1 text-lg font-black text-slate-900">Application form</h3>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+            When enrollment is closed, applicants cannot start or submit an application. The admissions page will show a notice that enrollment is not open.
+          </p>
+        </div>
+        <span className={`rounded-full px-3 py-1.5 text-xs font-bold ${settings.admissions.enrollmentOpen ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+          {settings.admissions.enrollmentOpen ? 'Applications open' : 'Applications closed'}
+        </span>
+      </div>
+      <label className="mt-5 flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+        <input
+          type="checkbox"
+          checked={settings.admissions.enrollmentOpen}
+          onChange={(event) => setSettings((current) => ({
+            ...current,
+            admissions: { ...current.admissions, enrollmentOpen: event.target.checked },
+          }))}
+          className="h-4 w-4 accent-emerald-700"
+        />
+        <span className="text-sm font-bold text-slate-800">Open applications for enrollment</span>
+      </label>
+      <div className="rounded-xl border border-slate-200 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-black text-slate-900">Application fee</p>
+            <p className="mt-1 text-xs leading-5 text-slate-600">Choose whether an application fee is charged. Applicants pay enabled fees online through Flutterwave.</p>
+          </div>
+          <label className="flex items-center gap-2 text-sm font-bold text-slate-800">
+            <input
+              type="checkbox"
+              checked={settings.admissions.applicationFeeRequired}
+              onChange={(event) => setSettings((current) => ({
+                ...current,
+                admissions: { ...current.admissions, applicationFeeRequired: event.target.checked },
+              }))}
+              className="h-4 w-4 accent-emerald-700"
+            />
+            Charge application fee
+          </label>
+        </div>
+        {settings.admissions.applicationFeeRequired && (
+          <label className="mt-4 block max-w-sm text-xs font-bold uppercase tracking-wide text-slate-500">
+            Fee amount ({settings.paymentGateway.currency})
+            <input
+              type="number"
+              min="0.01"
+              max="99999999.99"
+              step="0.01"
+              required
+              value={settings.admissions.applicationFeeAmount || ''}
+              onChange={(event) => setSettings((current) => ({
+                ...current,
+                admissions: { ...current.admissions, applicationFeeAmount: Number(event.target.value) },
+              }))}
+              className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-slate-400"
+            />
+          </label>
+        )}
+      </div>
+      <div className="rounded-xl border border-slate-200 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-black text-slate-900">Application years</p>
+            <p className="mt-1 text-xs text-slate-600">These are the years applicants can select on the form.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSettings((current) => {
+              const nextYear = Math.max(new Date().getFullYear(), ...current.admissions.applicationYears) + 1;
+              if (nextYear > 2100) return current;
+              return {
+                ...current,
+                admissions: { ...current.admissions, applicationYears: [...current.admissions.applicationYears, nextYear].sort((left, right) => left - right) },
+              };
+            })}
+            disabled={settings.admissions.applicationYears.length >= 10 || Math.max(new Date().getFullYear(), ...settings.admissions.applicationYears) >= 2100}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
+            Add year
+          </button>
+        </div>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {settings.admissions.applicationYears.map((year, index) => (
+            <label key={`${year}-${index}`} className="text-xs font-bold text-slate-600">
+              Year {index + 1}
+              <div className="mt-1 flex gap-2">
+                <input
+                  type="number"
+                  min="2000"
+                  max="2100"
+                  value={year}
+                  onChange={(event) => {
+                    const nextYear = Number(event.target.value);
+                    setSettings((current) => ({
+                      ...current,
+                      admissions: {
+                        ...current.admissions,
+                        applicationYears: current.admissions.applicationYears.map((item, itemIndex) => itemIndex === index ? nextYear : item),
+                      },
+                    }));
+                  }}
+                  className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900"
+                />
+                <button
+                  type="button"
+                  aria-label={`Remove application year ${year}`}
+                  disabled={settings.admissions.applicationYears.length <= 1}
+                  onClick={() => setSettings((current) => ({
+                    ...current,
+                    admissions: {
+                      ...current.admissions,
+                      applicationYears: current.admissions.applicationYears.filter((_, itemIndex) => itemIndex !== index),
+                    },
+                  }))}
+                  className="rounded-lg border border-slate-200 px-3 text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                >
+                  Remove
+                </button>
+              </div>
+            </label>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
 
   const renderAcademic = () => (
     <div className="space-y-6">
@@ -531,6 +687,7 @@ export default function SettingsHub() {
           {isLoading ? <p className="text-sm text-slate-500">Loading school settings...</p> : (
             <>
               {activeTab === 'Academic' && renderAcademic()}
+              {activeTab === 'Admissions' && renderAdmissions()}
               {activeTab === 'Finance' && renderFinance()}
               {activeTab === 'Payments' && renderPayments()}
               {activeTab === 'Alerts' && renderAlerts()}

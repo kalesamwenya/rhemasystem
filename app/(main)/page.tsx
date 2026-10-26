@@ -1,22 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { ArrowRight, BookOpen, GraduationCap, HandHeart, MapPin, Users } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ArrowLeft, ArrowRight, BookOpen, GraduationCap, HandHeart, MapPin, Users } from "lucide-react";
 import { assetUrl } from "@/lib/api";
-import SectionHeading from "@/components/main/SectionHeading";
 import { loadAboutContent, loadPublicCourses, type AboutPageContent, type PublicCourse } from "@/lib/public-site-content";
 import LoadingPlaceholder from "@/components/ui/LoadingPlaceholder";
-
-function initials(name: string): string {
-  return name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "?";
-}
 
 export default function HomePage() {
   const [content, setContent] = useState<AboutPageContent | null>(null);
   const [courses, setCourses] = useState<PublicCourse[]>([]);
   const [contentError, setContentError] = useState("");
   const [coursesError, setCoursesError] = useState("");
+  const testimonialsRef = useRef<HTMLDivElement>(null);
+  const scrollTestimonials = (direction: -1 | 1) => {
+    const track = testimonialsRef.current;
+    if (!track) return;
+    track.scrollBy({ left: direction * track.clientWidth, behavior: "smooth" });
+  };
 
   useEffect(() => {
     let active = true;
@@ -52,7 +53,7 @@ export default function HomePage() {
     linkUrl: page[`life_card_${index}_link_url` as keyof typeof page] as string,
     Icon: [BookOpen, HandHeart, Users][index - 1],
   })).filter((card) => card.title.trim() || card.description.trim());
-  const publishedStories = content.testimonials.slice(0, 3);
+  const publishedStories = content.testimonials;
   const quickLinks = [
     { href: "/apply", title: "Apply to Rhema", detail: "Admissions process and requirements", icon: GraduationCap },
     { href: "/offered-programs", title: "Explore academics", detail: "Discover our two-year ministry program", icon: BookOpen },
@@ -202,21 +203,55 @@ export default function HomePage() {
       </section>
 
       {publishedStories.length > 0 && (
-        <section className="bg-[#f4f5f4] py-20 sm:py-24">
+        <section id="testimonies" className="scroll-mt-28 bg-white py-20 text-slate-900">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <SectionHeading eyebrow="Student stories" title={publishedStories.length ? page.community_title : page.values_title} />
-            <div className="mt-9 grid gap-4 md:grid-cols-3">
-              {publishedStories.map((story) => (
-                <figure key={story.id} className="rounded-2xl border border-slate-200 bg-white p-6">
-                  <blockquote className="text-sm leading-6 text-slate-700">“{story.quote_text}”</blockquote>
-                  <figcaption className="mt-5 flex items-center gap-3 border-t border-slate-100 pt-4">
-                    {story.avatar_url ? (
-                      <span className="h-10 w-10 rounded-full bg-cover bg-center" role="img" aria-label={story.author_name} style={{ backgroundImage: `url("${assetUrl(story.avatar_url)}")` }} />
+            <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+              <div className="max-w-2xl">
+                <span className="inline-flex rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-rhema-red">Testimonies</span>
+                <h2 className="mt-4 text-3xl font-black tracking-tight text-slate-950 md:text-4xl">Stories from our community</h2>
+                <p className="mt-3 max-w-xl text-sm leading-6 text-slate-600">Hear how learning and fellowship at Rhema have shaped our community.</p>
+              </div>
+              {publishedStories.length > 1 && (
+                <div className="flex shrink-0 gap-3 sm:pb-1">
+                  <button
+                    type="button"
+                    aria-label="Show previous testimonies"
+                    onClick={() => scrollTestimonials(-1)}
+                    className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-300 text-rhema-blue transition hover:border-rhema-blue hover:bg-rhema-blue/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rhema-blue"
+                  >
+                    <ArrowLeft size={20} aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Show more testimonies"
+                    onClick={() => scrollTestimonials(1)}
+                    className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-300 text-rhema-blue transition hover:border-rhema-blue hover:bg-rhema-blue/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rhema-blue"
+                  >
+                    <ArrowRight size={20} aria-hidden="true" />
+                  </button>
+                </div>
+              )}
+            </div>
+            <div
+              ref={testimonialsRef}
+              role="region"
+              aria-label="Community testimonies"
+              className="mt-10 flex snap-x snap-mandatory gap-5 overflow-x-auto scroll-smooth pb-4 sm:mt-12 sm:gap-6"
+            >
+              {publishedStories.map((testimonial) => (
+                <figure key={testimonial.id} className="flex min-h-[390px] min-w-0 w-full shrink-0 snap-start flex-col items-center rounded-3xl border border-slate-200 bg-white px-6 py-8 text-center shadow-sm transition-shadow hover:shadow-md sm:min-h-[410px] sm:w-[calc((100%-1.25rem)/2)] sm:px-8 md:w-[calc((100%-1.5rem)/2)] lg:w-[calc((100%-4.5rem)/4)]">
+                  <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border-4 border-rhema-red bg-slate-100 text-xl font-black text-rhema-blue shadow-sm sm:h-24 sm:w-24">
+                    {testimonial.avatar_url ? (
+                      <div className="h-full w-full bg-cover bg-center" role="img" aria-label={`${testimonial.author_name} portrait`} style={{ backgroundImage: `url("${assetUrl(testimonial.avatar_url)}")` }} />
                     ) : (
-                      <span aria-hidden="true" className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-xs font-black text-blue-900">{initials(story.author_name)}</span>
+                      <span aria-hidden="true">{testimonial.author_name.trim().split(/\s+/).slice(0, 2).map((part) => part.charAt(0)).join("").toUpperCase() || "?"}</span>
                     )}
-                    <span><span className="block text-sm font-black text-slate-900">{story.author_name}</span><span className="block text-xs text-slate-500">{story.author_role || "Rhema student testimony"}</span></span>
+                  </div>
+                  <figcaption className="mt-5">
+                    <p className="text-lg font-black text-slate-950">{testimonial.author_name}</p>
+                    {testimonial.author_role && <p className="mt-1 text-xs font-semibold text-rhema-blue">{testimonial.author_role}</p>}
                   </figcaption>
+                  <blockquote className="mt-3 whitespace-pre-line text-sm leading-7 text-slate-600">{testimonial.quote_text}</blockquote>
                 </figure>
               ))}
             </div>

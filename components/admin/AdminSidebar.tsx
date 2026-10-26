@@ -135,7 +135,7 @@ const navigationGroups: NavGroup[] = [
   {
     title: 'Systems',
     items: [
-      { title: 'Performance Logs', href: '/admin/performance-logs', module: 'performance', icon: Activity },
+      { title: 'Activity Logs', href: '/admin/performance-logs', module: 'performance', icon: Activity },
       { title: 'System Settings', href: '/admin/settings', module: 'settings', icon: Sliders },
     ],
   },

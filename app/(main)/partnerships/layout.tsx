@@ -2,7 +2,7 @@ import { publicPageMetadata } from "@/lib/site-seo";
 
 export const metadata = publicPageMetadata(
   "/partnerships",
-  "Partner with Rhema Zambia",
+  "Partnerships",
   "Explore partnership opportunities with Rhema Zambia and learn how organizations can work with the Bible Training Center.",
 );
 

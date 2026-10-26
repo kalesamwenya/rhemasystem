@@ -2,7 +2,7 @@ import { publicPageMetadata } from "@/lib/site-seo";
 
 export const metadata = publicPageMetadata(
   "/community",
-  "Rhema Zambia Community",
+  "Community",
   "Learn about Rhema Zambia’s alumni community, ministry network, partnerships and ways to stay connected.",
 );
 

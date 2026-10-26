@@ -3,7 +3,7 @@
 import { api } from '@/lib/api';
 import { useCommunications, type CommunicationConversation } from './CommunicationProvider';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Bell, CheckCheck, ChevronDown, ChevronUp, MessageCircle, Mic, Pause, Paperclip, Play, RotateCw, Search, Send, SkipBack, SkipForward, Smile, Square, X } from 'lucide-react';
+import { Bell, CheckCheck, ChevronDown, ChevronUp, FileText, Image as ImageIcon, MessageCircle, Mic, Pause, Paperclip, Play, Plus, RotateCw, Search, Send, SkipBack, SkipForward, Smile, Square, Users, X } from 'lucide-react';
 import Image from 'next/image';
 import EmojiPicker from 'emoji-picker-react';
 import Link from 'next/link';
@@ -181,7 +181,7 @@ function VoiceNotePlayer({ src, name }: { src: string; name: string }) {
   );
 }
 
-export default function MessageCenter({ compact = false }: { compact?: boolean }) {
+export default function MessageCenter() {
   const { snapshot, error, refresh, retry } = useCommunications();
   const [currentUser] = useState<CurrentUser>(() => {
     if (typeof window === 'undefined') return {};
@@ -194,7 +194,7 @@ export default function MessageCenter({ compact = false }: { compact?: boolean }
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [contactsLoading, setContactsLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<number | null>(() => {
-    if (compact || typeof window === 'undefined') return null;
+    if (typeof window === 'undefined') return null;
     const requestedId = Number(new URLSearchParams(window.location.search).get('conversation'));
     return requestedId > 0 ? requestedId : null;
   });
@@ -207,6 +207,7 @@ export default function MessageCenter({ compact = false }: { compact?: boolean }
   const [messageSearchLoading, setMessageSearchLoading] = useState(false);
   const [messageSearchError, setMessageSearchError] = useState('');
   const [attachmentUrls, setAttachmentUrls] = useState<Record<number, string>>({});
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [attachment, setAttachment] = useState<File | null>(null);
   const [recording, setRecording] = useState(false);
@@ -217,6 +218,11 @@ export default function MessageCenter({ compact = false }: { compact?: boolean }
   const [messageSearch, setMessageSearch] = useState('');
   const [searchMatchIndex, setSearchMatchIndex] = useState(0);
   const [chatFilter, setChatFilter] = useState<ChatFilter>('all');
+  const [activeListTab, setActiveListTab] = useState<'inbox' | 'explore'>('inbox');
+  const [groupDialogOpen, setGroupDialogOpen] = useState(false);
+  const [groupTitle, setGroupTitle] = useState('');
+  const [groupParticipantKeys, setGroupParticipantKeys] = useState<string[]>([]);
+  const [groupSaving, setGroupSaving] = useState(false);
   const [activeAdminTab, setActiveAdminTab] = useState<AdminChatTab>(() =>
     isStudentAffairsAdmin(currentUser) ? 'student' : 'admin',
   );
@@ -243,6 +249,15 @@ export default function MessageCenter({ compact = false }: { compact?: boolean }
   const loadingAttachments = useRef(new Set<number>());
   const failedAttachments = useRef(new Set<number>());
   const cachedAttachmentUrls = useRef(new Map<number, string>());
+
+  useEffect(() => {
+    if (!imagePreviewUrl) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setImagePreviewUrl(null);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [imagePreviewUrl]);
   const mounted = useRef(true);
   const isAdmin = (currentUser.role || '').toLowerCase() === 'admin';
   const canChatWithStudents = isStudentAffairsAdmin(currentUser);
@@ -300,17 +315,18 @@ export default function MessageCenter({ compact = false }: { compact?: boolean }
       && contact.role === activeAdminTab
       && (contact.role !== 'student' || canChatWithStudents))
     : filteredContacts, [activeAdminTab, canChatWithStudents, filteredContacts, isAdmin]);
-  const chatListItems = useMemo<ChatListItem[]>(() => [
-    ...visibleConversations.map((conversation): ChatListItem => ({ kind: 'conversation', conversation })),
-    ...visibleContacts.map((contact): ChatListItem => ({ kind: 'contact', contact })),
-  ], [visibleConversations, visibleContacts]);
+  const chatListItems = useMemo<ChatListItem[]>(() => activeListTab === 'inbox'
+    ? visibleConversations.map((conversation): ChatListItem => ({ kind: 'conversation', conversation }))
+    : visibleContacts.map((contact): ChatListItem => ({ kind: 'contact', contact })),
+  [activeListTab, visibleConversations, visibleContacts]);
   const messageSearchMatches = messageSearch.trim() ? messageSearchResults : [];
   const displayedMessages = messageSearch.trim() ? messageSearchResults : messages;
   const activeSearchMatch = messageSearchMatches.length
     ? messageSearchMatches[searchMatchIndex % messageSearchMatches.length]
     : null;
-  const hasGlobalAdminGroup = chatListItems.some(
-    (item) => item.kind === 'conversation' && item.conversation.title === 'Global Admins',
+  const hasGlobalAdminGroup = visibleConversations.some((item) => item.title === 'Global Admins');
+  const groupCandidates = uniqueContacts.filter((contact) =>
+    contact.role !== 'student' || canChatWithStudents,
   );
   const currentUserIds = new Set([currentUser.id, currentUser.student_id].filter((id) => id != null).map(String));
   const latestMessageId = messages[messages.length - 1]?.id;
@@ -475,18 +491,7 @@ export default function MessageCenter({ compact = false }: { compact?: boolean }
   }, [displayedMessages]);
 
   function showSelectedChat() {
-    setSidebarOpen(!compact && typeof window !== 'undefined' && window.innerWidth >= 768);
-  }
-
-  function showCompactList() {
-    setMessages([]);
-    setMessageSearch('');
-    setMessageSearchResults([]);
-    setMessageSearchTotal(0);
-    setMessageSearchOffset(0);
-    setSelectedContact(null);
-    selectConversation(null);
-    setSidebarOpen(true);
+    setSidebarOpen(typeof window !== 'undefined' && window.innerWidth >= 768);
   }
 
   function selectConversation(conversationId: number | null) {
@@ -602,6 +607,44 @@ export default function MessageCenter({ compact = false }: { compact?: boolean }
       setPageError(cause instanceof Error ? cause.message : 'Unable to open the global admin group.');
     } finally {
       setBusyGlobalGroup(false);
+    }
+  }
+
+  async function createGroupConversation(event: React.FormEvent) {
+    event.preventDefault();
+    const selectedParticipants = groupCandidates
+      .filter((contact) => groupParticipantKeys.includes(`${contact.role}:${contact.id}`))
+      .map((contact) => ({ role: contact.role, id: contact.id }));
+    if (!groupTitle.trim() || selectedParticipants.length < 2 || selectedParticipants.length > 19) {
+      setPageError('Enter a group name and choose between two and nineteen participants.');
+      return;
+    }
+
+    setGroupSaving(true);
+    setPageError('');
+    try {
+      const result: { conversation_id?: number | string } = await api.communications.createConversation({
+        title: groupTitle.trim(),
+        participants: selectedParticipants,
+      });
+      const conversationId = Number(result.conversation_id);
+      if (!Number.isInteger(conversationId) || conversationId < 1) {
+        throw new Error('The group conversation could not be created.');
+      }
+      await refresh();
+      clearMessageSearch();
+      setMessages([]);
+      setSelectedContact(null);
+      selectConversation(conversationId);
+      setGroupDialogOpen(false);
+      setGroupTitle('');
+      setGroupParticipantKeys([]);
+      setActiveListTab('inbox');
+      showSelectedChat();
+    } catch (cause) {
+      setPageError(cause instanceof Error ? cause.message : 'Unable to create the group conversation.');
+    } finally {
+      setGroupSaving(false);
     }
   }
 
@@ -736,19 +779,21 @@ export default function MessageCenter({ compact = false }: { compact?: boolean }
   }, [stopRecordingVisualization]);
 
   return (
-    <section className={`flex overflow-hidden bg-white ${compact ? 'h-full min-h-0 flex-col rounded-none border-0 shadow-none sm:flex-row' : 'h-[calc(100dvh-9rem)] min-h-[420px] flex-col rounded-2xl border border-slate-200 shadow-sm md:h-[calc(100vh-150px)] md:flex-row'}`}>
-      <aside className={`shrink-0 flex-col border-slate-200 ${compact
-        ? `${selectedConversation || selectedContact ? 'hidden' : 'flex'} h-full min-h-0 w-full`
-        : `${sidebarOpen ? 'flex' : 'hidden'} h-full min-h-0 w-full border-b md:h-auto md:w-80 md:border-b-0 md:border-r`}`}>
+    <>
+    <section className="relative flex h-[min(78vh,900px)] min-h-[560px] overflow-hidden rounded-[26px] border border-slate-200 bg-white shadow-xl shadow-slate-900/5">
+      <aside className={`h-full w-full shrink-0 flex-col border-slate-200 bg-white md:w-[280px] md:border-r ${sidebarOpen ? 'flex' : 'hidden md:flex'}`}>
         <div className="border-b border-slate-100 p-4">
           <div className="flex items-center justify-between gap-2">
-            <h1 className="font-bold text-slate-900">Messages</h1>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-600">Communications</p>
+              <h1 className="mt-1 text-lg font-black tracking-tight text-slate-950">Messages</h1>
+            </div>
             {isAdmin && (
               <select
                 aria-label="Chat category"
                 value={activeAdminTab}
                 onChange={(event) => setActiveAdminTab(event.target.value as AdminChatTab)}
-                className="min-w-0 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700 outline-none focus:border-indigo-400"
+                className="min-w-0 rounded-xl border border-slate-200 bg-white px-2 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-indigo-400"
               >
                 {Object.entries(adminTabLabels)
                   .filter(([value]) => value !== 'student' || canChatWithStudents)
@@ -756,32 +801,39 @@ export default function MessageCenter({ compact = false }: { compact?: boolean }
               </select>
             )}
           </div>
-          <label className="relative mt-3 block">
+          <label className="relative mt-4 block">
             <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search chats or people" aria-label="Search chats or people" className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm outline-none transition focus:border-rhema-blue focus:ring-2 focus:ring-rhema-blue/10" />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search people or messages" aria-label="Search chats or people" className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-sm outline-none transition focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-100" />
           </label>
-          <div className="mt-3 flex rounded-lg bg-slate-100 p-1" aria-label="Filter conversations">
+          <div className="mt-3 grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1" aria-label="Message views">
             {([
-              ['all', 'All chats', conversations.length],
-              ['unread', 'Unread', conversations.filter((item) => item.unread_count > 0).length],
-            ] as const).map(([filter, label, count]) => (
+              ['inbox', 'Inbox', visibleConversations.length],
+              ['explore', 'Explore', visibleContacts.length],
+            ] as const).map(([tab, label, count]) => (
               <button
-                key={filter}
+                key={tab}
                 type="button"
-                aria-pressed={chatFilter === filter}
-                onClick={() => setChatFilter(filter)}
-                className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-semibold transition ${chatFilter === filter ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                aria-pressed={activeListTab === tab}
+                onClick={() => setActiveListTab(tab)}
+                className={`flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-bold transition ${activeListTab === tab ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
               >
-                {label}<span className="text-[10px] opacity-70">{count}</span>
+                {label}
+                {tab === 'inbox' && snapshot.unread_messages > 0 && <span className="rounded-full bg-indigo-600 px-1.5 py-0.5 text-[9px] text-white">{snapshot.unread_messages > 99 ? '99+' : snapshot.unread_messages}</span>}
+                {tab === 'explore' && <span className="text-[10px] opacity-70">{count}</span>}
               </button>
             ))}
           </div>
+          <div className="mt-3 flex items-center justify-between gap-2">
+            <button type="button" onClick={() => setChatFilter((current) => current === 'all' ? 'unread' : 'all')} aria-pressed={chatFilter === 'unread'} className={`rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition ${chatFilter === 'unread' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-500 hover:bg-slate-100'}`}>
+              {chatFilter === 'unread' ? 'Showing unread' : 'Unread only'}
+            </button>
+            <button type="button" onClick={() => { setPageError(''); setGroupDialogOpen(true); }} className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-2.5 py-1.5 text-[11px] font-bold text-white shadow-sm transition hover:bg-indigo-700">
+              <Plus size={13} /> New group
+            </button>
+          </div>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
-          {!isAdmin && (
-            <h2 className="px-4 pb-1 pt-3 text-[10px] font-bold uppercase tracking-wide text-slate-400">Chats</h2>
-          )}
-          {isAdmin && activeAdminTab === 'global' && !hasGlobalAdminGroup && (
+          {isAdmin && activeAdminTab === 'global' && activeListTab === 'inbox' && !hasGlobalAdminGroup && (
             <button
               type="button"
               disabled={busyGlobalGroup}
@@ -798,11 +850,11 @@ export default function MessageCenter({ compact = false }: { compact?: boolean }
           {chatListItems.map((item) => {
             if (item.kind === 'conversation') {
               const { conversation } = item;
-              return <button key={`conversation:${conversation.id}`} type="button" onClick={() => { clearMessageSearch(); setMessages([]); setSelectedContact(null); selectConversation(conversation.id); showSelectedChat(); }} className={`flex w-full items-start gap-3 border-b border-slate-100 p-3 text-left hover:bg-slate-50 ${selectedId === conversation.id ? 'bg-indigo-50' : ''}`}>
-                <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-xs font-bold text-indigo-800">{getInitials(conversation.display_title)}</span>
+              return <button key={`conversation:${conversation.id}`} type="button" onClick={() => { clearMessageSearch(); setMessages([]); setSelectedContact(null); selectConversation(conversation.id); showSelectedChat(); }} className={`flex w-full items-start gap-3 border-b border-slate-100 p-3.5 text-left transition hover:bg-slate-50 ${selectedId === conversation.id ? 'bg-indigo-50/80' : ''}`}>
+                <span aria-hidden="true" className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-xs font-bold ${conversation.conversation_type === 'group' ? 'bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-sm' : 'bg-indigo-100 text-indigo-800'}`}>{getInitials(conversation.display_title)}</span>
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center justify-between gap-2">
-                    <span className="truncate text-sm font-semibold text-slate-800">{conversation.display_title}</span>
+                    <span className="truncate text-[13px] font-bold text-slate-900">{conversation.display_title}</span>
                     {conversation.unread_count > 0 && <span className="rounded-full bg-indigo-600 px-2 py-0.5 text-xs font-bold text-white">{conversation.unread_count}</span>}
                   </span>
                   <span className="mt-1 block truncate text-xs text-slate-500">{conversation.last_message || 'No messages yet'}</span>
@@ -812,36 +864,30 @@ export default function MessageCenter({ compact = false }: { compact?: boolean }
             }
             const { contact } = item;
             const key = `${contact.role}:${contact.id}`;
-            return <button key={`contact:${key}`} type="button" disabled={busyContact === key} onClick={() => void openContact(contact)} className={`flex w-full items-center gap-3 border-b border-slate-100 p-3 text-left hover:bg-slate-50 disabled:opacity-60 ${selectedContact?.role === contact.role && selectedContact.id === contact.id ? 'bg-indigo-50' : ''}`}>
-              <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-700">{getInitials(contact.name)}</span>
+            return <button key={`contact:${key}`} type="button" disabled={busyContact === key} onClick={() => void openContact(contact)} className={`flex w-full items-center gap-3 border-b border-slate-100 p-3.5 text-left transition hover:bg-slate-50 disabled:opacity-60 ${selectedContact?.role === contact.role && selectedContact.id === contact.id ? 'bg-indigo-50' : ''}`}>
+            <span aria-hidden="true" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-xs font-bold text-slate-700">{getInitials(contact.name)}</span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-semibold text-slate-800">{contact.name}</span>
                 <span className="mt-1 block truncate text-xs capitalize text-slate-500">{busyContact === key ? 'Opening chat…' : contact.role}</span>
               </span>
             </button>;
           })}
-          {!chatListItems.length && !(isAdmin && activeAdminTab === 'global') && !contactsLoading && <p className="px-4 py-5 text-center text-xs text-slate-500">{chatFilter === 'unread' ? 'No unread conversations.' : 'No chats or people found.'}</p>}
-          {!chatListItems.length && contactsLoading && <p className="px-4 py-5 text-center text-xs text-slate-500">Loading chats…</p>}
+          {!chatListItems.length && !(isAdmin && activeAdminTab === 'global') && !contactsLoading && <p className="px-4 py-8 text-center text-xs text-slate-500">{chatFilter === 'unread' ? 'No unread conversations.' : activeListTab === 'explore' ? 'No people found.' : 'No conversations yet.'}</p>}
+          {!chatListItems.length && contactsLoading && <p className="px-4 py-8 text-center text-xs text-slate-500">Loading chats…</p>}
         </div>
-        {compact && !selectedConversation && !selectedContact && (pageError || error) && <div role="alert" className="border-t border-red-100 bg-red-50 px-4 py-2 text-xs text-red-700">
-          <p>{pageError || error}</p>
-          {error && <button type="button" onClick={() => void retry()} className="mt-2 inline-flex items-center gap-1.5 font-bold text-red-800 hover:text-red-950">
-            <RotateCw className="h-3 w-3" /> Retry communications
-          </button>}
-        </div>}
       </aside>
 
-      <div className={`flex min-h-0 min-w-0 flex-1 flex-col ${compact
-        ? selectedConversation || selectedContact ? 'flex' : 'hidden'
-        : sidebarOpen ? 'hidden md:flex' : ''}`}>
+      <div className={`flex min-h-0 min-w-0 flex-1 flex-col ${sidebarOpen ? 'hidden md:flex' : ''}`}>
         {selectedConversation || selectedContact ? (
           <>
             <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-3 sm:px-5 sm:py-4">
-              <button type="button" onClick={() => compact ? showCompactList() : setSidebarOpen((open) => !open)} aria-label={compact || !sidebarOpen ? 'Show chats' : 'Hide chats sidebar'} className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">{compact ? 'People' : sidebarOpen ? 'Hide chats' : 'Chats'}</button>
-              <div className="min-w-0">
+              <button type="button" onClick={() => setSidebarOpen((open) => !open)} aria-label="Show chats" className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">Chats</button>
+              <span aria-hidden="true" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-indigo-100 text-xs font-bold text-indigo-800">{getInitials(selectedConversation?.display_title || selectedContact?.name || '')}</span>
+              <div className="min-w-0 flex-1">
                 <h2 className="truncate font-bold text-slate-900">{selectedConversation?.display_title || selectedContact?.name}</h2>
                 <p className="text-xs capitalize text-slate-500">{selectedConversation ? `${selectedConversation.conversation_type} conversation` : `${selectedContact?.role || 'direct'} conversation`}</p>
               </div>
+              <button type="button" onClick={() => setGroupDialogOpen(true)} aria-label="Create a group chat" title="Create a group chat" className="hidden rounded-xl p-2 text-slate-500 transition hover:bg-slate-100 hover:text-indigo-700 sm:block"><Users size={18} /></button>
             </div>
             {selectedConversation && <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50/70 px-4 py-2.5 sm:px-5">
               <label className="relative min-w-[180px] flex-1">
@@ -890,21 +936,28 @@ export default function MessageCenter({ compact = false }: { compact?: boolean }
                   if (node) messageElements.current.set(message.id, node);
                   else messageElements.current.delete(message.id);
                 }} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
-                  <article className={`max-w-[85%] rounded-2xl px-4 py-3 transition-shadow ${isMine ? 'rounded-tl-md bg-indigo-100 text-indigo-950' : 'rounded-tr-md bg-slate-800 text-white'} ${activeSearchMatch?.id === message.id ? 'ring-2 ring-rhema-blue ring-offset-2' : ''}`}>
+                  <article className={`max-w-[85%] rounded-2xl px-4 py-3 transition-shadow ${isMine ? 'rounded-tl-md bg-indigo-600 text-white' : 'rounded-tr-md bg-slate-100 text-slate-900'} ${activeSearchMatch?.id === message.id ? 'ring-2 ring-rhema-blue ring-offset-2' : ''}`}>
                     <div className="mb-1 flex flex-wrap items-center gap-2">
-                      <span className={`text-xs font-bold ${isMine ? 'text-indigo-900' : 'text-white'}`}><HighlightedText text={message.sender_name || ''} query={messageSearch} /></span>
-                      <span className={`text-[10px] capitalize ${isMine ? 'text-indigo-600' : 'text-slate-300'}`}><HighlightedText text={message.sender_role || ''} query={messageSearch} /></span>
-                      <time className={`text-[10px] ${isMine ? 'text-indigo-500' : 'text-slate-300'}`}>{formatTime(message.created_at)}</time>
+                      <span className={`text-xs font-bold ${isMine ? 'text-white' : 'text-slate-800'}`}><HighlightedText text={message.sender_name || ''} query={messageSearch} /></span>
+                      <span className={`text-[10px] capitalize ${isMine ? 'text-indigo-100' : 'text-slate-500'}`}><HighlightedText text={message.sender_role || ''} query={messageSearch} /></span>
+                      <time className={`text-[10px] ${isMine ? 'text-indigo-100' : 'text-slate-500'}`}>{formatTime(message.created_at)}</time>
                     </div>
-                    <p className={`whitespace-pre-wrap break-words text-sm ${isMine ? 'text-indigo-950' : 'text-white'}`}><HighlightedText text={message.body || ''} query={messageSearch} /></p>
+                    <p className={`whitespace-pre-wrap break-words text-sm ${isMine ? 'text-white' : 'text-slate-900'}`}><HighlightedText text={message.body || ''} query={messageSearch} /></p>
                     {message.attachment_id && (
                       <div className="mt-2">
-                        {message.attachment_name && <p className="mb-1 text-xs opacity-80"><HighlightedText text={message.attachment_name} query={messageSearch} /></p>}
+                        {message.attachment_name && message.attachment_type !== 'image' && <p className="mb-1 text-xs opacity-80"><HighlightedText text={message.attachment_name} query={messageSearch} /></p>}
                         {!attachmentUrl && <span className="text-xs">Loading attachment…</span>}
-                        {attachmentUrl && message.attachment_type === 'image' && <a href={attachmentUrl} target="_blank" rel="noreferrer"><Image src={attachmentUrl} alt={message.attachment_name || 'Shared image'} width={640} height={480} unoptimized className="max-h-64 max-w-full rounded-lg object-contain" /></a>}
+                        {attachmentUrl && message.attachment_type === 'image' && <button
+                          type="button"
+                          onClick={() => setImagePreviewUrl(attachmentUrl)}
+                          aria-label="View shared image"
+                          className="block cursor-zoom-in rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                        >
+                          <Image src={attachmentUrl} alt="Shared image" width={640} height={480} unoptimized className="max-h-64 max-w-full rounded-lg object-contain" />
+                        </button>}
                         {attachmentUrl && message.attachment_type === 'video' && <video controls preload="metadata" className="max-h-64 max-w-full rounded-lg"><source src={attachmentUrl} type={message.attachment_mime || undefined} /></video>}
                         {attachmentUrl && message.attachment_type === 'audio' && <VoiceNotePlayer src={attachmentUrl} name={message.attachment_name || 'Voice note'} />}
-                        {attachmentUrl && message.attachment_type === 'file' && <a href={attachmentUrl} download={message.attachment_name || undefined} className={`text-sm underline ${isMine ? 'text-indigo-800' : 'text-white'}`}><HighlightedText text={message.attachment_name || 'Download attachment'} query={messageSearch} /></a>}
+                        {attachmentUrl && message.attachment_type === 'file' && <a href={attachmentUrl} download={message.attachment_name || undefined} className={`text-sm underline ${isMine ? 'text-white' : 'text-indigo-800'}`}><HighlightedText text={message.attachment_name || 'Download attachment'} query={messageSearch} /></a>}
                       </div>
                     )}
                   </article>
@@ -977,7 +1030,7 @@ export default function MessageCenter({ compact = false }: { compact?: boolean }
         ) : (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center text-slate-500">
             <MessageCircle className="h-10 w-10 text-slate-300" />
-            {!compact && !sidebarOpen && <button type="button" onClick={() => setSidebarOpen(true)} className="rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">Show chats</button>}
+            {!sidebarOpen && <button type="button" onClick={() => setSidebarOpen(true)} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">Show chats</button>}
             <p className="font-semibold">Choose a chat or click a person to start one.</p>
           </div>
         )}
@@ -988,7 +1041,158 @@ export default function MessageCenter({ compact = false }: { compact?: boolean }
           </button>}
         </div>}
       </div>
+      {selectedConversation && <aside className="hidden h-full w-[260px] shrink-0 flex-col overflow-y-auto border-l border-slate-200 bg-white xl:flex">
+        <div className="border-b border-slate-100 px-5 py-4">
+          <h2 className="text-sm font-bold text-slate-900">Conversation details</h2>
+        </div>
+        <div className="border-b border-slate-100 px-5 py-6 text-center">
+          <span aria-hidden="true" className="mx-auto flex h-16 w-16 items-center justify-center rounded-[22px] bg-gradient-to-br from-indigo-500 to-violet-600 text-lg font-black text-white shadow-lg shadow-indigo-200">
+            {getInitials(selectedConversation.display_title)}
+          </span>
+          <h3 className="mt-3 font-bold text-slate-900">{selectedConversation.display_title}</h3>
+          <p className="mt-1 text-xs capitalize text-slate-500">{selectedConversation.conversation_type} conversation</p>
+          <div className="mt-4 flex justify-center gap-2">
+            <span className="rounded-xl bg-slate-100 px-3 py-2 text-[10px] font-semibold text-slate-600">
+              {selectedConversation.unread_count ? `${selectedConversation.unread_count} unread` : 'All caught up'}
+            </span>
+            <span className="rounded-xl bg-slate-100 px-3 py-2 text-[10px] font-semibold text-slate-600">
+              {messages.length} messages
+            </span>
+          </div>
+        </div>
+        <div className="border-b border-slate-100 p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-xs font-bold text-slate-800">Shared images</h3>
+            <span className="text-[10px] text-slate-400">{messages.filter((message) => message.attachment_type === 'image').length}</span>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {messages.filter((message) => message.attachment_type === 'image').slice(-6).map((message) => {
+              const imageUrl = message.attachment_id ? attachmentUrls[Number(message.attachment_id)] : undefined;
+              return <button
+                key={message.id}
+                type="button"
+                disabled={!imageUrl}
+                onClick={() => imageUrl && setImagePreviewUrl(imageUrl)}
+                aria-label="View shared image"
+                className="flex aspect-square items-center justify-center overflow-hidden rounded-xl bg-slate-100 transition hover:opacity-80 disabled:opacity-50"
+              >
+                {imageUrl
+                  ? <Image src={imageUrl} alt="Shared image" width={120} height={120} unoptimized className="h-full w-full object-cover" />
+                  : <ImageIcon className="h-4 w-4 text-slate-400" />}
+              </button>;
+            })}
+            {!messages.some((message) => message.attachment_type === 'image') && <p className="col-span-3 py-3 text-center text-[11px] text-slate-400">No shared images yet.</p>}
+          </div>
+        </div>
+        <div className="p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-xs font-bold text-slate-800">Shared files</h3>
+            <span className="text-[10px] text-slate-400">{messages.filter((message) => message.attachment_type === 'file').length}</span>
+          </div>
+          <div className="space-y-2">
+            {messages.filter((message) => message.attachment_type === 'file').slice(-5).map((message) => {
+              const fileUrl = message.attachment_id ? attachmentUrls[Number(message.attachment_id)] : undefined;
+              return <div key={message.id} className="flex min-w-0 items-center gap-2 rounded-xl bg-slate-50 p-2.5">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-slate-500"><FileText size={15} /></span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[10px] font-semibold text-slate-700">{message.attachment_name || 'Shared file'}</p>
+                  <time className="mt-0.5 block text-[9px] text-slate-400">{formatTime(message.created_at)}</time>
+                </div>
+                {fileUrl && <a href={fileUrl} download={message.attachment_name || undefined} aria-label={`Download ${message.attachment_name || 'shared file'}`} className="rounded-lg p-1.5 text-indigo-600 hover:bg-indigo-50"><ChevronDown size={14} /></a>}
+              </div>;
+            })}
+            {!messages.some((message) => message.attachment_type === 'file') && <p className="py-3 text-center text-[11px] text-slate-400">No shared files yet.</p>}
+          </div>
+        </div>
+      </aside>}
     </section>
+    {groupDialogOpen && <div
+      className="fixed inset-0 z-[180] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !groupSaving) setGroupDialogOpen(false);
+      }}
+    >
+      <form onSubmit={(event) => void createGroupConversation(event)} role="dialog" aria-modal="true" aria-labelledby="new-group-title" className="w-full max-w-lg overflow-hidden rounded-3xl bg-white shadow-2xl">
+        <div className="flex items-start justify-between border-b border-slate-100 px-6 py-5">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-600">Start together</p>
+            <h2 id="new-group-title" className="mt-1 text-xl font-black text-slate-950">Create a group</h2>
+          </div>
+          <button type="button" onClick={() => setGroupDialogOpen(false)} disabled={groupSaving} aria-label="Close create group dialog" className="rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"><X size={18} /></button>
+        </div>
+        <div className="space-y-4 p-6">
+          <label className="block text-xs font-bold text-slate-700">
+            Group name
+            <input value={groupTitle} onChange={(event) => setGroupTitle(event.target.value)} maxLength={180} required placeholder="e.g. Marketing Team" className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-normal outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100" />
+          </label>
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-xs font-bold text-slate-700">Choose participants</h3>
+              <span className="text-[10px] text-slate-400">{groupParticipantKeys.length} selected</span>
+            </div>
+            <div className="max-h-64 overflow-y-auto rounded-xl border border-slate-200">
+              {groupCandidates.map((contact) => {
+                const key = `${contact.role}:${contact.id}`;
+                const checked = groupParticipantKeys.includes(key);
+                return <label key={key} className="flex cursor-pointer items-center gap-3 border-b border-slate-100 px-3 py-2.5 last:border-b-0 hover:bg-slate-50">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    disabled={!checked && groupParticipantKeys.length >= 19}
+                    onChange={() => setGroupParticipantKeys((current) => checked ? current.filter((item) => item !== key) : [...current, key])}
+                    className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-50 text-[10px] font-bold text-indigo-700">{getInitials(contact.name)}</span>
+                  <span className="min-w-0 flex-1 truncate text-xs font-semibold text-slate-800">{contact.name}</span>
+                  <span className="text-[10px] capitalize text-slate-400">{contact.role}</span>
+                </label>;
+              })}
+              {!groupCandidates.length && <p className="p-5 text-center text-xs text-slate-500">No eligible participants are available.</p>}
+            </div>
+          </div>
+          {pageError && <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700">{pageError}</p>}
+        </div>
+        <div className="flex justify-end gap-2 border-t border-slate-100 bg-slate-50 px-6 py-4">
+          <button type="button" disabled={groupSaving} onClick={() => setGroupDialogOpen(false)} className="rounded-xl px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-200 disabled:opacity-50">Cancel</button>
+          <button type="submit" disabled={groupSaving || groupParticipantKeys.length < 2} className="rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50">
+            {groupSaving ? 'Creating…' : 'Create group'}
+          </button>
+        </div>
+      </form>
+    </div>}
+    {imagePreviewUrl && <div
+      className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/90 p-3 sm:p-8"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) setImagePreviewUrl(null);
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Shared image preview"
+        className="relative flex h-full w-full items-center justify-center"
+      >
+        <button
+          type="button"
+          onClick={() => setImagePreviewUrl(null)}
+          aria-label="Close image preview"
+          className="absolute right-0 top-0 z-10 rounded-full bg-white/10 p-3 text-white transition hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+        >
+          <X size={22} />
+        </button>
+        <Image
+          src={imagePreviewUrl}
+          alt="Shared image"
+          width={1920}
+          height={1440}
+          unoptimized
+          className="max-h-[92vh] max-w-[94vw] rounded-lg object-contain"
+        />
+      </div>
+    </div>}
+    </>
   );
 }
 

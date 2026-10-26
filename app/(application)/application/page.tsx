@@ -20,55 +20,67 @@ import {
 } from "lucide-react";
 import CustomAlert from "@/components/main/CustomAlert";
 import { api } from "@/lib/api";
+import { openFlutterwaveInlineCheckout, type FlutterwaveInlineCheckout } from "@/lib/flutterwave-inline";
 
 const steps = [
-  { id: "personal", label: "Student Info", icon: UserRound },
-  { id: "education", label: "Qualifications", icon: GraduationCap },
+  { id: "personal", label: "Applicant details", icon: UserRound },
+  { id: "education", label: "Education", icon: GraduationCap },
+  { id: "references", label: "Recommendations", icon: Users },
+  { id: "emergency", label: "Emergency contact", icon: IdCard },
+  { id: "background", label: "Spiritual background", icon: BriefcaseBusiness },
   { id: "documents", label: "Documents", icon: Upload },
-  { id: "references", label: "References", icon: Users },
   { id: "review", label: "Review & Submit", icon: Check },
 ];
 
 const initialState = {
-  studentName: "",
+  firstName: "",
+  lastName: "",
   dateOfBirth: "",
-  gender: "",
+  nrcPassportNumber: "",
   nationality: "",
-  homeAddress: "",
   phone: "",
   email: "",
+  confirmEmail: "",
   program: "",
-  startTerm: "",
-  currentSchool: "",
-  guardianName: "",
-  guardianPhone: "",
-  guardianEmail: "",
-  guardianRelation: "",
-  qualifications: "",
-  examResults: "",
-  previousSchoolAddress: "",
-  supportNeeds: "",
-  recommendationPastoralName: "",
+  yearApplyingFor: "",
+  preferredClass: "",
+  addressLine1: "",
+  addressLine2: "",
+  city: "",
+  province: "",
+  postalCode: "",
+  country: "Zambia",
+  hasFiveOLevelCredits: "",
+  secondarySchool: "",
+  highSchoolAttended: "",
+  collegeAttended: "",
+  diplomaEarned: "",
+  collegeCompletionYear: "",
+  pastoralRecommenderName: "",
   recommendationPastoralPhone: "",
   recommendationPastoralEmail: "",
-  recommendationPastoralChurch: "",
-  recommendationPastoralPosition: "",
   recommendationPastoralAddress: "",
   personalReferenceName: "",
   personalReferenceEmail: "",
   personalReferencePhone: "",
   personalReferenceAddress: "",
-  personalReferenceRelation: "",
-  personalReferenceDuration: "",
-  nextOfKinName: "",
-  nextOfKinPhone: "",
-  nextOfKinEmail: "",
-  nextOfKinAddress: "",
-  nextOfKinRelation: "",
-  passportPhoto: null,
-  birthCertificate: null,
-  reportCard: null,
-  idDocument: null,
+  emergencyContactName: "",
+  emergencyContactRelationship: "",
+  emergencyContactPhone: "",
+  emergencyContactEmail: "",
+  emergencyContactAddress: "",
+  salvationDate: "",
+  baptismDate: "",
+  churchAffiliation: "",
+  pastorName: "",
+  churchAttendanceDuration: "",
+  ministryExperience: "",
+  declarationAccuracy: false,
+  declarationRecommenders: false,
+  passportPhoto: null as File | null,
+  birthCertificate: null as File | null,
+  nrcOrPassport: null as File | null,
+  resultsCertificate: null as File | null,
 };
 
 const wizardVariants = {
@@ -88,12 +100,24 @@ type AlertStatus = {
 type ApplicationRecord = {
   id: string;
   status: "Submitted" | "Recommendations pending" | "Payment pending" | "Under review" | "Interview scheduled" | "Approved";
-  recommendations: { pastoral: "Pending" | "Sent" | "Failed" | "Submitted"; personal: "Pending" | "Sent" | "Failed" | "Submitted" };
   trackingEmailSent: boolean;
+  feeRequired: boolean;
+  feeAmount: number;
+  currency: string;
+  paymentStatus: "Pending" | "Paid" | "Not required";
+};
+
+type EnrollmentSettings = {
+  enrollment_open: boolean;
+  application_years: number[];
+  application_fee_required: boolean;
+  application_fee_amount: number;
+  currency: string;
 };
 
 const applicationDraftStorageKey = "rhema_admission_application_draft";
-const documentFields: (keyof FormDataState)[] = ["passportPhoto", "birthCertificate", "reportCard", "idDocument"];
+const documentFields: (keyof FormDataState)[] = ["passportPhoto", "birthCertificate", "nrcOrPassport", "resultsCertificate"];
+const isBrowserFile = (value: unknown): value is File => typeof File !== "undefined" && value instanceof File;
 
 export default function ApplicationPage() {
   const [currentStep, setCurrentStep] = useState(0);
@@ -104,6 +128,13 @@ export default function ApplicationPage() {
   const [savedDraftAvailable, setSavedDraftAvailable] = useState(false);
   const [isDraftDirty, setIsDraftDirty] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [enrollmentOpen, setEnrollmentOpen] = useState(false);
+  const [applicationYears, setApplicationYears] = useState<number[]>([]);
+  const [applicationFeeRequired, setApplicationFeeRequired] = useState(false);
+  const [applicationFeeAmount, setApplicationFeeAmount] = useState(0);
+  const [applicationFeeCurrency, setApplicationFeeCurrency] = useState("ZMW");
+  const [enrollmentStatusLoaded, setEnrollmentStatusLoaded] = useState(false);
+  const [enrollmentStatusError, setEnrollmentStatusError] = useState("");
   const openFormButtonRef = useRef<HTMLButtonElement>(null);
   const closeFormButtonRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
@@ -133,6 +164,7 @@ export default function ApplicationPage() {
         if (documentFields.includes(field)) continue;
         const value = savedFormData[field];
         if (typeof value === "string") Object.assign(restoredFormData, { [field]: value });
+        if (typeof value === "boolean") Object.assign(restoredFormData, { [field]: value });
       }
       setFormData(restoredFormData);
       setIsDraftDirty(false);
@@ -155,6 +187,36 @@ export default function ApplicationPage() {
     const timer = window.setTimeout(restoreDraft, 0);
     return () => window.clearTimeout(timer);
   }, [restoreDraft]);
+
+  useEffect(() => {
+    let active = true;
+    api.admissions.getEnrollmentStatus()
+      .then((response: { data?: EnrollmentSettings }) => {
+        if (!active) return;
+        if (typeof response.data?.enrollment_open !== "boolean" || !Array.isArray(response.data.application_years)) {
+          throw new Error("Enrollment status is unavailable.");
+        }
+        setEnrollmentOpen(response.data.enrollment_open);
+        setApplicationYears(response.data.application_years);
+        setApplicationFeeRequired(response.data.application_fee_required === true);
+        setApplicationFeeAmount(Number(response.data.application_fee_amount ?? 0));
+        setApplicationFeeCurrency(response.data.currency || "ZMW");
+        setFormData((current) => ({
+          ...current,
+          yearApplyingFor: response.data?.application_years.includes(Number(current.yearApplyingFor))
+            ? current.yearApplyingFor
+            : String(response.data?.application_years[0] ?? ""),
+        }));
+      })
+      .catch((cause: unknown) => {
+        if (!active) return;
+        setEnrollmentStatusError(cause instanceof Error ? cause.message : "Enrollment status is unavailable.");
+      })
+      .finally(() => {
+        if (active) setEnrollmentStatusLoaded(true);
+      });
+    return () => { active = false; };
+  }, []);
 
   const cancelForm = useCallback(() => {
     if (application) {
@@ -208,9 +270,10 @@ export default function ApplicationPage() {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleFileChange = (field: keyof FormDataState, file: File | null | undefined) => {
+  const handleFileChange = (field: (typeof documentFields)[number], file: File | null | undefined) => {
     if (!file) return;
-    updateField(field, file.name as FormDataState[keyof FormDataState]);
+    setIsDraftDirty(true);
+    setFormData((previous) => ({ ...previous, [field]: file }));
   };
 
   const nextStep = () => {
@@ -231,8 +294,8 @@ export default function ApplicationPage() {
         ...formData,
         passportPhoto: "",
         birthCertificate: "",
-        reportCard: "",
-        idDocument: "",
+        nrcOrPassport: "",
+        resultsCertificate: "",
       };
       window.sessionStorage.setItem(applicationDraftStorageKey, JSON.stringify({ formData: draftFormData, currentStep }));
       setSavedDraftAvailable(true);
@@ -256,24 +319,36 @@ export default function ApplicationPage() {
     e.preventDefault();
 
     const required = [
-      formData.studentName,
+      formData.firstName,
+      formData.lastName,
       formData.dateOfBirth,
+      formData.nrcPassportNumber,
       formData.phone,
       formData.email,
-      formData.program,
-      formData.guardianName,
-      formData.guardianPhone,
-      formData.qualifications,
-      formData.recommendationPastoralName,
+      formData.yearApplyingFor,
+      formData.hasFiveOLevelCredits,
+      formData.pastoralRecommenderName,
       formData.personalReferenceName,
-      formData.nextOfKinName,
+      formData.emergencyContactName,
+      formData.emergencyContactEmail,
+      formData.declarationAccuracy,
+      formData.declarationRecommenders,
     ];
 
-    if (required.some((value) => !value || !value.trim())) {
+    if (required.some((value) => typeof value === "string" ? !value.trim() : !value)) {
       setStatus({
         type: "error",
         title: "Incomplete application",
-        message: "Please complete all required fields before submitting this school application.",
+        message: "Complete the required applicant, education, reference, emergency-contact, and declaration fields before submitting.",
+      });
+      return;
+    }
+
+    if (formData.email.trim().toLowerCase() !== formData.confirmEmail.trim().toLowerCase()) {
+      setStatus({
+        type: "error",
+        title: "Email addresses do not match",
+        message: "Confirm your email address before submitting your application.",
       });
       return;
     }
@@ -282,7 +357,16 @@ export default function ApplicationPage() {
       setStatus({
         type: "error",
         title: "Recommender email required",
-        message: "Enter a valid email address for both recommenders. Recommendation invitations are sent automatically by email.",
+        message: "Enter an email address for both recommenders so their confidential recommendation requests can be sent directly.",
+      });
+      return;
+    }
+
+    if (!formData.nrcOrPassport || !formData.resultsCertificate || !formData.passportPhoto || !formData.birthCertificate) {
+      setStatus({
+        type: "error",
+        title: "Required documents missing",
+        message: "Attach your NRC or passport, student results / Grade 12 certificate, and passport-size photo.",
       });
       return;
     }
@@ -290,14 +374,21 @@ export default function ApplicationPage() {
     setIsSubmitting(true);
     let responseData: {
       id?: string;
-      recommendation_statuses?: { pastoral?: "sent" | "failed"; personal?: "sent" | "failed" };
       tracking_email_sent?: boolean;
+      fee_required?: boolean;
+      fee_amount?: number;
+      currency?: string;
     } = {};
-    let responseMessage = "";
     try {
-      const response = await api.admissions.save({ application_data: formData, status: "Recommendations pending" }) as { data?: typeof responseData; message?: string };
+      const applicationData = { ...formData, passportPhoto: null, birthCertificate: null, nrcOrPassport: null, resultsCertificate: null };
+      const requestData = new FormData();
+      requestData.append("application_data", JSON.stringify(applicationData));
+      for (const field of documentFields) {
+        const file = formData[field];
+        if (isBrowserFile(file)) requestData.append(field, file);
+      }
+      const response = await api.admissions.save(requestData) as { data?: typeof responseData };
       responseData = response.data ?? {};
-      responseMessage = response.message ?? "";
       if (!responseData.id) throw new Error("The admissions service did not return an application reference. Please contact admissions before retrying.");
     } catch (cause) {
       setStatus({
@@ -311,21 +402,17 @@ export default function ApplicationPage() {
     const nextApplication: ApplicationRecord = {
       id: responseData.id!,
       status: "Recommendations pending",
-      recommendations: {
-        pastoral: responseData.recommendation_statuses?.pastoral === "sent" ? "Sent" : responseData.recommendation_statuses?.pastoral === "failed" ? "Failed" : "Pending",
-        personal: responseData.recommendation_statuses?.personal === "sent" ? "Sent" : responseData.recommendation_statuses?.personal === "failed" ? "Failed" : "Pending",
-      },
       trackingEmailSent: responseData.tracking_email_sent === true,
+      feeRequired: responseData.fee_required === true,
+      feeAmount: Number(responseData.fee_amount ?? 0),
+      currency: responseData.currency || applicationFeeCurrency,
+      paymentStatus: responseData.fee_required === true ? "Pending" : "Not required",
     };
     setApplication(nextApplication);
-    const failedDeliveries = (["pastoral", "personal"] as const)
-      .filter((kind) => responseData.recommendation_statuses?.[kind] === "failed");
     setStatus({
-      type: failedDeliveries.length ? "error" : "success",
-      title: failedDeliveries.length ? "Application submitted; email delivery failed" : "Application submitted",
-      message: failedDeliveries.length
-        ? `Application ${nextApplication.id} is saved, but the ${failedDeliveries.join(" and ")} recommendation email${failedDeliveries.length > 1 ? "s" : ""} could not be sent. Contact admissions for help.`
-        : responseMessage || `Application ${nextApplication.id} has been saved.`,
+      type: nextApplication.feeRequired ? "" : "success",
+      title: nextApplication.feeRequired ? "" : "Application submitted",
+      message: nextApplication.feeRequired ? "" : `Application ${nextApplication.id} has been received.`,
     });
     if (!nextApplication.trackingEmailSent) {
       setStatus({
@@ -347,6 +434,62 @@ export default function ApplicationPage() {
     }
     setIsDraftDirty(false);
     setIsSubmitting(false);
+    if (nextApplication.feeRequired) void startApplicationFeePayment(nextApplication.id);
+  };
+
+  const startApplicationFeePayment = async (applicationId: string) => {
+    setIsSubmitting(true);
+    try {
+      const initiation = await api.admissions.initiateFeePayment(applicationId) as { data: FlutterwaveInlineCheckout };
+      await openFlutterwaveInlineCheckout(initiation.data, async (transaction) => {
+        const transactionId = String(transaction.transaction_id ?? "");
+        if (!/^\d+$/.test(transactionId) || transaction.tx_ref !== initiation.data.reference) {
+          setStatus({
+            type: "error",
+            title: "Payment could not be confirmed",
+            message: "Flutterwave returned invalid payment details. Your application fee remains unpaid.",
+          });
+          setIsSubmitting(false);
+          return;
+        }
+        setIsSubmitting(true);
+        setStatus({ type: "", title: "", message: "" });
+        try {
+          const verification = await api.admissions.verifyFeePayment(transactionId, initiation.data.reference) as {
+            data?: { application_status?: ApplicationRecord["status"] };
+          };
+          const applicationStatus = verification.data?.application_status ?? "Recommendations pending";
+          setApplication((current) => current?.id === applicationId
+            ? { ...current, paymentStatus: "Paid", status: applicationStatus }
+            : current);
+          setStatus({
+            type: "success",
+            title: "Application fee paid",
+            message: applicationStatus === "Under review"
+              ? "Your payment was confirmed and your application is under review."
+              : "Your payment was confirmed. Your application will move to review once both recommendations have been submitted.",
+          });
+        } catch (cause) {
+          setStatus({
+            type: "error",
+            title: "Payment confirmation pending",
+            message: cause instanceof Error ? cause.message : "We could not confirm the payment yet. Your application fee has not been marked paid.",
+          });
+        } finally {
+          setIsSubmitting(false);
+        }
+      }, () => {
+        setStatus({ type: "error", title: "Payment not completed", message: "Your application is saved, but the fee is still due. You can retry payment below." });
+        setIsSubmitting(false);
+      });
+    } catch (cause) {
+      setStatus({
+        type: "error",
+        title: "Unable to start payment",
+        message: cause instanceof Error ? cause.message : "Your application is saved, but payment could not be started. Please retry.",
+      });
+      setIsSubmitting(false);
+    }
   };
 
   const renderInput = <K extends keyof FormDataState>(
@@ -391,14 +534,32 @@ export default function ApplicationPage() {
     <div className="space-y-2">
       <label className="block text-sm font-medium text-slate-700">{label}</label>
       <label className="flex cursor-pointer items-center justify-between rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-600 transition hover:border-red-400 hover:bg-white">
-        <span>{String(formData[fieldName] ?? "Choose file")}</span>
+        <span>{isBrowserFile(formData[fieldName]) ? formData[fieldName].name : "Choose file"}</span>
         <Upload size={16} className="text-red-600" />
         <input
           type="file"
           className="hidden"
-          onChange={(e) => handleFileChange(fieldName, e.target.files?.[0])}
+          accept={fieldName === "passportPhoto" ? "image/jpeg,image/png" : "application/pdf,image/jpeg,image/png"}
+          onChange={(e) => {
+            if (documentFields.includes(fieldName)) handleFileChange(fieldName, e.target.files?.[0]);
+          }}
         />
       </label>
+    </div>
+  );
+
+  const renderSelect = <K extends keyof FormDataState>(label: string, name: K, options: string[]) => (
+    <div className="space-y-2">
+      <label className="block text-sm font-medium text-slate-700">{label}</label>
+      <select
+        name={name}
+        value={String(formData[name] ?? "")}
+        onChange={(event) => updateField(name, event.target.value as FormDataState[K])}
+        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-red-400 focus:bg-white"
+      >
+        <option value="">Select an option</option>
+        {options.map((option) => <option key={option} value={option}>{option}</option>)}
+      </select>
     </div>
   );
 
@@ -407,112 +568,120 @@ export default function ApplicationPage() {
       case 0:
         return (
           <div className="space-y-6">
+            <h3 className="text-xl font-bold text-slate-900">Applicant details</h3>
             <div className="grid gap-6 md:grid-cols-2">
-              {renderInput("Student full name", "studentName", "text", "Enter student full name")}
-              {renderInput("Date of birth", "dateOfBirth", "date")}
-              {renderInput("Gender", "gender", "text", "Male / Female / Other")}
+              {renderInput("First name *", "firstName")}
+              {renderInput("Last name *", "lastName")}
+              {renderInput("Your email address *", "email", "email")}
+              {renderInput("Confirm your email address *", "confirmEmail", "email")}
+              {renderInput("Phone number *", "phone", "tel")}
+              {renderInput("NRC or passport number *", "nrcPassportNumber")}
+              {renderInput("Date of birth *", "dateOfBirth", "date")}
+              {renderSelect("Year applying for *", "yearApplyingFor", applicationYears.map(String))}
+              {renderInput("Preferred class, if known", "preferredClass")}
               {renderInput("Nationality", "nationality", "text", "Nationality")}
-            </div>
-            <div className="grid gap-6 md:grid-cols-2">
-              {renderInput("Phone number", "phone", "tel", "+233 20 000 0000")}
-              {renderInput("Email address", "email", "email", "student@example.com")}
-              {renderInput("Home address", "homeAddress", "text", "Residential address")}
-              {renderInput("Program applying for", "program", "text", "Primary / JHS / SHS / etc")}
-            </div>
-            <div className="grid gap-6 md:grid-cols-2">
-              {renderInput("Preferred start term", "startTerm", "text", "September 2026")}
-              {renderInput("Current / previous school", "currentSchool", "text", "School name")}
-            </div>
-            <div className="grid gap-6 md:grid-cols-2">
-              {renderInput("Guardian name", "guardianName", "text", "Parent / guardian full name")}
-              {renderInput("Guardian phone", "guardianPhone", "tel", "+233 20 000 0000")}
-              {renderInput("Guardian email", "guardianEmail", "email", "guardian@example.com")}
-              {renderInput("Guardian relationship", "guardianRelation", "text", "Father / Mother / Guardian")}
+              {renderInput("Address line 1", "addressLine1")}
+              {renderInput("Address line 2", "addressLine2")}
+              {renderInput("City / town", "city")}
+              {renderInput("Province / region", "province")}
+              {renderInput("Postal code", "postalCode")}
+              {renderInput("Country", "country")}
             </div>
           </div>
         );
       case 1:
         return (
           <div className="space-y-6">
+            <h3 className="text-xl font-bold text-slate-900">Education</h3>
             <div className="grid gap-6 md:grid-cols-2">
-              {renderTextarea("Academic qualifications", "qualifications", "List academic qualifications and records")}
-              {renderTextarea("Exam results / grades", "examResults", "Enter grades, scores or exam summary")}
-            </div>
-            <div className="grid gap-6 md:grid-cols-2">
-              {renderTextarea("Previous school address", "previousSchoolAddress", "Previous school location and contact details", 4)}
-              {renderTextarea("Support needs / accommodations", "supportNeeds", "Mention any special educational needs or support preferred", 4)}
+              {renderSelect("Do you have five O-level credits? *", "hasFiveOLevelCredits", ["Yes", "No", "Pending"])}
+              {renderInput("High / secondary school attended", "highSchoolAttended")}
+              {renderInput("Secondary school completed", "secondarySchool")}
+              {renderInput("College / university attended, if any", "collegeAttended")}
+              {renderInput("Diploma / degree earned", "diplomaEarned")}
+              {renderInput("Year you completed college / university", "collegeCompletionYear", "number")}
             </div>
           </div>
         );
       case 2:
         return (
-          <div className="space-y-6">
-            <div className="grid gap-6 md:grid-cols-2">
-              {renderFileUpload("Passport photo", "passportPhoto")}
-              {renderFileUpload("Birth certificate", "birthCertificate")}
-              {renderFileUpload("Academic report / transcript", "reportCard")}
-              {renderFileUpload("Identification document", "idDocument")}
-            </div>
+          <div className="space-y-8">
+            <section className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
+              <h3 className="mb-5 text-xl font-bold text-slate-900">Pastoral recommender</h3>
+              <p className="mb-5 text-sm text-slate-600">A private recommendation request will be sent directly to this person.</p>
+              <div className="grid gap-6 md:grid-cols-2">
+                {renderInput("Pastor’s full name *", "pastoralRecommenderName")}
+                {renderInput("Pastor’s email address *", "recommendationPastoralEmail", "email")}
+                {renderInput("Pastor’s phone number", "recommendationPastoralPhone", "tel")}
+                {renderTextarea("Pastor’s postal / residential address", "recommendationPastoralAddress", "Address")}
+              </div>
+            </section>
+            <section className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
+              <h3 className="mb-5 text-xl font-bold text-slate-900">Personal recommender</h3>
+              <p className="mb-5 text-sm text-slate-600">Choose someone who knows you well and is not a relative.</p>
+              <div className="grid gap-6 md:grid-cols-2">
+                {renderInput("Recommender’s full name *", "personalReferenceName")}
+                {renderInput("Recommender’s email address *", "personalReferenceEmail", "email")}
+                {renderInput("Recommender’s phone number", "personalReferencePhone", "tel")}
+                {renderTextarea("Recommender’s postal / residential address", "personalReferenceAddress", "Address")}
+              </div>
+            </section>
           </div>
         );
       case 3:
         return (
-          <div className="space-y-8">
-            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
-              <div className="mb-5 flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-red-100 text-red-700">
-                  <BriefcaseBusiness size={18} />
-                </div>
-                <h3 className="text-xl font-bold text-slate-900">Pastoral Recommendation</h3>
-              </div>
-
-              <div className="grid gap-6 md:grid-cols-2">
-                {renderInput("Pastoral recommender name", "recommendationPastoralName", "text", "Name")}
-                {renderInput("Phone", "recommendationPastoralPhone", "tel", "+233 20 000 0000")}
-                {renderInput("Email (required)", "recommendationPastoralEmail", "email", "pastor@example.com")}
-                {renderInput("Church name", "recommendationPastoralChurch", "text", "Church name")}
-                {renderInput("Position / role", "recommendationPastoralPosition", "text", "Minister / Elder / Pastor")}
-                {renderInput("Address", "recommendationPastoralAddress", "text", "Church address")}
-              </div>
+          <section className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
+            <h3 className="mb-5 text-xl font-bold text-slate-900">Emergency contact</h3>
+            <div className="grid gap-6 md:grid-cols-2">
+              {renderInput("Full name *", "emergencyContactName")}
+              {renderInput("Relationship to you", "emergencyContactRelationship")}
+              {renderInput("Phone number", "emergencyContactPhone", "tel")}
+              {renderInput("Email address *", "emergencyContactEmail", "email")}
+              {renderTextarea("Address", "emergencyContactAddress", "Address")}
             </div>
-
-            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
-              <div className="mb-5 flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-red-100 text-red-700">
-                  <Users size={18} />
-                </div>
-                <h3 className="text-xl font-bold text-slate-900">Personal Recommendation</h3>
-              </div>
-
-              <div className="grid gap-6 md:grid-cols-2">
-                {renderInput("Name", "personalReferenceName", "text", "Full name")}
-                {renderInput("Email address (required)", "personalReferenceEmail", "email", "reference@example.com")}
-                {renderInput("Phone", "personalReferencePhone", "tel", "+233 20 000 0000")}
-                {renderInput("Address", "personalReferenceAddress", "text", "Physical address")}
-                {renderInput("Relationship", "personalReferenceRelation", "text", "Teacher / Family friend / Mentor")}
-                {renderInput("How long have you known them?", "personalReferenceDuration", "text", "e.g. 3 years")}
-              </div>
-            </div>
-
-            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
-              <div className="mb-5 flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-red-100 text-red-700">
-                  <IdCard size={18} />
-                </div>
-                <h3 className="text-xl font-bold text-slate-900">Next of Kin</h3>
-              </div>
-
-              <div className="grid gap-6 md:grid-cols-2">
-                {renderInput("Next of kin name", "nextOfKinName", "text", "Full name")}
-                {renderInput("Phone", "nextOfKinPhone", "tel", "+233 20 000 0000")}
-                {renderInput("Email", "nextOfKinEmail", "email", "kin@example.com")}
-                {renderInput("Address", "nextOfKinAddress", "text", "Address")}
-                {renderInput("Relationship", "nextOfKinRelation", "text", "Mother / Father / Aunt / Guardian")}
-              </div>
-            </div>
-          </div>
+          </section>
         );
       case 4:
+        return (
+          <section className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
+            <h3 className="mb-5 text-xl font-bold text-slate-900">Spiritual background</h3>
+            <div className="grid gap-6 md:grid-cols-2">
+              {renderInput("When did you accept Christ as your Saviour?", "salvationDate", "date")}
+              {renderInput("When were you baptised?", "baptismDate", "date")}
+              {renderInput("Current church affiliation", "churchAffiliation")}
+              {renderInput("Pastor / minister’s name", "pastorName")}
+              {renderInput("How long have you attended this church?", "churchAttendanceDuration")}
+              {renderTextarea("Describe your ministry experience, if any", "ministryExperience", "Ministry experience")}
+            </div>
+          </section>
+        );
+      case 5:
+        return (
+          <div className="space-y-6">
+            <section className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
+              <h3 className="mb-2 text-xl font-bold text-slate-900">Required documents</h3>
+              <p className="mb-5 text-sm text-slate-600">Upload readable copies. PDF, JPG, or PNG files up to 5 MB; passport photo up to 3 MB.</p>
+              <div className="grid gap-6">
+                {renderFileUpload("NRC or passport (identification document) *", "nrcOrPassport")}
+                {renderFileUpload("Birth certificate *", "birthCertificate")}
+                {renderFileUpload("Student results / Grade 12 certificate *", "resultsCertificate")}
+                {renderFileUpload("Passport-size portrait photo *", "passportPhoto")}
+              </div>
+            </section>
+            <section className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
+              <h3 className="mb-4 text-xl font-bold text-slate-900">Declaration & permission</h3>
+              <label className="flex items-start gap-3 text-sm leading-6 text-slate-700">
+                <input type="checkbox" checked={formData.declarationAccuracy} onChange={(event) => updateField("declarationAccuracy", event.target.checked)} className="mt-1 accent-red-600" />
+                <span>I confirm the information and documents I have provided are true and complete. I understand that the Rhema programme is a two-year programme and that the admissions team will review my application. *</span>
+              </label>
+              <label className="mt-4 flex items-start gap-3 text-sm leading-6 text-slate-700">
+                <input type="checkbox" checked={formData.declarationRecommenders} onChange={(event) => updateField("declarationRecommenders", event.target.checked)} className="mt-1 accent-red-600" />
+                <span>I give permission for Rhema Zambia to contact the people named as my recommenders about this application. I confirm that my personal recommender is not a relative. *</span>
+              </label>
+            </section>
+          </div>
+        );
+      case 6:
         return (
           <div className="space-y-6">
             <div className="rounded-[2rem] border border-slate-200 bg-slate-50 p-6">
@@ -522,31 +691,30 @@ export default function ApplicationPage() {
                 </div>
                 <h3 className="text-xl font-bold text-slate-900">Application review</h3>
               </div>
-
               <div className="grid gap-5 md:grid-cols-2">
-                <div className="rounded-2xl bg-white p-4 shadow-sm">
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Student</p>
-                  <p className="mt-2 text-lg font-semibold text-slate-900">{formData.studentName || "Not provided"}</p>
-                </div>
-                <div className="rounded-2xl bg-white p-4 shadow-sm">
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Program</p>
-                  <p className="mt-2 text-lg font-semibold text-slate-900">{formData.program || "Not provided"}</p>
-                </div>
-                <div className="rounded-2xl bg-white p-4 shadow-sm">
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Guardian</p>
-                  <p className="mt-2 text-lg font-semibold text-slate-900">{formData.guardianName || "Not provided"}</p>
-                </div>
-                <div className="rounded-2xl bg-white p-4 shadow-sm">
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">School</p>
-                  <p className="mt-2 text-lg font-semibold text-slate-900">{formData.currentSchool || "Not provided"}</p>
-                </div>
+                {[
+                  ["Applicant", `${formData.firstName} ${formData.lastName}`],
+                  ["Email", formData.email],
+                  ["Phone", formData.phone],
+                  ["NRC / passport", formData.nrcPassportNumber],
+                  ["Year applying for", formData.yearApplyingFor],
+                  ["Preferred class", formData.preferredClass],
+                  ["Education", formData.secondarySchool],
+                  ["Pastoral recommender", formData.pastoralRecommenderName],
+                  ["Personal recommender", formData.personalReferenceName],
+                  ["Emergency contact", formData.emergencyContactName],
+                  ["Documents", [formData.nrcOrPassport, formData.birthCertificate, formData.resultsCertificate, formData.passportPhoto].filter(isBrowserFile).length === 4 ? "All required documents attached" : "Documents incomplete"],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-2xl bg-white p-4 shadow-sm">
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{label}</p>
+                    <p className="mt-2 text-lg font-semibold text-slate-900">{value || "Not provided"}</p>
+                  </div>
+                ))}
               </div>
-            </div>
-
-            <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
-              <h3 className="text-xl font-bold text-slate-900">Declaration</h3>
-              <p className="mt-4 text-sm leading-7 text-slate-600">
-                I confirm that the information provided is accurate and complete to the best of my knowledge. I understand that submission of this application does not guarantee admission and that supporting documents may be requested for verification.
+              <p className="mt-5 rounded-2xl border border-slate-200 bg-white p-4 text-sm font-semibold text-slate-800">
+                {applicationFeeRequired
+                  ? `Application fee: ${new Intl.NumberFormat("en-ZM", { style: "currency", currency: applicationFeeCurrency }).format(applicationFeeAmount)}. Pay online after submitting your application.`
+                  : "There is no application fee."}
               </p>
             </div>
           </div>
@@ -560,8 +728,10 @@ export default function ApplicationPage() {
     <div className="bg-white pb-10">
       <section className="bg-[#f4f5f4] px-4 pb-10 pt-32 sm:px-6 sm:pb-14 lg:px-8">
         <div className="mx-auto max-w-5xl">
-          <p className="text-xs font-semibold text-slate-500"><Link href="/" className="hover:text-blue-800">Home</Link><span className="mx-2">/</span><Link href="/apply" className="hover:text-blue-800">Admissions</Link><span className="mx-2">/</span>2027 Application</p>
-          <p className="mt-5 text-[11px] font-black uppercase tracking-[0.2em] text-blue-800">2027 admissions</p>
+          <p className="text-xs font-semibold text-slate-500"><Link href="/" className="hover:text-blue-800">Home</Link><span className="mx-2">/</span><Link href="/apply" className="hover:text-blue-800">Admissions</Link><span className="mx-2">/</span>{formData.yearApplyingFor ? `${formData.yearApplyingFor} Application` : "Application"}</p>
+          <p className="mt-5 text-[11px] font-black uppercase tracking-[0.2em] text-blue-800">
+            Admissions{applicationYears.length ? ` · ${applicationYears.join(", ")}` : ""}
+          </p>
           <h1 className="mt-2 max-w-3xl text-3xl font-black leading-tight tracking-tight text-[#10283a] sm:text-5xl">Begin your Rhema Zambia application.</h1>
           <p className="mt-3 max-w-2xl text-sm font-medium leading-6 text-slate-700">Complete the application in a guided form. You can save your progress on this device and return to it later.</p>
 
@@ -569,6 +739,7 @@ export default function ApplicationPage() {
             <h2 className="text-lg font-black text-[#10283a]">Before you begin</h2>
             <ul className="mt-3 grid gap-2 text-sm leading-6 text-slate-600 sm:grid-cols-2">
               <li>Prepare a certified NRC or passport copy.</li>
+              <li>Prepare your birth certificate.</li>
               <li>Prepare your Grade 12 certificate.</li>
               <li>Have a recent passport-size photo ready.</li>
               <li>Have your pastoral and personal referee details ready.</li>
@@ -583,19 +754,38 @@ export default function ApplicationPage() {
                 <CustomAlert type={status.type} title={status.title} message={status.message} onClose={() => setStatus({ type: "", title: "", message: "" })} />
               </div>
             ) : null}
-            <button
-              ref={openFormButtonRef}
-              type="button"
-              onClick={() => {
-                if (savedDraftAvailable) restoreDraft();
-                setStatus({ type: "", title: "", message: "" });
-                setIsFormOpen(true);
-              }}
-              className="mt-6 inline-flex items-center gap-2 rounded-full bg-rhema-red px-6 py-3 text-sm font-bold text-white transition hover:bg-rhema-red-dark"
+            <div
+              className="group relative mt-6 inline-flex"
+              tabIndex={!enrollmentOpen ? 0 : undefined}
+              aria-describedby={!enrollmentOpen && enrollmentStatusLoaded ? "enrollment-closed-message" : undefined}
             >
-              {savedDraftAvailable ? "Continue application" : "Start application"}
-              <ArrowRight size={16} />
-            </button>
+              <button
+                ref={openFormButtonRef}
+                type="button"
+                disabled={!enrollmentStatusLoaded || !enrollmentOpen}
+                onClick={() => {
+                  if (savedDraftAvailable) restoreDraft();
+                  setStatus({ type: "", title: "", message: "" });
+                  setIsFormOpen(true);
+                }}
+                className="inline-flex items-center gap-2 rounded-full bg-rhema-red px-6 py-3 text-sm font-bold text-white transition hover:bg-rhema-red-dark disabled:cursor-not-allowed disabled:bg-slate-400 disabled:hover:bg-slate-400"
+              >
+                {savedDraftAvailable ? "Continue application" : "Start application"}
+                <ArrowRight size={16} />
+              </button>
+              {!enrollmentOpen && enrollmentStatusLoaded ? (
+                <span
+                  id="enrollment-closed-message"
+                  role="status"
+                  className="pointer-events-none absolute bottom-full left-0 z-10 mb-3 w-72 rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold leading-5 text-white opacity-0 shadow-xl transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+                >
+                  No enrollment open at the moment, please check back after some time.
+                </span>
+              ) : null}
+            </div>
+            {enrollmentStatusError ? (
+              <p className="mt-3 text-sm font-semibold text-red-700" role="alert">Enrollment status could not be checked. Please refresh the page or contact admissions.</p>
+            ) : null}
           </div>
         </div>
       </section>
@@ -627,7 +817,7 @@ export default function ApplicationPage() {
                   <div>
                     <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-800">Official application form</p>
                     <h2 id="application-modal-title" className="mt-1 text-xl font-black text-[#10283a] sm:text-2xl">
-                      {application ? "Application submitted" : "2027 Student Application"}
+                      {application ? "Application submitted" : "Student Application"}
                     </h2>
                   </div>
                   <button
@@ -686,35 +876,32 @@ export default function ApplicationPage() {
                     <h3 className="mt-2 text-xl font-black text-emerald-950">Your application is saved.</h3>
                     <p className="mt-2 text-sm leading-6 text-emerald-950">
                       {application.trackingEmailSent
-                        ? "We sent a private application-tracking link to your email address. Use that link to check your application and recommendation progress."
+                        ? "A private application-tracking link has been sent to your email address."
                         : "We could not email your private tracking link. Contact admissions with your application reference to check progress."}
                     </p>
-                    <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                      {(["pastoral", "personal"] as const).map((kind) => {
-                        const recommendationStatus = application.recommendations[kind];
-                        const submitted = recommendationStatus === "Submitted";
-                        const statusLabel = submitted ? "Submitted"
-                          : recommendationStatus === "Sent" ? "Email sent"
-                            : recommendationStatus === "Failed" ? "Send failed"
-                              : recommendationStatus;
-                        return (
-                          <div key={kind} className="rounded-xl border border-emerald-200 bg-white p-4">
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="font-bold capitalize text-emerald-950">{kind} recommendation</p>
-                              <span className={`rounded-full px-2.5 py-1 text-[11px] font-black uppercase ${submitted ? "bg-emerald-100 text-emerald-800" : recommendationStatus === "Failed" ? "bg-red-100 text-red-800" : recommendationStatus === "Sent" ? "bg-sky-100 text-sky-800" : "bg-amber-100 text-amber-800"}`}>
-                                {statusLabel}
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
                     {status.message ? (
                       <div className="mt-4">
                         <CustomAlert type={status.type} title={status.title} message={status.message} onClose={() => setStatus({ type: "", title: "", message: "" })} />
                       </div>
                     ) : null}
-                    <p className="mt-4 text-xs text-emerald-900">No application fee. Keep your private tracking link secure; anyone with the link can view this application&apos;s status.</p>
+                    {application.feeRequired && (
+                      <p className="mt-4 text-sm font-bold text-emerald-950">
+                        Application fee: {new Intl.NumberFormat("en-ZM", { style: "currency", currency: application.currency }).format(application.feeAmount)}
+                        {" · "}{application.paymentStatus === "Paid" ? "Paid" : "Payment due"}
+                      </p>
+                    )}
+                    {!application.feeRequired && <p className="mt-4 text-xs text-emerald-900">No application fee.</p>}
+                    <p className="mt-2 text-xs text-emerald-900">Keep your private tracking link secure; anyone with the link can view this application&apos;s status.</p>
+                    {application.feeRequired && application.paymentStatus !== "Paid" && (
+                      <button
+                        type="button"
+                        disabled={isSubmitting}
+                        onClick={() => void startApplicationFeePayment(application.id)}
+                        className="mt-5 inline-flex items-center gap-2 rounded-full bg-emerald-800 px-5 py-3 text-sm font-bold text-white transition hover:bg-emerald-900 disabled:cursor-wait disabled:opacity-60"
+                      >
+                        {isSubmitting ? "Processing payment…" : "Pay application fee"}
+                      </button>
+                    )}
                   </div>
                   <div className="mt-5 flex justify-end">
                     <button type="button" onClick={() => setIsFormOpen(false)} className="rounded-full bg-[#10283a] px-6 py-3 text-sm font-bold text-white transition hover:bg-slate-800">

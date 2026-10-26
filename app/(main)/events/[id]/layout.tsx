@@ -9,7 +9,7 @@ export async function generateMetadata({
   const { id } = await params;
   return publicPageMetadata(
     `/events/${encodeURIComponent(id)}`,
-    "Rhema Zambia Event",
+    "Event Details",
     "Event details, registration information and updates from Rhema Zambia Bible Training Center.",
   );
 }
