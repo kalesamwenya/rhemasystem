@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Bell, CheckCircle2, Clock3, Filter, RefreshCw, Search, X } from "lucide-react";
-import { fetchNotifications } from "@/lib/api";
+import { fetchNotifications } from "@/lib/notifications-api";
 import { getAuthUser } from "@/lib/auth";
 
 const notificationTypes = ["all", "info", "alert", "success"];
@@ -49,6 +49,7 @@ export default function NotificationsPage() {
             }
             previousUnreadRef.current = nextUnread;
             setNotifications(nextNotifications);
+            setError(data.offline ? "You're offline. Showing saved notifications." : "");
         } catch (loadError) {
             setError(loadError.message || "Unable to load notifications");
         } finally {

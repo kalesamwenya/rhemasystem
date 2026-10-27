@@ -1,6 +1,6 @@
 'use client';
 
-import { api } from '@/lib/api';
+import { fetchChatSnapshot, markAllChatNotificationsRead, markChatNotificationRead } from '@/lib/chat-notifications-api';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 export interface CommunicationConversation {
@@ -150,7 +150,7 @@ export function CommunicationProvider({ children, enabled = true }: { children: 
     }
 
     try {
-      const result = await api.communications.snapshot() as Partial<CommunicationSnapshot>;
+      const result = await fetchChatSnapshot() as Partial<CommunicationSnapshot> & { offline?: boolean };
       communicationsFailures.current = 0;
       const conversations = Array.isArray(result.conversations) ? result.conversations : [];
       const allNotifications = Array.isArray(result.notifications) ? result.notifications : [];
@@ -182,7 +182,9 @@ export function CommunicationProvider({ children, enabled = true }: { children: 
         unread_messages: Number(result.unread_messages) || 0,
         unread_notifications: Number(result.unread_notifications) || 0,
       });
-      setError(currentUserError);
+      setError(result.offline
+        ? 'You are offline. Showing saved communications; queued messages will sync when connection returns.'
+        : currentUserError);
     } catch (cause) {
       communicationsFailures.current += 1;
       setError(cause instanceof Error ? cause.message : 'Unable to refresh communications.');
@@ -199,7 +201,7 @@ export function CommunicationProvider({ children, enabled = true }: { children: 
 
   const markNotificationRead = useCallback(async (notification: CommunicationNotification) => {
     try {
-      await api.communications.markNotificationRead(notification.id, notification.source || 'communications');
+      await markChatNotificationRead(notification.id, notification.source || 'communications');
       await refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to mark this notification as read.');
@@ -211,7 +213,7 @@ export function CommunicationProvider({ children, enabled = true }: { children: 
     if (!unreadNotifications.length) return;
 
     try {
-      await api.communications.markAllNotificationsRead();
+      await markAllChatNotificationsRead();
       await refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to mark all notifications as read.');
@@ -246,6 +248,20 @@ export function CommunicationProvider({ children, enabled = true }: { children: 
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, [enabled, refresh, retryKey]);
+
+  useEffect(() => {
+    if (!enabled) return;
+    const refreshWhenOnline = () => void refresh();
+    window.addEventListener('online', refreshWhenOnline);
+    return () => window.removeEventListener('online', refreshWhenOnline);
+  }, [enabled, refresh]);
+
+  useEffect(() => {
+    if (!enabled) return;
+    const refreshAfterSync = () => void refresh();
+    window.addEventListener('rhema:communications-updated', refreshAfterSync);
+    return () => window.removeEventListener('rhema:communications-updated', refreshAfterSync);
+  }, [enabled, refresh]);
 
   useEffect(() => () => {
     Object.values(audioPlayers.current).forEach((audio) => {

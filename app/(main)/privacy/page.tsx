@@ -40,6 +40,13 @@ export default function PrivacyPage() {
             </div>
           ))}
         </div>
+
+        <div className="mt-8 rounded-3xl border border-slate-200 bg-slate-50 p-6">
+          <h2 className="text-lg font-bold text-slate-900">Anonymous website analytics</h2>
+          <p className="mt-3 text-sm leading-7 text-slate-700">
+            We use a random first-party browser ID to count visits to public website pages and record broad navigation or button activity. The request IP is used for a local lookup of an approximate city, region, and country; the raw IP address is discarded and is not stored in analytics. We do not collect form contents, button text, names, or email addresses. Private portal and application pages are excluded. Analytics records, including approximate location, are kept for up to one year. Clearing this site&apos;s browser storage resets the ID used by this browser.
+          </p>
+        </div>
       </section>
     </div>
   );

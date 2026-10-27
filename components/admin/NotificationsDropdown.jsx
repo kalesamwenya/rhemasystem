@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { FaBell } from 'react-icons/fa';
 import { AnimatePresence, motion } from 'framer-motion';
-import { fetchNotifications } from '@/lib/api';
+import { fetchNotifications } from '@/lib/notifications-api';
 import { getAuthToken, getAuthUser } from '@/lib/auth';
 
 export default function NotificationsDropdown({
@@ -19,6 +19,7 @@ export default function NotificationsDropdown({
     const [notifications, setNotifications] = useState([]);
     const [unread, setUnread] = useState(0);
     const [loading, setLoading] = useState(false);
+    const [offline, setOffline] = useState(false);
 
     /**
      * TRACK PREVIOUS COUNT
@@ -67,6 +68,7 @@ export default function NotificationsDropdown({
 
                 setNotifications(data.data || []);
                 setUnread(newUnread);
+                setOffline(Boolean(data.offline));
             }
         } catch (err) {
             console.error(err);
@@ -166,7 +168,7 @@ export default function NotificationsDropdown({
                             </h3>
 
                             <p className="text-[11px] text-gray-400 mt-0.5">
-                                Live updates enabled
+                                {offline ? 'Offline · showing saved notifications' : 'Live updates enabled'}
                             </p>
                         </div>
 

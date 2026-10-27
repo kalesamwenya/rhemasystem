@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
 import { FaComments, FaExternalLinkAlt } from 'react-icons/fa';
 import Link from 'next/link';
-import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth';
+import { fetchChatSnapshot } from '@/lib/chat-notifications-api';
 
 const SETTINGS_KEY = 'chatSettings';
 
@@ -56,7 +56,7 @@ export default function MessagesDropdown({ isOpen, onToggle }) {
     const fetchMessages = useCallback(async () => {
         if (!getAuthToken()) return;
         try {
-            const result = await api.communications.snapshot();
+            const result = await fetchChatSnapshot();
             if (result?.success && Array.isArray(result.conversations)) {
                 const settings = readSettings();
                 const latestThreads = result.conversations.filter((conversation) => conversation.last_message).slice(0, 5);

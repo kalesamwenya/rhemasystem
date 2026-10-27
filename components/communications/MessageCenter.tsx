@@ -1,8 +1,15 @@
 'use client';
 
-import { api } from '@/lib/api';
 import { useCommunications, type CommunicationConversation } from './CommunicationProvider';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { fetchChatContacts, createChatConversation, openGlobalAdminChat } from '@/lib/chat-api';
+import {
+  fetchMessageAttachment,
+  fetchConversationMessages,
+  markConversationRead,
+  searchConversationMessages,
+  sendConversationMessage,
+} from '@/lib/messages-api';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Bell, CheckCheck, ChevronDown, ChevronUp, FileText, Image as ImageIcon, MessageCircle, Mic, Pause, Paperclip, Play, Plus, RotateCw, Search, Send, SkipBack, SkipForward, Smile, Square, Users, X } from 'lucide-react';
 import Image from 'next/image';
 import EmojiPicker from 'emoji-picker-react';
@@ -18,11 +25,13 @@ interface Contact {
 
 interface Message {
   id: number;
+  conversation_id: number;
   sender_role: string;
   sender_id: string;
   sender_name: string;
   body: string;
   created_at: string;
+  pending?: boolean;
   attachment_id?: number | null;
   attachment_path?: string | null;
   attachment_name?: string | null;
@@ -244,7 +253,7 @@ export default function MessageCenter() {
   const messagePaneRef = useRef<HTMLDivElement>(null);
   const messageElements = useRef(new Map<number, HTMLDivElement>());
   const messageSearchRequest = useRef(0);
-  const previousMessageCount = useRef(0);
+  const previousScrollConversationId = useRef<number | null>(selectedId);
   const recordedChunks = useRef<Blob[]>([]);
   const loadingAttachments = useRef(new Set<number>());
   const failedAttachments = useRef(new Set<number>());
@@ -351,7 +360,7 @@ export default function MessageCenter() {
     let active = true;
     const requestId = ++messageSearchRequest.current;
     const timer = window.setTimeout(() => {
-      api.communications.searchMessages(conversationId, query, messageSearchOffset)
+      searchConversationMessages(conversationId, query, messageSearchOffset)
         .then((result: { messages?: Message[]; total?: number }) => {
           if (!active || requestId !== messageSearchRequest.current) return;
           setMessageSearchResults(Array.isArray(result.messages) ? result.messages : []);
@@ -377,7 +386,7 @@ export default function MessageCenter() {
 
   useEffect(() => {
     let active = true;
-    api.communications.contacts()
+    fetchChatContacts()
       .then((result: { contacts?: Contact[] }) => {
         if (active) setContacts(Array.isArray(result.contacts) ? result.contacts : []);
       })
@@ -396,14 +405,14 @@ export default function MessageCenter() {
     if (messagesLoading.current) return;
     messagesLoading.current = true;
     try {
-      const result: { messages?: Message[] } = await api.communications.messages(conversationId);
+      const result: { messages?: Message[] } = await fetchConversationMessages(conversationId);
       if (activeConversationId.current !== conversationId) return;
       const nextMessages = Array.isArray(result.messages) ? result.messages : [];
       setMessages(nextMessages);
       messagePollingFailures.current = 0;
       const newestMessageId = nextMessages.reduce((latest, message) => Math.max(latest, message.id), 0);
       if (newestMessageId > lastMarkedReadMessageId.current) {
-        await api.communications.markRead(conversationId);
+        await markConversationRead(conversationId);
         lastMarkedReadMessageId.current = newestMessageId;
         await refresh();
       }
@@ -417,17 +426,26 @@ export default function MessageCenter() {
   }, [refresh]);
 
   useEffect(() => {
+    if (!selectedId) return;
+    const refreshMessagesAfterSync = () => void loadMessages(selectedId);
+    window.addEventListener('rhema:communications-updated', refreshMessagesAfterSync);
+    return () => window.removeEventListener('rhema:communications-updated', refreshMessagesAfterSync);
+  }, [loadMessages, selectedId]);
+
+  useEffect(() => {
     activeConversationId.current = selectedId;
   }, [selectedId]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const pane = messagePaneRef.current;
-    if (!pane) return;
-    const wasEmpty = previousMessageCount.current === 0;
-    const isNearBottom = pane.scrollHeight - pane.scrollTop - pane.clientHeight < 120;
-    if (wasEmpty || isNearBottom) pane.scrollTop = pane.scrollHeight;
-    previousMessageCount.current = messages.length;
-  }, [latestMessageId, messages.length, selectedId]);
+    if (!pane || messageSearch.trim()) return;
+    const conversationChanged = previousScrollConversationId.current !== selectedId;
+    previousScrollConversationId.current = selectedId;
+    pane.scrollTo({
+      top: pane.scrollHeight,
+      behavior: conversationChanged ? 'auto' : 'smooth',
+    });
+  }, [attachmentUrls, displayedMessages.length, latestMessageId, messageSearch, selectedId]);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -475,7 +493,7 @@ export default function MessageCenter() {
       if (!attachmentId || cachedAttachmentUrls.current.has(attachmentId)
         || loadingAttachments.current.has(attachmentId) || failedAttachments.current.has(attachmentId)) return;
       loadingAttachments.current.add(attachmentId);
-      api.communications.attachment(attachmentId)
+      fetchMessageAttachment(attachmentId)
         .then((blob: Blob) => {
           if (!mounted.current) return;
           const url = URL.createObjectURL(blob);
@@ -572,7 +590,7 @@ export default function MessageCenter() {
     }
     setBusyContact(key);
     try {
-      const result: { conversation_id?: number | string } = await api.communications.createConversation({
+      const result: { conversation_id?: number | string } = await createChatConversation({
         participants: [{ role: contact.role, id: contact.id }],
       });
       const conversationId = Number(result.conversation_id);
@@ -594,7 +612,7 @@ export default function MessageCenter() {
     setPageError('');
     setBusyGlobalGroup(true);
     try {
-      const result: { conversation_id?: number | string } = await api.communications.globalAdminGroup();
+      const result: { conversation_id?: number | string } = await openGlobalAdminChat();
       const conversationId = Number(result.conversation_id);
       if (!Number.isInteger(conversationId) || conversationId < 1) throw new Error('The global admin group could not be opened.');
       await refresh();
@@ -623,7 +641,7 @@ export default function MessageCenter() {
     setGroupSaving(true);
     setPageError('');
     try {
-      const result: { conversation_id?: number | string } = await api.communications.createConversation({
+      const result: { conversation_id?: number | string } = await createChatConversation({
         title: groupTitle.trim(),
         participants: selectedParticipants,
       });
@@ -657,7 +675,7 @@ export default function MessageCenter() {
     try {
       let conversationId = selectedId;
       if (!conversationId && selectedContact) {
-        const result: { conversation_id?: number | string } = await api.communications.createConversation({
+        const result: { conversation_id?: number | string } = await createChatConversation({
           participants: [{ role: selectedContact.role, id: selectedContact.id }],
         });
         conversationId = Number(result.conversation_id);
@@ -669,7 +687,7 @@ export default function MessageCenter() {
         await refresh();
       }
       if (!conversationId) throw new Error('Choose a chat before sending a message.');
-      await api.communications.sendMessage({ conversation_id: conversationId, body, file: attachment });
+      await sendConversationMessage({ conversation_id: conversationId, body, file: attachment });
       setDraft('');
       setAttachment(null);
       await loadMessages(conversationId);
@@ -941,6 +959,7 @@ export default function MessageCenter() {
                       <span className={`text-xs font-bold ${isMine ? 'text-white' : 'text-slate-800'}`}><HighlightedText text={message.sender_name || ''} query={messageSearch} /></span>
                       <span className={`text-[10px] capitalize ${isMine ? 'text-indigo-100' : 'text-slate-500'}`}><HighlightedText text={message.sender_role || ''} query={messageSearch} /></span>
                       <time className={`text-[10px] ${isMine ? 'text-indigo-100' : 'text-slate-500'}`}>{formatTime(message.created_at)}</time>
+                      {message.pending && <span className={`text-[10px] ${isMine ? 'text-indigo-100' : 'text-amber-700'}`}>Queued to send</span>}
                     </div>
                     <p className={`whitespace-pre-wrap break-words text-sm ${isMine ? 'text-white' : 'text-slate-900'}`}><HighlightedText text={message.body || ''} query={messageSearch} /></p>
                     {message.attachment_id && (

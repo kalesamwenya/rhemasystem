@@ -5,11 +5,12 @@ import { Activity, AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, Clock
 import { api } from '@/lib/api';
 
 type ActivityStatus = 'all' | 'success' | 'failure';
+type ActivityRole = 'all' | 'admin' | 'lecturer' | 'student' | 'public';
 
 type ActivityLog = {
   id: number;
   request_id: string;
-  actor_role: 'admin' | 'lecturer' | 'student';
+  actor_role: Exclude<ActivityRole, 'all'>;
   actor_id: string;
   http_method: string;
   request_path: string;
@@ -43,6 +44,7 @@ function isSuccessful(log: ActivityLog) {
 export default function PerformanceLogsPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<ActivityStatus>('all');
+  const [actorRoleFilter, setActorRoleFilter] = useState<ActivityRole>('all');
   const [offset, setOffset] = useState(0);
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [summary, setSummary] = useState({ total: 0, succeeded: 0, failed: 0 });
@@ -59,6 +61,7 @@ export default function PerformanceLogsPage() {
         limit: PAGE_SIZE,
         offset,
         status: statusFilter,
+        actor_role: actorRoleFilter,
         search: search.trim(),
       }) as ActivityLogsResponse;
       if (!response.success || !Array.isArray(response.data) || !response.summary) {
@@ -72,7 +75,7 @@ export default function PerformanceLogsPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [offset, search, statusFilter]);
+  }, [actorRoleFilter, offset, search, statusFilter]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void refresh(), 250);
@@ -88,7 +91,7 @@ export default function PerformanceLogsPage() {
         <div>
           <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">System monitoring</div>
           <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-900">Activity Logs</h1>
-          <p className="mt-1 max-w-2xl text-sm text-slate-500">Review authenticated API requests, page views, and interface interactions, with outcomes and timing. Form values and request or response bodies are never stored.</p>
+          <p className="mt-1 max-w-2xl text-sm text-slate-500">Review API requests, page views, and interface interactions from administrators, lecturers, students, and public visitors. Form values and request or response bodies are never stored.</p>
         </div>
         <button
           type="button"
@@ -102,7 +105,7 @@ export default function PerformanceLogsPage() {
 
       <div className="grid gap-4 sm:grid-cols-3">
         {[
-          { label: 'Matching requests', value: summary.total, tone: 'bg-slate-100 text-slate-700' },
+          { label: 'Matching activities', value: summary.total, tone: 'bg-slate-100 text-slate-700' },
           { label: 'Successful', value: summary.succeeded, tone: 'bg-emerald-50 text-emerald-700' },
           { label: 'Failed', value: summary.failed, tone: 'bg-rose-50 text-rose-700' },
         ].map((card) => (
@@ -128,7 +131,23 @@ export default function PerformanceLogsPage() {
               placeholder="Search route, user, response, or request ID"
             />
           </label>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="sr-only" htmlFor="activity-role-filter">Filter by actor role</label>
+            <select
+              id="activity-role-filter"
+              value={actorRoleFilter}
+              onChange={(event) => {
+                setActorRoleFilter(event.target.value as ActivityRole);
+                setOffset(0);
+              }}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+            >
+              <option value="all">All roles</option>
+              <option value="admin">Administrators</option>
+              <option value="lecturer">Lecturers</option>
+              <option value="student">Students</option>
+              <option value="public">Public visitors</option>
+            </select>
             {([
               ['all', 'All'],
               ['success', 'Successful'],

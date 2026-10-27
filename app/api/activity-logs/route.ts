@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 const PRODUCTION_API_URL = "https://firebrick-snail-772746.hostingersite.com";
-const DEVELOPMENT_API_URL = "http://localruntest.com";
+const DEVELOPMENT_API_URL = PRODUCTION_API_URL;
 const SESSION_COOKIE_NAMES = new Set([
   "rhema_admin_session",
   "rhema_lecturer_session",
@@ -15,7 +15,7 @@ function getApiBaseUrl() {
   const configuredUrl = process.env.NEXT_PUBLIC_API_URL
     || (process.env.NODE_ENV === "production" ? PRODUCTION_API_URL : DEVELOPMENT_API_URL);
   const parsedUrl = new URL(configuredUrl.trim());
-  if (process.env.NODE_ENV === "production" && parsedUrl.hostname === "localruntest.com") {
+  if (parsedUrl.hostname === "localruntest.com") {
     return PRODUCTION_API_URL;
   }
   if (!["http:", "https:"].includes(parsedUrl.protocol)) {
@@ -49,25 +49,84 @@ function getAuthenticationAttempts(request: Request) {
   return attempts;
 }
 
+function hasValidVisitorId(input: unknown): input is { visitor_id: string } {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return false;
+  const visitorId = (input as { visitor_id?: unknown }).visitor_id;
+  return typeof visitorId === "string"
+    && /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(visitorId);
+}
+
+async function readLimitedBody(request: Request, maxBytes: number): Promise<ArrayBuffer | null> {
+  const reader = request.body?.getReader();
+  if (!reader) return new ArrayBuffer(0);
+
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    totalBytes += value.byteLength;
+    if (totalBytes > maxBytes) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+
+  const body = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return body.buffer;
+}
+
 async function handleRequest(request: Request) {
   if (request.method !== "GET" && request.method !== "POST") {
     return Response.json({ success: false, message: "Method not allowed." }, { status: 405 });
   }
 
   const attempts = getAuthenticationAttempts(request);
-  if (!attempts.length) {
+  if (request.method === "GET" && !attempts.length) {
     return Response.json({ success: false, message: "Sign-in is required." }, { status: 401 });
   }
 
   const requestId = randomUUID();
   try {
+    if (request.method === "POST") {
+      const origin = request.headers.get("origin");
+      if (origin && new URL(origin).origin !== new URL(request.url).origin) {
+        return Response.json({ success: false, message: "Cross-origin activity records are not accepted." }, { status: 403 });
+      }
+    }
     const apiBaseUrl = getApiBaseUrl();
     const upstreamUrl = new URL("logs/activity.php", `${apiBaseUrl}/`);
     upstreamUrl.search = new URL(request.url).search;
-    const body = request.method === "POST" ? await request.arrayBuffer() : undefined;
+    let body: ArrayBuffer | undefined;
+    if (request.method === "POST") {
+      const contentLength = Number(request.headers.get("content-length") || 0);
+      if (contentLength > 2048) {
+        return Response.json({ success: false, message: "The activity record is too large." }, { status: 413 });
+      }
+      body = await readLimitedBody(request, 2048) ?? undefined;
+      if (!body) {
+        return Response.json({ success: false, message: "The activity record is too large." }, { status: 413 });
+      }
+      let input: unknown;
+      try {
+        input = JSON.parse(new TextDecoder().decode(body));
+      } catch {
+        return Response.json({ success: false, message: "A valid JSON activity record is required." }, { status: 400 });
+      }
+      if (!hasValidVisitorId(input)) {
+        return Response.json({ success: false, message: "A valid activity visitor ID is required." }, { status: 400 });
+      }
+    }
     let upstreamResponse: Response | undefined;
 
-    for (const attempt of attempts) {
+    const forwardingAttempts: Array<{ authorization?: string; cookie?: string }> = attempts.length ? attempts : [{}];
+    for (const attempt of forwardingAttempts) {
       const headers = new Headers({
         Accept: "application/json",
         Origin: new URL(apiBaseUrl).origin,
@@ -84,7 +143,7 @@ async function handleRequest(request: Request) {
         cache: "no-store",
         signal: AbortSignal.timeout(15000),
       });
-      if (upstreamResponse.status !== 401 || attempt === attempts[attempts.length - 1]) break;
+      if (upstreamResponse.status !== 401 || attempt === forwardingAttempts[forwardingAttempts.length - 1]) break;
       await upstreamResponse.body?.cancel();
     }
 

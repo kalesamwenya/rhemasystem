@@ -1,7 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { FileText, RefreshCw, Send, Share2 } from 'lucide-react';
+import Link from 'next/link';
 import { api } from '@/lib/api';
 
 interface SharedReport {
@@ -29,7 +31,6 @@ function formatDate(value: string) {
 export default function SharedReportsPage() {
   const [reports, setReports] = useState<SharedReport[]>([]);
   const [departments, setDepartments] = useState<ReportDepartment[]>([]);
-  const [selectedReport, setSelectedReport] = useState<SharedReport | null>(null);
   const [selectedDepartments, setSelectedDepartments] = useState<string[]>([]);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -38,7 +39,9 @@ export default function SharedReportsPage() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
-  const loadReports = useCallback(async (requestedId?: number) => {
+  const router = useRouter();
+
+  const loadReports = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
@@ -51,12 +54,6 @@ export default function SharedReportsPage() {
       }
       setReports(response.reports);
       setDepartments(response.departments);
-      const reportId = requestedId ?? Number(new URLSearchParams(window.location.search).get('id'));
-      if (reportId > 0) {
-        const reportResponse = await api.adminReports.view(reportId) as { report?: SharedReport };
-        if (!reportResponse.report) throw new Error('The selected report is unavailable.');
-        setSelectedReport(reportResponse.report);
-      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to load shared reports.');
     } finally {
@@ -65,22 +62,13 @@ export default function SharedReportsPage() {
   }, []);
 
   useEffect(() => {
+    const legacyReportId = Number(new URLSearchParams(window.location.search).get('id'));
+    if (Number.isInteger(legacyReportId) && legacyReportId > 0) {
+      router.replace(`/admin/reports/${legacyReportId}`);
+    }
     const initialLoad = window.setTimeout(() => void loadReports(), 0);
     return () => window.clearTimeout(initialLoad);
-  }, [loadReports]);
-
-  const openReport = async (report: SharedReport) => {
-    setError('');
-    setNotice('');
-    try {
-      const response = await api.adminReports.view(report.id) as { report?: SharedReport };
-      if (!response.report) throw new Error('The selected report is unavailable.');
-      setSelectedReport(response.report);
-      window.history.replaceState(null, '', `/admin/reports?id=${report.id}`);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Unable to open this report.');
-    }
-  };
+  }, [loadReports, router]);
 
   const createReport = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -98,8 +86,7 @@ export default function SharedReportsPage() {
       setContent('');
       setSelectedDepartments([]);
       setNotice(`Report shared. ${response.notifications_created ?? 0} department notification(s) sent.`);
-      await loadReports(response.report_id);
-      window.history.replaceState(null, '', `/admin/reports?id=${response.report_id}`);
+      router.push(`/admin/reports/${response.report_id}`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to share this report.');
     } finally {
@@ -132,14 +119,14 @@ export default function SharedReportsPage() {
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(20rem,0.8fr)]">
         <section className="space-y-3" aria-label="Reports available to your department">
           <h2 className="text-lg font-bold text-slate-900">Reports available to you</h2>
-          {loading && reports.length === 0 && <p className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500">Loading reports…</p>}
-          {!loading && reports.length === 0 && <p className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500">No reports have been shared with you yet.</p>}
-          {reports.map((report) => (
-            <button
-              key={report.id}
-              type="button"
-              onClick={() => void openReport(report)}
-              className={`w-full rounded-xl border bg-white p-4 text-left shadow-sm transition hover:border-[#91aaa0] ${selectedReport?.id === report.id ? 'border-[#58736b]' : 'border-slate-200'}`}
+              {loading && reports.length === 0 && <p role="status" className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500">Loading reports…</p>}
+              {!loading && error && reports.length === 0 && <p className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500">Reports could not be loaded.</p>}
+              {!loading && !error && reports.length === 0 && <p className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500">No reports have been shared with you yet.</p>}
+              {reports.map((report) => (
+                <Link
+                  key={report.id}
+                  href={`/admin/reports/${report.id}`}
+                  className="block w-full rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-[#91aaa0]"
             >
               <span className="flex items-start justify-between gap-3">
                 <span>
@@ -152,20 +139,11 @@ export default function SharedReportsPage() {
                 {report.recipients.map((recipient) => <span key={recipient} className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold text-slate-600">{recipient}</span>)}
                 {report.is_author && <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-semibold text-blue-700">Created by you</span>}
               </span>
-            </button>
+            </Link>
           ))}
         </section>
 
-        <div className="space-y-6">
-          {selectedReport && (
-            <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#58736b]">View-only report</p>
-              <h2 className="mt-2 text-xl font-black text-slate-950">{selectedReport.title}</h2>
-              <p className="mt-1 text-xs text-slate-500">Prepared by {selectedReport.author_name} · {formatDate(selectedReport.created_at)}</p>
-              <div className="mt-4 whitespace-pre-wrap border-t border-slate-100 pt-4 text-sm leading-6 text-slate-700">{selectedReport.content}</div>
-            </article>
-          )}
-
+        <div>
           <form onSubmit={createReport} className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex items-center gap-2">
               <Share2 className="h-5 w-5 text-[#31584c]" />

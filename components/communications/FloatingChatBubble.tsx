@@ -4,7 +4,12 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ArrowLeft, ArrowUpRight, MessageCircle, Search, Send, Users, X } from 'lucide-react';
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { api } from '@/lib/api';
+import { fetchChatContacts, createChatConversation } from '@/lib/chat-api';
+import {
+  fetchConversationMessages,
+  markConversationRead,
+  sendConversationMessage,
+} from '@/lib/messages-api';
 import { useCommunications, type CommunicationConversation } from './CommunicationProvider';
 
 interface Contact {
@@ -16,11 +21,13 @@ interface Contact {
 
 interface ChatMessage {
   id: number;
+  conversation_id: number;
   sender_id: string;
   sender_role: string;
   sender_name: string;
   body: string;
   created_at: string;
+  pending?: boolean;
 }
 
 type PanelTab = 'inbox' | 'people';
@@ -44,6 +51,7 @@ export default function FloatingChatBubble() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [contactsLoading, setContactsLoading] = useState(true);
   const [selectedConversationId, setSelectedConversationId] = useState<number | null>(null);
+  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [loadingMessages, setLoadingMessages] = useState(false);
@@ -64,21 +72,19 @@ export default function FloatingChatBubble() {
   const lastMarkedMessageId = useRef(0);
   const rolePath = pathname.startsWith('/admin') ? '/admin' : pathname.startsWith('/lecturer') ? '/lecturer' : '/student';
   const selectedConversation = snapshot.conversations.find((conversation) => conversation.id === selectedConversationId) || null;
+  const threadOpen = selectedConversationId !== null;
+  const threadTitle = selectedConversation?.display_title || selectedContact?.name || 'Conversation';
   const filteredConversations = useMemo(() => snapshot.conversations.filter((conversation) =>
     `${conversation.display_title} ${conversation.last_message || ''}`.toLowerCase().includes(search.trim().toLowerCase()),
   ), [snapshot.conversations, search]);
-  const filteredContacts = useMemo(() => contacts.filter((contact) => {
-    const hasExistingConversation = snapshot.conversations.some((conversation) =>
-      conversation.direct_contact_key === `${contact.role}:${contact.id}`,
-    );
-    return !hasExistingConversation
-      && `${contact.name} ${contact.role} ${contact.email}`.toLowerCase().includes(search.trim().toLowerCase());
-  }), [contacts, search, snapshot.conversations]);
+  const filteredContacts = useMemo(() => contacts.filter((contact) =>
+    `${contact.name} ${contact.role} ${contact.email}`.toLowerCase().includes(search.trim().toLowerCase()),
+  ), [contacts, search]);
 
   useEffect(() => {
     if (!open || contactsLoaded.current) return;
     let active = true;
-    api.communications.contacts()
+    fetchChatContacts()
       .then((result: { contacts?: Contact[] }) => {
         if (active) {
           setContacts(Array.isArray(result.contacts) ? result.contacts : []);
@@ -105,14 +111,14 @@ export default function FloatingChatBubble() {
       if (!active || loading) return;
       loading = true;
       try {
-        const result = await api.communications.messages(selectedConversationId) as { messages?: ChatMessage[] };
+        const result = await fetchConversationMessages(selectedConversationId) as { messages?: ChatMessage[] };
         if (!active) return;
         const nextMessages = Array.isArray(result.messages) ? result.messages : [];
         setMessages(nextMessages);
         setPanelError('');
         const latestMessageId = nextMessages.reduce((latest, message) => Math.max(latest, message.id), 0);
         if (latestMessageId > lastMarkedMessageId.current) {
-          await api.communications.markRead(selectedConversationId);
+          await markConversationRead(selectedConversationId);
           lastMarkedMessageId.current = latestMessageId;
           await refresh();
         }
@@ -126,10 +132,15 @@ export default function FloatingChatBubble() {
         }
       }
     };
+    const refreshAfterSync = () => {
+      if (!loading) void poll();
+    };
     void poll();
+    window.addEventListener('rhema:communications-updated', refreshAfterSync);
     return () => {
       active = false;
       window.clearTimeout(timer);
+      window.removeEventListener('rhema:communications-updated', refreshAfterSync);
     };
   }, [open, refresh, selectedConversationId]);
 
@@ -143,6 +154,7 @@ export default function FloatingChatBubble() {
     setLoadingMessages(true);
     lastMarkedMessageId.current = 0;
     setMessages([]);
+    setSelectedContact(null);
     setSelectedConversationId(conversation.id);
   }
 
@@ -156,12 +168,13 @@ export default function FloatingChatBubble() {
       setLoadingMessages(true);
       lastMarkedMessageId.current = 0;
       setMessages([]);
+      setSelectedContact(contact);
       setSelectedConversationId(existing.id);
       return;
     }
     setLoadingMessages(true);
     try {
-      const result = await api.communications.createConversation({
+      const result = await createChatConversation({
         participants: [{ role: contact.role, id: contact.id }],
       }) as { conversation_id?: number | string };
       const conversationId = Number(result.conversation_id);
@@ -172,6 +185,7 @@ export default function FloatingChatBubble() {
       setActiveTab('inbox');
       lastMarkedMessageId.current = 0;
       setMessages([]);
+      setSelectedContact(contact);
       setSelectedConversationId(conversationId);
     } catch (cause) {
       setPanelError(cause instanceof Error ? cause.message : 'Unable to start a conversation.');
@@ -187,9 +201,9 @@ export default function FloatingChatBubble() {
     setSending(true);
     setPanelError('');
     try {
-      await api.communications.sendMessage({ conversation_id: selectedConversationId, body });
+      await sendConversationMessage({ conversation_id: selectedConversationId, body });
       setDraft('');
-      const result = await api.communications.messages(selectedConversationId) as { messages?: ChatMessage[] };
+      const result = await fetchConversationMessages(selectedConversationId) as { messages?: ChatMessage[] };
       const nextMessages = Array.isArray(result.messages) ? result.messages : [];
       setMessages(nextMessages);
       lastMarkedMessageId.current = nextMessages.reduce((latest, message) => Math.max(latest, message.id), 0);
@@ -203,6 +217,7 @@ export default function FloatingChatBubble() {
 
   function returnToList() {
     setSelectedConversationId(null);
+    setSelectedContact(null);
     setMessages([]);
     setPanelError('');
   }
@@ -213,25 +228,25 @@ export default function FloatingChatBubble() {
     <div className="fixed bottom-4 right-4 z-[60] hidden md:block sm:bottom-6 sm:right-6">
       {open && <section
         role="dialog"
-        aria-label={selectedConversation ? `Chat with ${selectedConversation.display_title}` : 'Quick messages'}
+        aria-label={threadOpen ? `Chat with ${threadTitle}` : 'Quick messages'}
         className="mb-3 flex h-[min(560px,calc(100dvh-6rem))] w-[min(390px,calc(100vw-2rem))] flex-col overflow-hidden rounded-[26px] border border-slate-200 bg-white shadow-2xl shadow-slate-950/20"
       >
         <header className="relative overflow-hidden bg-slate-950 px-5 pb-4 pt-4 text-white">
           <div aria-hidden="true" className="absolute -right-8 -top-12 h-36 w-36 rounded-full bg-indigo-500/30 blur-2xl" />
           <div className="relative flex items-start justify-between gap-3">
             <div className="flex min-w-0 items-start gap-2.5">
-              {selectedConversation && <button type="button" onClick={returnToList} aria-label="Back to conversations" className="mt-0.5 rounded-lg bg-white/10 p-1.5 transition hover:bg-white/20"><ArrowLeft size={16} /></button>}
+              {threadOpen && <button type="button" onClick={returnToList} aria-label="Back to conversations" className="mt-0.5 rounded-lg bg-white/10 p-1.5 transition hover:bg-white/20"><ArrowLeft size={16} /></button>}
               <div className="min-w-0">
                 <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-indigo-300">Rhema connect</p>
-                <h2 className="mt-1 truncate text-lg font-black">{selectedConversation?.display_title || 'Your conversations'}</h2>
-                <p className="mt-1 text-xs text-slate-300">{selectedConversation ? 'Send a message securely.' : 'Choose a conversation or find someone.'}</p>
+                <h2 className="mt-1 truncate text-lg font-black">{threadOpen ? threadTitle : 'Your conversations'}</h2>
+                <p className="mt-1 text-xs text-slate-300">{threadOpen ? 'Send a message securely.' : 'Choose a conversation or find someone.'}</p>
               </div>
             </div>
             <button type="button" onClick={() => setOpen(false)} aria-label="Close quick messages" className="rounded-full bg-white/10 p-2 text-white transition hover:bg-white/20">
               <X size={17} />
             </button>
           </div>
-          {!selectedConversation && <label className="relative mt-4 block">
+          {!threadOpen && <label className="relative mt-4 block">
             <Search aria-hidden="true" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               type="search"
@@ -244,7 +259,7 @@ export default function FloatingChatBubble() {
           </label>}
         </header>
 
-        {selectedConversation ? <>
+        {threadOpen ? <>
           <div ref={messagePane} className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-slate-50/70 px-4 py-4">
             {loadingMessages && !messages.length && <p role="status" className="pt-8 text-center text-xs text-slate-500">Loading conversation…</p>}
             {messages.map((message) => {
@@ -254,7 +269,7 @@ export default function FloatingChatBubble() {
                 <article className={`max-w-[88%] rounded-2xl px-3.5 py-2.5 ${isMine ? 'rounded-br-md bg-indigo-600 text-white' : 'rounded-bl-md border border-slate-100 bg-white text-slate-900 shadow-sm'}`}>
                   {!isMine && <p className="mb-1 text-[10px] font-bold text-indigo-700">{message.sender_name}</p>}
                   <p className="whitespace-pre-wrap break-words text-xs leading-5">{message.body}</p>
-                  <time className={`mt-1 block text-right text-[9px] ${isMine ? 'text-indigo-100' : 'text-slate-400'}`}>{formatTime(message.created_at)}</time>
+                  <time className={`mt-1 block text-right text-[9px] ${message.pending ? 'text-amber-600' : isMine ? 'text-indigo-100' : 'text-slate-400'}`}>{message.pending ? 'Queued to send' : formatTime(message.created_at)}</time>
                 </article>
               </div>;
             })}
@@ -321,7 +336,7 @@ export default function FloatingChatBubble() {
               </button>
             ))}
             {contactsLoading && activeTab === 'people' && <p role="status" className="px-4 py-8 text-center text-xs text-slate-500">Loading people…</p>}
-            {!contactsLoading && activeTab === 'people' && !filteredContacts.length && <p className="px-4 py-8 text-center text-xs text-slate-500">{search ? 'No people match your search.' : 'You already have a conversation with everyone available.'}</p>}
+            {!contactsLoading && activeTab === 'people' && !filteredContacts.length && <p className="px-4 py-8 text-center text-xs text-slate-500">{search ? 'No people match your search.' : 'No people are available to chat.'}</p>}
             {activeTab === 'inbox' && !filteredConversations.length && <div className="flex h-full flex-col items-center justify-center px-6 py-10 text-center">
               <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600"><MessageCircle size={20} /></span>
               <p className="mt-3 text-xs font-bold text-slate-800">{error ? 'Messages are unavailable' : search ? 'No matches found' : 'No conversations yet'}</p>
@@ -332,7 +347,7 @@ export default function FloatingChatBubble() {
           {panelError && <p role="alert" className="border-t border-rose-100 bg-rose-50 px-4 py-2 text-[11px] text-rose-700">{panelError}</p>}
         </>}
 
-        {!selectedConversation && <footer className="border-t border-slate-100 bg-slate-50 p-3">
+        {!threadOpen && <footer className="border-t border-slate-100 bg-slate-50 p-3">
           <Link href={`${rolePath}/messages`} onClick={() => setOpen(false)} className="flex items-center justify-between rounded-xl bg-indigo-600 px-4 py-3 text-xs font-bold text-white transition hover:bg-indigo-700">
             Open full inbox <ArrowUpRight size={15} />
           </Link>

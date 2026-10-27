@@ -15,6 +15,19 @@ interface ReportNotification {
   created_at: string;
 }
 
+function getReportHref(actionUrl: string) {
+  try {
+    const url = new URL(actionUrl, window.location.origin);
+    if (url.pathname === '/admin/reports') {
+      const reportId = Number(url.searchParams.get('id'));
+      if (Number.isSafeInteger(reportId) && reportId > 0) return `/admin/reports/${reportId}`;
+    }
+  } catch {
+    return actionUrl;
+  }
+  return actionUrl;
+}
+
 export default function SharedReportNotifications() {
   const router = useRouter();
   const [notifications, setNotifications] = useState<ReportNotification[]>([]);
@@ -85,7 +98,7 @@ export default function SharedReportNotifications() {
             {notifications.map((notification) => (
               <Link
                 key={notification.id}
-                href={notification.action_url}
+                href={getReportHref(notification.action_url)}
                 onClick={() => {
                   setOpen(false);
                   void markRead(notification);
