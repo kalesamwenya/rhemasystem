@@ -71,8 +71,8 @@ export default function LoginPage() {
         throw new Error('The sign-in service returned an invalid session. Please try again or contact the school office.');
       }
 
+      setAuthSession(response.access_token!, response.expires_in!, user.role);
       window.localStorage.setItem('rhema_user', JSON.stringify(user));
-      setAuthSession(response.access_token!, response.expires_in!);
       const requestedPath = new URLSearchParams(window.location.search).get('next');
       const destination = user.role === 'admin' && !requestedPath
         ? getAdminLandingPath(user.admin_role || '')
@@ -89,7 +89,7 @@ export default function LoginPage() {
     <main className="min-h-screen bg-slate-50 lg:grid lg:grid-cols-[1.08fr_0.92fr]">
       <section
         aria-label="Welcome to Rhema Bible Training Center"
-        className="relative isolate flex min-h-[340px] items-end overflow-hidden bg-blue-950 px-7 py-10 sm:px-10 lg:min-h-screen lg:px-16 lg:py-16"
+        className="relative isolate hidden min-h-screen items-end overflow-hidden bg-blue-950 px-7 py-10 lg:flex lg:px-16 lg:py-16"
       >
         <Image
           src="/login-study.jpg"
@@ -118,7 +118,7 @@ export default function LoginPage() {
         </div>
       </section>
 
-      <section className="relative flex min-h-[62vh] items-center justify-center px-5 py-10 sm:px-8 lg:min-h-screen lg:px-12">
+      <section className="relative flex min-h-screen items-center justify-center px-5 py-10 sm:px-8 lg:px-12">
         <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(234,179,8,0.1),transparent_38%),radial-gradient(ellipse_at_bottom_left,rgba(37,99,235,0.08),transparent_42%)]" />
         <div className="relative w-full max-w-md rounded-3xl border border-slate-100 bg-white p-7 shadow-xl shadow-slate-900/5 sm:p-10">
           <header className="text-center">

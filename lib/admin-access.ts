@@ -16,6 +16,7 @@ export type AdminModule =
   | 'store'
   | 'help-desk'
   | 'statistics'
+  | 'website-statistics'
   | 'analysis'
   | 'performance'
   | 'finance'
@@ -32,7 +33,7 @@ export type AdminModule =
 const allModules: AdminModule[] = [
   'dashboard', 'reports', 'admissions', 'partnerships', 'students', 'people', 'student-affairs', 'academics',
   'communications', 'contact-messages', 'chatbot', 'social-media', 'events', 'store', 'help-desk', 'tasks',
-  'statistics', 'analysis', 'performance', 'finance', 'budgets', 'assets', 'activity-requests', 'schedule', 'library', 'profile', 'settings', 'staff-access',
+  'statistics', 'website-statistics', 'analysis', 'performance', 'finance', 'budgets', 'assets', 'activity-requests', 'schedule', 'library', 'profile', 'settings', 'staff-access',
 ];
 
 const roleModules: Record<AdminRole, AdminModule[]> = {
@@ -82,6 +83,7 @@ export function canAccessAdminModule(roleValue: string, department: string, modu
   const role = normalizeAdminRole(roleValue);
   if (!role) return false;
   if (module === 'staff-access') return role === 'owner' || role === 'administrator' || role === 'it';
+  if (module === 'website-statistics') return role === 'owner' || role === 'administrator' || role === 'it';
   if (role === 'it') return true;
   if (module === 'budgets' || module === 'assets') return true;
   if (module === 'activity-requests') {
@@ -114,6 +116,7 @@ export function getAdminModuleForPath(pathname: string): AdminModule {
   if (pathname.startsWith('/admin/store')) return 'store';
   if (pathname.startsWith('/admin/help-desk')) return 'help-desk';
   if (pathname.startsWith('/admin/statistics')) return 'statistics';
+  if (pathname.startsWith('/admin/website-statistics')) return 'website-statistics';
   if (pathname.startsWith('/admin/analysis')) return 'analysis';
   if (pathname.startsWith('/admin/performance-logs')) return 'performance';
   if (pathname.startsWith('/admin/budgets')) return 'budgets';

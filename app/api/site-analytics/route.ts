@@ -59,8 +59,16 @@ async function handleRequest(request: Request) {
         return Response.json({ success: false, message: "The analytics event is too large." }, { status: 413 });
       }
       headers.set("Content-Type", "application/json");
-      const edgeForwardedFor = request.headers.get("x-vercel-forwarded-for");
-      const clientIp = edgeForwardedFor?.split(",").map((value) => value.trim()).find((value) => isIP(value));
+      const forwardedHeaders = [
+        request.headers.get("cf-connecting-ip"),
+        request.headers.get("x-vercel-forwarded-for"),
+        request.headers.get("x-real-ip"),
+        request.headers.get("x-forwarded-for"),
+      ];
+      const clientIp = forwardedHeaders
+        .flatMap((value) => value?.split(",") || [])
+        .map((value) => value.trim())
+        .find((value) => isIP(value));
       if (clientIp) headers.set("X-Analytics-Client-IP", clientIp);
     }
 
