@@ -172,7 +172,7 @@ export default function AdminWorkspaceMenu({
 
   const links = useMemo(() => {
     const role = admin.admin_role.toLowerCase();
-    const department = role === 'owner' || role === 'administrator'
+    const department = role === 'owner' || role === 'administrator' || role === 'it'
       ? 'director'
       : role;
     const candidates = [

@@ -20,7 +20,7 @@ interface AdminUserDropdownProps {
 export default function AdminUserDropdown({ isOpen, onToggle, admin, onSignOut }: AdminUserDropdownProps) {
   const [signOutError, setSignOutError] = useState<string | null>(null);
   const [isSigningOut, setIsSigningOut] = useState(false);
-  const isOwnerOrAdministrator = ['owner', 'administrator'].includes(admin.role.toLowerCase());
+  const isOwnerOrAdministrator = ['owner', 'administrator', 'it'].includes(admin.role.toLowerCase());
 
   async function handleSignOut() {
     setSignOutError(null);

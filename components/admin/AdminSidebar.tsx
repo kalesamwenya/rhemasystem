@@ -27,6 +27,7 @@ import {
   LogOut,
   MessageSquareText,
   Share2,
+  ShieldCheck,
   ShoppingBag,
   Sliders,
   Tag,
@@ -135,6 +136,7 @@ const navigationGroups: NavGroup[] = [
   {
     title: 'Systems',
     items: [
+      { title: 'Staff access', href: '/admin/staff-access', module: 'staff-access', icon: ShieldCheck },
       { title: 'Activity Logs', href: '/admin/performance-logs', module: 'performance', icon: Activity },
       { title: 'System Settings', href: '/admin/settings', module: 'settings', icon: Sliders },
     ],

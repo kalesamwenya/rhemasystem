@@ -1,4 +1,4 @@
-export type AdminRole = 'owner' | 'administrator' | 'finance' | 'academic' | 'registrar' | 'support' | 'operations';
+export type AdminRole = 'owner' | 'administrator' | 'it' | 'finance' | 'academic' | 'registrar' | 'support' | 'operations';
 export type AdminModule =
   | 'dashboard'
   | 'reports'
@@ -26,17 +26,19 @@ export type AdminModule =
   | 'library'
   | 'profile'
   | 'settings'
-  | 'tasks';
+  | 'tasks'
+  | 'staff-access';
 
 const allModules: AdminModule[] = [
   'dashboard', 'reports', 'admissions', 'partnerships', 'students', 'people', 'student-affairs', 'academics',
   'communications', 'contact-messages', 'chatbot', 'social-media', 'events', 'store', 'help-desk', 'tasks',
-  'statistics', 'analysis', 'performance', 'finance', 'budgets', 'assets', 'activity-requests', 'schedule', 'library', 'profile', 'settings',
+  'statistics', 'analysis', 'performance', 'finance', 'budgets', 'assets', 'activity-requests', 'schedule', 'library', 'profile', 'settings', 'staff-access',
 ];
 
 const roleModules: Record<AdminRole, AdminModule[]> = {
   owner: allModules,
   administrator: allModules,
+  it: allModules,
   finance: ['dashboard', 'reports', 'finance', 'budgets', 'assets', 'activity-requests', 'store', 'communications', 'profile', 'tasks'],
   academic: ['dashboard', 'reports', 'academics', 'budgets', 'assets', 'student-affairs', 'schedule', 'library', 'communications', 'profile', 'tasks'],
   registrar: ['dashboard', 'reports', 'admissions', 'partnerships', 'students', 'people', 'events', 'budgets', 'assets', 'student-affairs', 'communications', 'profile', 'tasks'],
@@ -44,7 +46,7 @@ const roleModules: Record<AdminRole, AdminModule[]> = {
   operations: ['dashboard', 'reports', 'events', 'budgets', 'assets', 'schedule', 'tasks', 'profile'],
 };
 
-const departmentAliases: Record<Exclude<AdminRole, 'owner' | 'administrator'>, string[]> = {
+const departmentAliases: Record<Exclude<AdminRole, 'owner' | 'administrator' | 'it'>, string[]> = {
   finance: ['finance', 'financial', 'account', 'accounts', 'bursar', 'payments'],
   academic: ['academic', 'academics', 'education', 'lecturer', 'faculty', 'dean'],
   registrar: ['registrar', 'admissions', 'admission', 'records', 'enrollment', 'enrolment', 'student affairs', 'student services'],
@@ -53,7 +55,7 @@ const departmentAliases: Record<Exclude<AdminRole, 'owner' | 'administrator'>, s
 };
 
 function departmentMatchesRole(department: string, role: AdminRole): boolean {
-  if (role === 'owner' || role === 'administrator') return true;
+  if (role === 'owner' || role === 'administrator' || role === 'it') return true;
   const normalized = department.trim().toLowerCase().replace(/[_-]+/g, ' ');
   if (!normalized) return false;
   const matchingRoles = (Object.keys(departmentAliases) as Array<keyof typeof departmentAliases>)
@@ -79,6 +81,8 @@ export function normalizeAdminRole(value: string): AdminRole | null {
 export function canAccessAdminModule(roleValue: string, department: string, module: AdminModule): boolean {
   const role = normalizeAdminRole(roleValue);
   if (!role) return false;
+  if (module === 'staff-access') return role === 'owner' || role === 'administrator' || role === 'it';
+  if (role === 'it') return true;
   if (module === 'budgets' || module === 'assets') return true;
   if (module === 'activity-requests') {
     return role === 'owner' || role === 'administrator'
@@ -93,6 +97,7 @@ export function canAccessAdminModule(roleValue: string, department: string, modu
 
 export function getAdminModuleForPath(pathname: string): AdminModule {
   if (pathname === '/admin') return 'dashboard';
+  if (pathname.startsWith('/admin/staff-access')) return 'staff-access';
   if (pathname.startsWith('/admin/reports')) return 'reports';
   if (pathname.startsWith('/admin/partnerships') || pathname.startsWith('/admin/partner-applications')) return 'partnerships';
   if (pathname.startsWith('/admin/admissions')) return 'admissions';

@@ -23,7 +23,7 @@ export default function AdminHeader({ onMenuToggle, isMobileSidebarOpen, isDeskt
   const containerRef = useRef<HTMLDivElement>(null);
   const canViewCommunications = canAccessAdminModule(admin.admin_role, admin.department, 'communications');
   const canViewReportNotifications = canAccessAdminModule(admin.admin_role, admin.department, 'reports');
-  const canViewGlobalSearch = ['owner', 'administrator'].includes(admin.admin_role.toLowerCase());
+  const canViewGlobalSearch = ['owner', 'administrator', 'it'].includes(admin.admin_role.toLowerCase());
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {

@@ -103,7 +103,7 @@ const departmentTitles: Record<string, string> = {
 };
 
 function departmentForRole(role: string): string | null {
-  if (role === 'owner' || role === 'administrator') return 'director';
+  if (role === 'owner' || role === 'administrator' || role === 'it') return 'director';
   return departmentTitles[role] ? role : null;
 }
 
