@@ -230,14 +230,9 @@ export default function AdminDashboard() {
     const timestamp = record.created_at ?? record.createdAt;
     return typeof timestamp === 'string' && !Number.isNaN(new Date(timestamp.replace(' ', 'T')).getTime());
   }));
-  const today = new Date();
-  const firstWeekday = new Date(today.getFullYear(), today.getMonth(), 1).getDay();
-  const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-  const calendarCells = [...Array(firstWeekday).fill(null), ...Array.from({ length: daysInMonth }, (_, index) => index + 1)];
-
   return (
     <main className="pb-8">
-      <div className="grid items-start gap-5 2xl:grid-cols-[minmax(0,1fr)_18rem]">
+      <div className="grid items-start gap-5">
         <div className="min-w-0 space-y-5">
           <header className="relative isolate overflow-hidden rounded-3xl bg-[#10283a] px-5 py-6 text-white shadow-lg shadow-slate-900/10 sm:px-8 sm:py-8">
             <div aria-hidden="true" className="absolute -right-12 -top-28 -z-10 h-72 w-72 rounded-full border-[34px] border-white/10" />
@@ -410,43 +405,6 @@ export default function AdminDashboard() {
           )}
         </div>
 
-        <aside className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-1">
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-red-800">Today</p>
-                <h2 className="mt-1 font-bold text-slate-900">{today.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</h2>
-              </div>
-              <CalendarDays className="h-5 w-5 text-[#0f4c5c]" />
-            </div>
-            <div className="grid grid-cols-7 gap-y-2 text-center">
-              {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, index) => <span key={`${day}-${index}`} className="pb-1 text-[10px] font-bold text-slate-600">{day}</span>)}
-              {calendarCells.map((day, index) => day
-                ? <span key={index} className={`mx-auto flex h-7 w-7 items-center justify-center rounded-full text-[11px] ${day === today.getDate() ? 'bg-[#10283a] font-bold text-white' : 'text-slate-700'}`}>{day}</span>
-                : <span key={`blank-${index}`} />)}
-            </div>
-            <p className="mt-4 border-t border-slate-200 pt-3 text-xs text-slate-700">Use your department schedule for class and event details.</p>
-          </section>
-
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:col-span-2 2xl:col-span-1">
-            <div className="mb-3 flex items-center justify-between">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-600">Get started</p>
-                <h2 className="mt-1 font-bold text-slate-900">Quick links</h2>
-              </div>
-              <ArrowUpRight className="h-4 w-4 text-red-800" />
-            </div>
-            <div className="divide-y divide-slate-100">
-              {accessibleLinks.slice(0, 4).map((item) => (
-                <Link key={`quick-${item.href}`} href={item.href} className="group flex items-center justify-between gap-3 py-3 text-sm font-semibold text-slate-700 transition hover:text-[#0f4c5c] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f4c5c]">
-                  <span className="truncate">{item.label}</span>
-                  <ArrowUpRight className="h-4 w-4 shrink-0 text-slate-500 transition group-hover:text-red-800" />
-                </Link>
-              ))}
-              {!accessibleLinks.length && <p className="py-3 text-xs font-medium text-slate-700">Department workspaces will appear here when available.</p>}
-            </div>
-          </section>
-        </aside>
       </div>
     </main>
   );

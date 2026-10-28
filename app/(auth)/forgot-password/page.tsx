@@ -38,7 +38,7 @@ export default function ForgotPasswordPage() {
     }
   };
 
-  const loginPath = accountType === 'admin' ? '/admin/login' : accountType === 'lecturer' ? '/lecturer/login' : '/login';
+  const loginPath = '/login';
 
   return (
     <div className="flex min-h-screen w-full items-center justify-center bg-slate-50 px-4 py-12 sm:px-6 lg:px-8">

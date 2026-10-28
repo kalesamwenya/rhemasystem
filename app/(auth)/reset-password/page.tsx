@@ -26,7 +26,7 @@ export default function ResetPasswordPage() {
     return () => window.clearTimeout(timer);
   }, []);
 
-  const loginPath = accountType === 'admin' ? '/admin/login' : accountType === 'lecturer' ? '/lecturer/login' : '/login';
+  const loginPath = '/login';
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

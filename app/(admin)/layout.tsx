@@ -79,7 +79,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         if (!active) return;
         if (error.status === 401) {
           clearAuthSession();
-          router.replace('/admin/login');
+          router.replace('/login');
           return;
         }
         setAuthError(error.message || 'Unable to verify the administrator session.');
@@ -93,7 +93,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   const signOut = useCallback(async () => {
     await api.logout();
     clearAuthSession();
-    router.replace('/admin/login');
+    router.replace('/login');
   }, [router]);
 
   const closeSidebar = useCallback(() => {

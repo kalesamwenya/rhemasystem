@@ -20,7 +20,7 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 ## Environment configuration
 
-The portal reads local Next.js settings from `.env.local`; start with `.env.example`. `NEXT_PUBLIC_API_URL` selects the PHP API origin. Development defaults to `http://localruntest.com`; production defaults to `https://firebrick-snail-772746.hostingersite.com` and will not use `localruntest.com` if the development URL is present in the build environment. Optional Moodle settings are server-side only; keep `MOODLE_TOKEN` private and never prefix it with `NEXT_PUBLIC_`.
+The portal reads local Next.js settings from `.env.local`; start with `.env.example`. `NEXT_PUBLIC_API_URL` selects the PHP API origin. Development and production default to `https://firebrick-snail-772746.hostingersite.com`. A configured `localruntest.com` URL is redirected to the production API host. Optional Moodle settings are server-side only; keep `MOODLE_TOKEN` private and never prefix it with `NEXT_PUBLIC_`.
 
 The PHP API reads its settings from the PHP hosting environment, not from a `.env` file. Use `../php-api/.env.example` as the variable checklist and configure values in PHP-FPM, Apache, or the deployment platform. Do not commit production credentials.
 

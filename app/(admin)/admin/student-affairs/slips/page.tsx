@@ -141,7 +141,7 @@ export default function StudentAffairsSlipsPage() {
           <Link href="/admin/student-affairs" className="mb-3 inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-red-700 print:hidden"><ArrowLeft className="h-4 w-4" />Student Affairs dashboard</Link>
           <p className="text-[11px] font-black uppercase tracking-[0.22em] text-red-600">Student Affairs · QR slips</p>
           <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-900">Code violations & late slips</h1>
-          <p className="mt-2 max-w-2xl text-sm text-slate-500">Print the general code-violation QR or a session-specific late-slip QR. Review student records and term flags below.</p>
+          <p className="mt-2 max-w-2xl text-sm text-slate-500">Print the general slip QR codes. Students choose their academic term or currently running class session in the form. Review student records and term flags below.</p>
         </div>
         <div className="flex flex-wrap gap-2 print:hidden">
           <button type="button" onClick={() => window.print()} className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white hover:bg-slate-800"><Printer className="h-4 w-4" />Print QR codes</button>
@@ -165,20 +165,13 @@ export default function StudentAffairsSlipsPage() {
           <div className="rounded-xl bg-red-50 p-2.5 text-red-800"><QrCode className="h-5 w-5" /></div>
           <div>
             <h2 className="text-xl font-black text-slate-900">QR codes to display or print</h2>
-            <p className="mt-1 text-sm text-slate-500">Each late-slip QR is linked to one scheduled session and cannot submit for another class.</p>
+            <p className="mt-1 text-sm text-slate-500">The late-slip QR opens a shared form. Students verify their number and choose a session currently in progress for one of their active enrollments.</p>
           </div>
         </div>
         {loading ? <div className="flex items-center gap-2 py-8 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" />Loading session QR codes…</div> : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-3">
             <QrCard value={`${baseUrl}/slips/code-violation`} label="General code-violation slip" />
-            {(data?.sessions ?? []).map((session) => (
-              <QrCard
-                key={session.session_id}
-                value={`${baseUrl}/slips/late-slip?session_id=${encodeURIComponent(session.session_id)}`}
-                label={`${session.course_name} · ${formatDate(session.session_date)} · ${session.start_time}`}
-              />
-            ))}
-            {!data?.sessions.length && <p className="col-span-full rounded-xl bg-slate-50 p-5 text-sm text-slate-500">No class sessions are scheduled from today through the next 30 days.</p>}
+            <QrCard value={`${baseUrl}/slips/late-slip`} label="General late-slip form — students choose their current session" />
           </div>
         )}
       </section>

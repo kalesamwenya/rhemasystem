@@ -52,6 +52,7 @@ export default function LateSlipPage() {
   const formRef = useRef<HTMLFormElement>(null);
   const [sessionId, setSessionId] = useState('');
   const [session, setSession] = useState<SessionInfo | null>(null);
+  const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [studentId, setStudentId] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -61,7 +62,7 @@ export default function LateSlipPage() {
   const [administrationAuthorization, setAdministrationAuthorization] = useState('');
   const [arrivalTime, setArrivalTime] = useState(() => localTime());
   const [step, setStep] = useState(0);
-  const [loadingSession, setLoadingSession] = useState(true);
+  const [loadingSessions, setLoadingSessions] = useState(false);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
 
@@ -70,45 +71,35 @@ export default function LateSlipPage() {
     setFirstName(nameParts[0] || '');
     setLastName(nameParts.length > 1 ? nameParts[nameParts.length - 1] : '');
     setEmail(student.email || '');
+    setLoadingSessions(true);
   }, []);
   const studentLookup = usePublicSlipStudent(studentId, fillStudentDetails);
 
   useEffect(() => {
     const clock = window.setInterval(() => setArrivalTime(localTime()), 30000);
-    let active = true;
-    const timer = window.setTimeout(() => {
-      const id = new URLSearchParams(window.location.search).get('session_id')?.trim() || '';
-      setSessionId(id);
-      if (!id) {
-        setFeedback({
-          type: 'error',
-          title: 'Invalid class QR code',
-          message: 'This QR code does not include a class session. Scan the QR code displayed for your class.',
-        });
-        setLoadingSession(false);
-        return;
-      }
-      api.attendance.publicSlipSession(id)
-        .then((response: { data?: SessionInfo }) => {
-          if (!active) return;
-          if (!response.data) throw new Error('The class session could not be found.');
-          setSession(response.data);
-        })
-        .catch((cause: unknown) => {
-          if (active) setFeedback({
-            type: 'error',
-            title: 'Unable to load class session',
-            message: cause instanceof Error ? cause.message : 'Unable to load this class session.',
-          });
-        })
-        .finally(() => { if (active) setLoadingSession(false); });
-    }, 0);
-    return () => {
-      active = false;
-      window.clearTimeout(timer);
-      window.clearInterval(clock);
-    };
+    return () => window.clearInterval(clock);
   }, []);
+
+  useEffect(() => {
+    if (studentLookup.state !== 'found' || !studentId.trim()) return;
+
+    let active = true;
+    api.attendance.publicSlipSessions(studentId.trim())
+      .then((response: { data?: { sessions?: SessionInfo[] } }) => {
+        if (!active) return;
+        if (!Array.isArray(response.data?.sessions)) throw new Error('The current session list was incomplete.');
+        setSessions(response.data.sessions);
+      })
+      .catch((cause: unknown) => {
+        if (active) setFeedback({
+          type: 'error',
+          title: 'Unable to load current sessions',
+          message: cause instanceof Error ? cause.message : 'Unable to load your current class sessions.',
+        });
+      })
+      .finally(() => { if (active) setLoadingSessions(false); });
+    return () => { active = false; };
+  }, [studentId, studentLookup.state]);
 
   const validateStep = (index: number) => {
     const panel = formRef.current?.querySelector<HTMLElement>(`[data-wizard-step="${index}"]`);
@@ -131,8 +122,8 @@ export default function LateSlipPage() {
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!validateStep(step)) return;
-    if (!session) {
-      setFeedback({ type: 'error', title: 'Class session unavailable', message: 'Reload the QR form or contact Student Affairs.' });
+    if (!session || !sessionId) {
+      setFeedback({ type: 'error', title: 'Choose your current class session', message: 'Select the class session taking place now before continuing.' });
       return;
     }
     setSaving(true);
@@ -190,14 +181,14 @@ export default function LateSlipPage() {
           <div className="mb-4 inline-flex rounded-2xl bg-white/10 p-3 text-sky-300"><Clock3 className="h-6 w-6" /></div>
           <p className="text-xs font-black uppercase tracking-[0.2em] text-sky-300">Student Affairs · Class attendance</p>
           <h1 className="mt-2 text-3xl font-black tracking-tight">Late slip</h1>
-          <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">Complete the wizard to record your arrival. Your lateness is calculated using the scheduled class start and the school server time.</p>
+          <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">Enter your student number, choose the class session taking place now, and record your arrival.</p>
         </header>
 
         {session && (
           <section className="mb-5 rounded-2xl border border-sky-200 bg-sky-50 p-5 text-sky-950">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="text-xs font-black uppercase tracking-wider text-sky-800">Scanned class session</p>
+                <p className="text-xs font-black uppercase tracking-wider text-sky-800">Selected current class session</p>
                 <h2 className="mt-1 text-lg font-black">{session.course_name}</h2>
                 <p className="mt-1 text-sm">{session.cohort_name} · {session.session_date} · {session.start_time}–{session.end_time}</p>
               </div>
@@ -222,17 +213,13 @@ export default function LateSlipPage() {
             </ol>
           </div>
 
-          {loadingSession ? (
-            <div className="flex items-center gap-3 p-8 text-sm font-semibold text-slate-600"><Loader2 className="h-5 w-5 animate-spin text-sky-700" />Loading class session…</div>
-          ) : (
-            <>
-              <section data-wizard-step={0} hidden={step !== 0} className="space-y-5 p-5 sm:p-8">
+          <section data-wizard-step={0} hidden={step !== 0} className="space-y-5 p-5 sm:p-8">
                 <div>
                   <h2 className="text-xl font-black text-slate-950">Student details</h2>
-                  <p className="mt-1 text-sm text-slate-500">Enter the details that match your active student record.</p>
+                  <p className="mt-1 text-sm text-slate-500">Enter your active student details, then select the class session taking place now.</p>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <label className={labelClass}>Student number <span className="text-red-600">*</span><input required maxLength={50} autoComplete="off" value={studentId} onChange={(event) => { setStudentId(event.target.value); setFirstName(''); setLastName(''); setEmail(''); }} className={inputClass} />
+                  <label className={labelClass}>Student number <span className="text-red-600">*</span><input required maxLength={50} autoComplete="off" value={studentId} onChange={(event) => { setStudentId(event.target.value); setFirstName(''); setLastName(''); setEmail(''); setSessionId(''); setSession(null); setSessions([]); setLoadingSessions(false); }} className={inputClass} />
                     {studentLookup.state === 'loading' && <span className="mt-1 block text-xs font-medium text-slate-500">Looking up student…</span>}
                     {studentLookup.state === 'found' && <span className="mt-1 block text-xs font-medium text-emerald-700">Student record found. Details filled in.</span>}
                     {(studentLookup.state === 'not-found' || studentLookup.state === 'error') && <span role="status" className="mt-1 block text-xs font-medium text-red-700">{studentLookup.error}</span>}
@@ -240,10 +227,41 @@ export default function LateSlipPage() {
                   <label className={labelClass}>Surname <span className="text-red-600">*</span><input required maxLength={120} autoComplete="family-name" value={lastName} onChange={(event) => setLastName(event.target.value)} className={inputClass} /></label>
                   <label className={labelClass}>First name <span className="text-red-600">*</span><input required maxLength={120} autoComplete="given-name" value={firstName} onChange={(event) => setFirstName(event.target.value)} className={inputClass} /></label>
                   <label className={labelClass}>Email <span className="text-red-600">*</span><input required type="email" maxLength={255} autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} className={inputClass} /></label>
+                  <label className={labelClass}>Current class session <span className="text-red-600">*</span>
+                    <select
+                      required
+                      value={sessionId}
+                      disabled={studentLookup.state !== 'found' || loadingSessions || sessions.length === 0}
+                      onChange={(event) => {
+                        const selected = sessions.find((item) => item.id === event.target.value) ?? null;
+                        setSessionId(selected?.id ?? '');
+                        setSession(selected);
+                      }}
+                      className={inputClass}
+                    >
+                      <option value="">
+                        {studentLookup.state !== 'found'
+                          ? 'Verify your student number first'
+                          : loadingSessions
+                            ? 'Loading sessions happening now…'
+                            : sessions.length
+                              ? 'Choose your current class session'
+                              : 'No enrolled class session is in progress'}
+                      </option>
+                      {sessions.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.course_name} · {item.cohort_name} · {item.start_time}–{item.end_time}
+                        </option>
+                      ))}
+                    </select>
+                    {studentLookup.state === 'found' && !loadingSessions && sessions.length === 0 && (
+                      <span className="mt-1 block text-xs font-medium text-amber-800">There are no currently running sessions linked to your active course enrollment.</span>
+                    )}
+                  </label>
                 </div>
-              </section>
+          </section>
 
-              <section data-wizard-step={1} hidden={step !== 1} className="space-y-5 p-5 sm:p-8">
+          <section data-wizard-step={1} hidden={step !== 1} className="space-y-5 p-5 sm:p-8">
                 <div>
                   <h2 className="text-xl font-black text-slate-950">Reason and audio acknowledgement</h2>
                   <p className="mt-1 text-sm text-slate-500">Tell us why you are late and acknowledge the session-audio policy.</p>
@@ -261,9 +279,9 @@ export default function LateSlipPage() {
                     ))}
                   </div>
                 </fieldset>
-              </section>
+          </section>
 
-              <section data-wizard-step={2} hidden={step !== 2} className="space-y-5 p-5 sm:p-8">
+          <section data-wizard-step={2} hidden={step !== 2} className="space-y-5 p-5 sm:p-8">
                 <div>
                   <h2 className="text-xl font-black text-slate-950">Administration authorization</h2>
                   <p className="mt-1 text-sm text-slate-500">Add the staff name if already authorized, then review before submitting.</p>
@@ -281,9 +299,9 @@ export default function LateSlipPage() {
                   <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
                   <p>If you are five minutes or more late, the required session audio must be purchased. The system will notify your student account and calculate this from server time.</p>
                 </div>
-              </section>
+          </section>
 
-              <div className="flex items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:px-8">
+          <div className="flex items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:px-8">
                 <button type="button" onClick={() => setStep((current) => Math.max(0, current - 1))} disabled={step === 0 || saving} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50">
                   <ArrowLeft className="h-4 w-4" />Previous
                 </button>
@@ -296,14 +314,12 @@ export default function LateSlipPage() {
                     {saving ? <><Loader2 className="h-4 w-4 animate-spin" />Submitting…</> : <>Submit slip<CheckCircle2 className="h-4 w-4" /></>}
                   </button>
                 )}
-              </div>
-            </>
-          )}
+          </div>
         </form>
 
         <div className="mt-4 flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-xs leading-5 text-slate-600 shadow-sm">
           <Clock3 className="mt-0.5 h-4 w-4 shrink-0 text-sky-800" />
-          <p>The session schedule and server time determine your lateness. Slip submissions are limited to actively enrolled students during the class session.</p>
+          <p>Only currently running sessions from your active course enrollments are selectable. The school server checks the selected session and calculates your lateness.</p>
         </div>
       </div>
       {feedback && (

@@ -38,7 +38,8 @@ type SlipResponse = {
   };
 };
 
-type OptionsResponse = { data?: { cohorts: string[] } };
+type AcademicTerm = { term_id: number; start_date: string; end_date: string };
+type OptionsResponse = { data?: { cohorts: string[]; academic_terms: AcademicTerm[] } };
 
 function localDateTime() {
   const now = new Date();
@@ -53,6 +54,8 @@ export default function CodeViolationSlipPage() {
   const [lastName, setLastName] = useState('');
   const [cohort, setCohort] = useState('');
   const [cohorts, setCohorts] = useState<string[]>([]);
+  const [termId, setTermId] = useState('');
+  const [academicTerms, setAcademicTerms] = useState<AcademicTerm[]>([]);
   const [date, setDate] = useState(() => localDateTime().date);
   const [time, setTime] = useState(() => localDateTime().time);
   const [violations, setViolations] = useState<string[]>([]);
@@ -84,14 +87,15 @@ export default function CodeViolationSlipPage() {
     api.attendance.publicSlipOptions()
       .then((response: OptionsResponse) => {
         if (!active) return;
-        if (!response.data?.cohorts) throw new Error('The slip options response was incomplete.');
+        if (!response.data?.cohorts || !Array.isArray(response.data.academic_terms)) throw new Error('The slip options response was incomplete.');
         setCohorts(response.data.cohorts);
+        setAcademicTerms(response.data.academic_terms);
       })
       .catch((cause: unknown) => {
         if (active) setFeedback({
           type: 'error',
           title: 'Unable to load form options',
-          message: cause instanceof Error ? cause.message : 'Unable to load cohort options.',
+          message: cause instanceof Error ? cause.message : 'Unable to load slip options.',
         });
       })
       .finally(() => { if (active) setLoadingOptions(false); });
@@ -149,6 +153,7 @@ export default function CodeViolationSlipPage() {
         first_name: firstName.trim(),
         last_name: lastName.trim(),
         cohort_name: cohort,
+        term_id: Number(termId),
         incident_date: date,
         incident_time: time,
         violation_codes: violations,
@@ -226,8 +231,23 @@ export default function CodeViolationSlipPage() {
                   {cohorts.map((option) => <option key={option} value={option}>{option}</option>)}
                 </select>
               </label>
-              <label className={labelClass}>Incident date <span className="text-red-600">*</span><input required type="date" value={date} onChange={(event) => setDate(event.target.value)} className={inputClass} /></label>
+              <label className={labelClass}>Incident date <span className="text-red-600">*</span><input required type="date" value={date} onChange={(event) => {
+                const nextDate = event.target.value;
+                setDate(nextDate);
+                const selectedTerm = academicTerms.find((term) => String(term.term_id) === termId);
+                if (selectedTerm && (nextDate < selectedTerm.start_date || nextDate > selectedTerm.end_date)) setTermId('');
+              }} className={inputClass} /></label>
               <label className={labelClass}>Incident time <span className="text-red-600">*</span><input required type="time" value={time} onChange={(event) => setTime(event.target.value)} className={inputClass} /></label>
+              <label className={labelClass}>Academic session <span className="text-red-600">*</span>
+                <select required value={termId} onChange={(event) => setTermId(event.target.value)} disabled={loadingOptions || academicTerms.length === 0} className={inputClass}>
+                  <option value="">{loadingOptions ? 'Loading academic sessions…' : 'Choose the session for this incident'}</option>
+                  {academicTerms.map((term) => (
+                    <option key={term.term_id} value={term.term_id} disabled={date < term.start_date || date > term.end_date}>
+                      Term {term.term_id} · {term.start_date} to {term.end_date}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
           </section>
 

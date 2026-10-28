@@ -799,19 +799,19 @@ export default function MessageCenter() {
   return (
     <>
     <section className="relative flex h-[min(78vh,900px)] min-h-[560px] overflow-hidden rounded-[26px] border border-slate-200 bg-white shadow-xl shadow-slate-900/5">
-      <aside className={`h-full w-full shrink-0 flex-col border-slate-200 bg-white md:w-[280px] md:border-r ${sidebarOpen ? 'flex' : 'hidden md:flex'}`}>
-        <div className="border-b border-slate-100 p-4">
+      <aside className={`h-full w-full shrink-0 flex-col border-slate-200 bg-white md:w-[300px] md:border-r xl:w-[320px] ${sidebarOpen ? 'flex' : 'hidden md:flex'}`}>
+        <div className="border-b border-slate-200/80 bg-gradient-to-b from-slate-50/80 to-white p-4 sm:p-5">
           <div className="flex items-center justify-between gap-2">
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-600">Communications</p>
-              <h1 className="mt-1 text-lg font-black tracking-tight text-slate-950">Messages</h1>
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-indigo-600">Communications</p>
+              <h1 className="mt-1 text-xl font-black tracking-tight text-slate-950">Messages</h1>
             </div>
             {isAdmin && (
               <select
                 aria-label="Chat category"
                 value={activeAdminTab}
                 onChange={(event) => setActiveAdminTab(event.target.value as AdminChatTab)}
-                className="min-w-0 rounded-xl border border-slate-200 bg-white px-2 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-indigo-400"
+                className="h-10 min-w-0 max-w-[130px] rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
               >
                 {Object.entries(adminTabLabels)
                   .filter(([value]) => value !== 'student' || canChatWithStudents)
@@ -821,7 +821,7 @@ export default function MessageCenter() {
           </div>
           <label className="relative mt-4 block">
             <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search people or messages" aria-label="Search chats or people" className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-sm outline-none transition focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-100" />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search people or messages" aria-label="Search chats or people" className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-sm shadow-sm outline-none transition placeholder:text-slate-400 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100" />
           </label>
           <div className="mt-3 grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1" aria-label="Message views">
             {([
@@ -833,20 +833,21 @@ export default function MessageCenter() {
                 type="button"
                 aria-pressed={activeListTab === tab}
                 onClick={() => setActiveListTab(tab)}
-                className={`flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-bold transition ${activeListTab === tab ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                className={`flex h-10 items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1 ${activeListTab === tab ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:bg-white/60 hover:text-slate-800'}`}
               >
                 {label}
-                {tab === 'inbox' && snapshot.unread_messages > 0 && <span className="rounded-full bg-indigo-600 px-1.5 py-0.5 text-[9px] text-white">{snapshot.unread_messages > 99 ? '99+' : snapshot.unread_messages}</span>}
-                {tab === 'explore' && <span className="text-[10px] opacity-70">{count}</span>}
+                <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${activeListTab === tab ? 'bg-slate-100 text-slate-600' : 'bg-slate-200/70 text-slate-500'}`}>{count}</span>
+                {tab === 'inbox' && snapshot.unread_messages > 0 && <span className="rounded-full bg-indigo-600 px-1.5 py-0.5 text-[9px] font-bold text-white">{snapshot.unread_messages > 99 ? '99+' : snapshot.unread_messages}</span>}
               </button>
             ))}
           </div>
-          <div className="mt-3 flex items-center justify-between gap-2">
-            <button type="button" onClick={() => setChatFilter((current) => current === 'all' ? 'unread' : 'all')} aria-pressed={chatFilter === 'unread'} className={`rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition ${chatFilter === 'unread' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-500 hover:bg-slate-100'}`}>
-              {chatFilter === 'unread' ? 'Showing unread' : 'Unread only'}
+          <div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+            <button type="button" disabled={activeListTab !== 'inbox'} onClick={() => setChatFilter((current) => current === 'all' ? 'unread' : 'all')} aria-pressed={chatFilter === 'unread'} title={activeListTab === 'inbox' ? 'Filter conversations to unread only' : 'Switch to Inbox to filter unread conversations'} className={`inline-flex h-10 min-w-0 items-center justify-center gap-2 rounded-xl border px-3 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${chatFilter === 'unread' ? 'border-indigo-200 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>
+              <Bell aria-hidden="true" size={14} />
+              {chatFilter === 'unread' ? 'Unread only · On' : 'Unread only'}
             </button>
-            <button type="button" onClick={() => { setPageError(''); setGroupDialogOpen(true); }} className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-2.5 py-1.5 text-[11px] font-bold text-white shadow-sm transition hover:bg-indigo-700">
-              <Plus size={13} /> New group
+            <button type="button" onClick={() => { setPageError(''); setGroupDialogOpen(true); }} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-indigo-700 px-3 text-xs font-bold text-white shadow-sm shadow-indigo-900/10 transition hover:bg-indigo-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2">
+              <Plus aria-hidden="true" size={15} /> New group
             </button>
           </div>
         </div>
@@ -868,7 +869,8 @@ export default function MessageCenter() {
           {chatListItems.map((item) => {
             if (item.kind === 'conversation') {
               const { conversation } = item;
-              return <button key={`conversation:${conversation.id}`} type="button" onClick={() => { clearMessageSearch(); setMessages([]); setSelectedContact(null); selectConversation(conversation.id); showSelectedChat(); }} className={`flex w-full items-start gap-3 border-b border-slate-100 p-3.5 text-left transition hover:bg-slate-50 ${selectedId === conversation.id ? 'bg-indigo-50/80' : ''}`}>
+              return <button key={`conversation:${conversation.id}`} type="button" onClick={() => { clearMessageSearch(); setMessages([]); setSelectedContact(null); selectConversation(conversation.id); showSelectedChat(); }} className={`relative flex w-full items-start gap-3 border-b border-slate-100 p-3.5 text-left transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 ${selectedId === conversation.id ? 'bg-indigo-50/80' : ''}`}>
+                {selectedId === conversation.id && <span aria-hidden="true" className="absolute inset-y-0 left-0 w-1 rounded-r-full bg-indigo-600" />}
                 <span aria-hidden="true" className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-xs font-bold ${conversation.conversation_type === 'group' ? 'bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-sm' : 'bg-indigo-100 text-indigo-800'}`}>{getInitials(conversation.display_title)}</span>
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center justify-between gap-2">
@@ -882,7 +884,8 @@ export default function MessageCenter() {
             }
             const { contact } = item;
             const key = `${contact.role}:${contact.id}`;
-            return <button key={`contact:${key}`} type="button" disabled={busyContact === key} onClick={() => void openContact(contact)} className={`flex w-full items-center gap-3 border-b border-slate-100 p-3.5 text-left transition hover:bg-slate-50 disabled:opacity-60 ${selectedContact?.role === contact.role && selectedContact.id === contact.id ? 'bg-indigo-50' : ''}`}>
+            return <button key={`contact:${key}`} type="button" disabled={busyContact === key} onClick={() => void openContact(contact)} className={`relative flex w-full items-center gap-3 border-b border-slate-100 p-3.5 text-left transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 disabled:opacity-60 ${selectedContact?.role === contact.role && selectedContact.id === contact.id ? 'bg-indigo-50' : ''}`}>
+            {selectedContact?.role === contact.role && selectedContact.id === contact.id && <span aria-hidden="true" className="absolute inset-y-0 left-0 w-1 rounded-r-full bg-indigo-600" />}
             <span aria-hidden="true" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-xs font-bold text-slate-700">{getInitials(contact.name)}</span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-semibold text-slate-800">{contact.name}</span>

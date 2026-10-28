@@ -34,6 +34,7 @@ export interface CommunicationSnapshot {
   notifications: CommunicationNotification[];
   unread_messages: number;
   unread_notifications: number;
+  notifications_error?: string;
 }
 
 interface CommunicationContextValue {
@@ -184,7 +185,7 @@ export function CommunicationProvider({ children, enabled = true }: { children: 
       });
       setError(result.offline
         ? 'You are offline. Showing saved communications; queued messages will sync when connection returns.'
-        : currentUserError);
+        : [currentUserError, result.notifications_error].filter(Boolean).join(' '));
     } catch (cause) {
       communicationsFailures.current += 1;
       setError(cause instanceof Error ? cause.message : 'Unable to refresh communications.');

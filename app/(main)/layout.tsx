@@ -1,6 +1,7 @@
 import SiteHeader from "@/components/main/SiteHeader";
 import SiteFooter from "@/components/main/SiteFooter";
 import SiteChatbot from "@/components/main/SiteChatbot";
+import EnrollmentPromotionModal from "@/components/main/EnrollmentPromotionModal";
 import type { Metadata } from "next";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_ORIGIN, SITE_SOCIAL_IMAGE } from "@/lib/site-seo";
 
@@ -71,6 +72,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
       <SiteHeader />
       <main>{children}</main>
       <SiteFooter />
+      <EnrollmentPromotionModal />
       <SiteChatbot />
     </div>
   );

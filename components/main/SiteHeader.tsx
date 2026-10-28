@@ -39,7 +39,7 @@ const navigation: NavigationItem[] = [
       { href: "/apply#how-to-apply", label: "How to apply" },
       { href: "/apply#requirements", label: "Requirements" },
       { href: "/application", label: "2027 application form" },
-      { href: "/login", label: "Student login" },
+      { href: "/login", label: "Portal sign in" },
     ],
   },
   {
@@ -105,7 +105,7 @@ export default function SiteHeader() {
           <span>Rhema Bible Training Center Zambia · Lusaka</span>
           <div className="flex items-center gap-3">
             <a href="tel:+260977480033" className="hidden hover:underline sm:inline">+260 977 480 033</a>
-            <Link href="/login" className="hover:underline">Student Portal</Link>
+            <Link href="/login" className="hover:underline">Portal sign in</Link>
           </div>
         </div>
       </div>
@@ -154,7 +154,7 @@ export default function SiteHeader() {
 
           <div className="hidden shrink-0 items-center gap-2 lg:flex">
             <Link href="/login" className={`rounded-full border px-4 py-2.5 text-xs font-bold transition ${isSolid ? "border-slate-200 text-slate-800 hover:bg-slate-50" : "border-white/60 text-white hover:bg-white/10"}`}>
-              Student login
+              Portal sign in
             </Link>
             <Link href="/apply" className="rounded-full bg-rhema-accent px-4 py-2.5 text-xs font-black text-slate-950 shadow-lg shadow-orange-900/10 transition hover:brightness-95">
               Apply now

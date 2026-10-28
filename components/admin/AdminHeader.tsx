@@ -1,24 +1,25 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Menu, Search, X } from 'lucide-react';
+import { CalendarDays, Menu, Search, X } from 'lucide-react';
 
 // Updated imports to reflect the Admin-specific folder
 import AdminUserDropdown from './AdminUserDropdown';
 import { canAccessAdminModule } from '@/lib/admin-access';
 import CommunicationDropdown from '@/components/communications/CommunicationDropdown';
 import SharedReportNotifications from './SharedReportNotifications';
+import AdminWorkspaceMenu from './AdminWorkspaceMenu';
 
 interface AdminHeaderProps {
   onMenuToggle: () => void;
   isMobileSidebarOpen: boolean;
   isDesktopSidebarOpen: boolean;
-  admin: { name: string; email: string; admin_role: string; department: string };
+  admin: { id: string; name: string; email: string; admin_role: string; department: string };
   onSignOut: () => Promise<void>;
 }
 
 export default function AdminHeader({ onMenuToggle, isMobileSidebarOpen, isDesktopSidebarOpen, admin, onSignOut }: AdminHeaderProps) {
-  const [activeDropdown, setActiveDropdown] = useState<'notifications' | 'messages' | 'user' | null>(null);
+  const [activeDropdown, setActiveDropdown] = useState<'notifications' | 'messages' | 'user' | 'workspace' | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const canViewCommunications = canAccessAdminModule(admin.admin_role, admin.department, 'communications');
   const canViewReportNotifications = canAccessAdminModule(admin.admin_role, admin.department, 'reports');
@@ -26,15 +27,16 @@ export default function AdminHeader({ onMenuToggle, isMobileSidebarOpen, isDeskt
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
+      if (activeDropdown === 'workspace') return;
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setActiveDropdown(null);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [activeDropdown]);
 
-  const toggleDropdown = (type: 'notifications' | 'messages' | 'user') => {
+  const toggleDropdown = (type: 'notifications' | 'messages' | 'user' | 'workspace') => {
     setActiveDropdown(prev => prev === type ? null : type);
   };
 
@@ -64,6 +66,16 @@ export default function AdminHeader({ onMenuToggle, isMobileSidebarOpen, isDeskt
 
       <div className="flex items-center gap-2">
         {canViewReportNotifications && !canViewCommunications && <SharedReportNotifications />}
+        <button
+          type="button"
+          onClick={() => toggleDropdown('workspace')}
+          aria-expanded={activeDropdown === 'workspace'}
+          aria-label={activeDropdown === 'workspace' ? 'Close admin workspace menu' : 'Open admin workspace menu'}
+          className={`inline-flex h-10 items-center gap-2 rounded-xl border px-3 text-xs font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0f4c5c] focus-visible:ring-offset-2 ${activeDropdown === 'workspace' ? 'border-[#0f4c5c] bg-[#e8f1ec] text-[#0f4c5c]' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}
+        >
+          <CalendarDays className="h-4 w-4" />
+          <span className="hidden sm:inline">Workspace</span>
+        </button>
         {canViewCommunications && <>
           <CommunicationDropdown
             kind="notifications"
@@ -88,6 +100,11 @@ export default function AdminHeader({ onMenuToggle, isMobileSidebarOpen, isDeskt
           onSignOut={onSignOut}
         />
       </div>
+      <AdminWorkspaceMenu
+        isOpen={activeDropdown === 'workspace'}
+        onClose={() => setActiveDropdown(null)}
+        admin={admin}
+      />
     </header>
   );
 }

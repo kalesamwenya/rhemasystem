@@ -62,7 +62,7 @@ export default function LecturerLayout({ children }: LecturerLayoutProps) {
         if (!active) return;
         if (error.status === 401) {
           clearAuthSession();
-          router.replace('/lecturer/login');
+          router.replace('/login');
           return;
         }
         setAuthError(error.message || 'Unable to verify the lecturer session.');
@@ -87,7 +87,7 @@ export default function LecturerLayout({ children }: LecturerLayoutProps) {
       await api.logout();
     } finally {
       clearAuthSession();
-      router.replace('/lecturer/login');
+      router.replace('/login');
     }
   }, [router]);
 
