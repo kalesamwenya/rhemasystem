@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import AdminHeader from '@/components/admin/AdminHeader';
 import AdminSidebar from '@/components/admin/AdminSidebar';
 import AdminAudioPlayerProvider from '@/components/admin/AdminAudioPlayer';
+import AdminErrorMonitor from '@/components/admin/AdminErrorMonitor';
 import { CommunicationProvider } from '@/components/communications/CommunicationProvider';
 import FloatingChatBubble from '@/components/communications/FloatingChatBubble';
 import LoadingPlaceholder from '@/components/ui/LoadingPlaceholder';
@@ -193,6 +194,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       style={{ '--sidebar-width': `${sidebarWidth}px` } as React.CSSProperties}
       className="admin-shell relative h-screen overflow-hidden bg-[#f6f7f4] text-[#17201d] antialiased"
     >
+      <AdminErrorMonitor />
       
       {/* Mobile Drawer Dim Overlay Backdrop */}
       {isMobileSidebarOpen && (

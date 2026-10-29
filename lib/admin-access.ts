@@ -118,7 +118,7 @@ export function getAdminModuleForPath(pathname: string): AdminModule {
   if (pathname.startsWith('/admin/statistics')) return 'statistics';
   if (pathname.startsWith('/admin/website-statistics')) return 'website-statistics';
   if (pathname.startsWith('/admin/analysis')) return 'analysis';
-  if (pathname.startsWith('/admin/performance-logs')) return 'performance';
+  if (pathname.startsWith('/admin/performance-logs') || pathname.startsWith('/admin/error-logs')) return 'performance';
   if (pathname.startsWith('/admin/budgets')) return 'budgets';
   if (pathname.startsWith('/admin/assets')) return 'assets';
   if (pathname.startsWith('/admin/activity-requests')) return 'activity-requests';

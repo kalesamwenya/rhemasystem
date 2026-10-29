@@ -8,6 +8,61 @@ import { getActivityVisitorId } from '@/lib/activity-identity';
 const EXCLUDED_PATH_PATTERN = /^\/(admin|login|lecturer|student|check-in-out|checkin|slips|forgot-password|reset-password|verify|verify-payment|verify-profile|recommendation|cart|purchases)(?:\/|$)|\/(?:apply|application|register|checkout|payment)(?:\/|$)/i;
 let websiteAnalyticsWarningShown = false;
 
+function getVisitorTechnology() {
+  const userAgent = navigator.userAgent;
+  const platformHint = 'userAgentData' in navigator
+    ? (navigator as Navigator & { userAgentData?: { platform?: string; mobile?: boolean; brands?: Array<{ brand: string }> } }).userAgentData
+    : undefined;
+  const platformValue = navigator.platform || platformHint?.platform || '';
+  const normalizedPlatform = platformValue.toLowerCase();
+  const normalizedAgent = userAgent.toLowerCase();
+  const isIPadOS = normalizedPlatform === 'macintel' && navigator.maxTouchPoints > 1;
+
+  const deviceType = platformHint?.mobile
+    ? 'mobile'
+    : isIPadOS
+      || /ipad|tablet|kindle|silk|playbook/i.test(userAgent)
+      || (normalizedAgent.includes('android') && !normalizedAgent.includes('mobile'))
+      ? 'tablet'
+      : /mobile|iphone|ipod|android/i.test(userAgent)
+        ? 'mobile'
+        : 'desktop';
+
+  const operatingSystem = isIPadOS
+    ? 'iOS'
+    : /windows/.test(normalizedAgent) || /win/.test(normalizedPlatform)
+    ? 'Windows'
+    : /iphone|ipad|ipod/.test(normalizedAgent)
+      ? 'iOS'
+      : /android/.test(normalizedAgent) || normalizedPlatform.includes('android')
+        ? 'Android'
+        : /cros/.test(normalizedAgent) || /chrome\s?os/.test(normalizedPlatform)
+          ? 'Chrome OS'
+          : /mac os|macintosh/.test(normalizedAgent) || /mac/.test(normalizedPlatform)
+            ? 'macOS'
+            : /linux/.test(normalizedAgent) || /linux/.test(normalizedPlatform)
+              ? 'Linux'
+              : 'Other';
+
+  const browserBrand = platformHint?.brands?.find((item) => !/not.?a.?brand/i.test(item.brand))?.brand || '';
+  const browserName = /edge/i.test(browserBrand) || /edg(e|a|ios)?\//i.test(userAgent) ? 'Edge'
+    : /opera/i.test(browserBrand) || /opr\//i.test(userAgent) || /opios/i.test(userAgent) ? 'Opera'
+      : /firefox/i.test(browserBrand) || /firefox\//i.test(userAgent) || /fxios/i.test(userAgent) ? 'Firefox'
+        : /chrome|chromium/i.test(browserBrand) || /chrome|crios\//i.test(userAgent) ? 'Chrome'
+          : /safari/i.test(browserBrand) || /safari\//i.test(userAgent) ? 'Safari'
+            : /msie|trident/i.test(userAgent) ? 'Internet Explorer'
+              : 'Other';
+  const platform = isIPadOS || /iphone|ipad|ipod/i.test(platformValue) ? 'Apple mobile'
+    : /win/i.test(platformValue) ? 'Windows'
+    : /mac/i.test(platformValue) ? 'Mac'
+      : /cros|chrome\s?os/i.test(platformValue) ? 'Chrome OS'
+      : /android/i.test(platformValue) ? 'Android'
+        : /linux/i.test(platformValue) ? 'Linux'
+          : 'Other';
+
+  return { device_type: deviceType, operating_system: operatingSystem, browser_name: browserName, platform };
+}
+
 function isTrackablePath(path: string) {
   let normalizedPath = path;
   try {
@@ -34,6 +89,7 @@ function sendWebsiteAnalytics(eventType: 'page_view' | 'action', pagePath: strin
       event_type: eventType,
       page_path: pagePath,
       action_type: actionType ?? null,
+      ...getVisitorTechnology(),
     }),
     cache: 'no-store',
     keepalive: true,

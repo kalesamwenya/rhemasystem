@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Check, ClipboardList, Download, Loader2, RefreshCw, X } from 'lucide-react';
+import { Check, ClipboardList, Download, Eye, Loader2, RefreshCw, X } from 'lucide-react';
+import { InvoicePreviewModal } from '@/components/activity-requests/InvoicePreviewModal';
 import { api } from '@/lib/api';
 
 type AccessRequest = {
@@ -50,6 +51,8 @@ export default function ActivityRequestsPage() {
   const [canApprove, setCanApprove] = useState(false);
   const [invoiceAmounts, setInvoiceAmounts] = useState<Record<number, string>>({});
   const [notes, setNotes] = useState<Record<number, string>>({});
+  const [invoiceLoadingId, setInvoiceLoadingId] = useState<number | null>(null);
+  const [invoicePreview, setInvoicePreview] = useState<{ url: string; fileName: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<number | null>(null);
   const [error, setError] = useState('');
@@ -75,6 +78,12 @@ export default function ActivityRequestsPage() {
     queueMicrotask(() => { if (active) void loadRequests(); });
     return () => { active = false; };
   }, [loadRequests]);
+
+  useEffect(() => {
+    if (!invoicePreview) return;
+    const url = invoicePreview.url;
+    return () => URL.revokeObjectURL(url);
+  }, [invoicePreview]);
 
   async function updateRequest(request: AccessRequest, action: 'invoice' | 'approve' | 'reject') {
     setSavingId(request.id);
@@ -116,17 +125,21 @@ export default function ActivityRequestsPage() {
     }
   }
 
-  async function downloadInvoice(request: AccessRequest) {
+  const closeInvoicePreview = useCallback(() => setInvoicePreview(null), []);
+
+  async function viewInvoice(request: AccessRequest) {
+    setInvoiceLoadingId(request.id);
+    setError('');
     try {
       const blob = await api.activityRequests.invoice(request.id);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${request.invoice_number || `activity-invoice-${request.id}`}.pdf`;
-      link.click();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setInvoicePreview({
+        url: URL.createObjectURL(blob),
+        fileName: `${request.invoice_number || `activity-invoice-${request.id}`}.pdf`,
+      });
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Unable to download the invoice.');
+      setError(reason instanceof Error ? reason.message : 'Unable to view the invoice.');
+    } finally {
+      setInvoiceLoadingId(null);
     }
   }
 
@@ -165,7 +178,7 @@ export default function ActivityRequestsPage() {
               {request.has_sick_note && <button type="button" onClick={() => void downloadSickNote(request)} className="mt-3 inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-bold text-blue-800 hover:bg-blue-50"><Download size={14} />Download sick note</button>}
               {request.charge_id && <p className="mt-2 text-xs font-semibold text-slate-600">Invoice {request.invoice_reference} · {formatMoney(request.amount || 0, request.currency || 'ZMW')} · Paid {formatMoney(request.paid_amount, request.currency || 'ZMW')}</p>}
               {request.has_invoice && <div className="mt-3 flex flex-wrap items-center gap-3">
-                <button type="button" onClick={() => void downloadInvoice(request)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"><Download size={14} />Download {request.invoice_number || 'invoice'}</button>
+                <button type="button" onClick={() => void viewInvoice(request)} disabled={invoiceLoadingId === request.id} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60">{invoiceLoadingId === request.id ? <Loader2 size={14} className="animate-spin" /> : <Eye size={14} />}View {request.invoice_number || 'invoice'}</button>
                 {canFinance && <button type="button" onClick={() => void resendInvoice(request)} disabled={savingId === request.id} className="text-xs font-bold text-blue-900 hover:underline disabled:opacity-60">{request.invoice_emailed_at ? 'Resend invoice email' : 'Send invoice email'}</button>}
                 <span className="text-[11px] text-slate-500">{request.invoice_emailed_at ? `Emailed ${new Date(request.invoice_emailed_at).toLocaleString()}` : 'Email not confirmed'}</span>
               </div>}
@@ -184,6 +197,7 @@ export default function ActivityRequestsPage() {
         </article>
       ))}</section>}
       {!error && !loading && !canFinance && !canApprove && <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Your account can view requests but cannot invoice or approve them.</p>}
+      {invoicePreview && <InvoicePreviewModal url={invoicePreview.url} fileName={invoicePreview.fileName} onClose={closeInvoicePreview} />}
     </main>
   );
 }

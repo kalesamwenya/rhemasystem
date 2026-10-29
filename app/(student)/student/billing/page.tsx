@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { AlertCircle, ArrowDownLeft, ArrowUpRight, CheckCircle2, CreditCard, Download, ExternalLink, Eye, Loader2, RefreshCw, Wallet, X } from 'lucide-react';
+import { InvoicePreviewModal } from '@/components/activity-requests/InvoicePreviewModal';
 import { api, uploadPdfDocument } from '@/lib/api';
 import { openFlutterwaveInlineCheckout, type FlutterwaveInlineCheckout } from '@/lib/flutterwave-inline';
 import { createPaymentReceiptPdf, openPaymentReceiptBlob, uploadVerifiedStudentPaymentReceipt } from '@/lib/payment-receipt';
@@ -84,23 +85,34 @@ export default function StudentBillingPage() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [receiptAction, setReceiptAction] = useState<{ id: number; mode: 'view' | 'download' } | null>(null);
+  const [invoiceLoadingId, setInvoiceLoadingId] = useState<number | null>(null);
+  const [invoicePreview, setInvoicePreview] = useState<{ url: string; fileName: string } | null>(null);
   const paymentDialogRef = useRef<HTMLDivElement>(null);
   const selectedLiability = paymentTarget === 'tuition'
     ? null
     : account?.liabilities.find((liability) => String(liability.id) === paymentTarget) ?? null;
 
-  async function downloadActivityInvoice(request: StudentActivityRequest) {
+  const closeInvoicePreview = useCallback(() => setInvoicePreview(null), []);
+
+  useEffect(() => {
+    if (!invoicePreview) return;
+    const url = invoicePreview.url;
+    return () => URL.revokeObjectURL(url);
+  }, [invoicePreview]);
+
+  async function viewActivityInvoice(request: StudentActivityRequest) {
+    setInvoiceLoadingId(request.id);
     setError('');
     try {
       const blob = await api.activityRequests.invoice(request.id);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${request.invoice_number || `activity-invoice-${request.id}`}.pdf`;
-      link.click();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setInvoicePreview({
+        url: URL.createObjectURL(blob),
+        fileName: `${request.invoice_number || `activity-invoice-${request.id}`}.pdf`,
+      });
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Unable to download the invoice.');
+      setError(reason instanceof Error ? reason.message : 'Unable to view the invoice.');
+    } finally {
+      setInvoiceLoadingId(null);
     }
   }
 
@@ -410,7 +422,7 @@ export default function StudentBillingPage() {
         {activityRequests.length > 0 && <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-100 p-5"><h2 className="text-base font-black text-slate-950">Activity access requests</h2><p className="mt-1 text-xs text-slate-500">Track Finance invoicing and IT access decisions.</p></div>
           <div className="divide-y divide-slate-100">{activityRequests.map((request) => <article key={request.id} className="flex flex-col gap-2 p-5 sm:flex-row sm:items-center sm:justify-between">
-            <div><p className="font-bold text-slate-900">{request.activity_name}</p><p className="mt-1 text-xs text-slate-500">{request.activity_type} · Requested {new Date(request.created_at).toLocaleDateString()}{request.invoice_number ? ` · ${request.invoice_number}` : request.invoice_reference ? ` · Invoice ${request.invoice_reference}` : ''}</p>{request.amount !== null && <p className="mt-1 text-xs font-semibold text-slate-600">Invoice amount {money(request.amount, request.currency || account.currency)}</p>}{request.charge_id && <button type="button" onClick={() => void downloadActivityInvoice(request)} className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-blue-900 hover:underline"><Download size={13} />Download invoice</button>}{request.status === 'approved' && <a href={request.activity_url} className="mt-2 ml-4 inline-flex items-center gap-1.5 text-xs font-bold text-blue-900 hover:underline">Open activity<ExternalLink size={13} /></a>}</div>
+            <div><p className="font-bold text-slate-900">{request.activity_name}</p><p className="mt-1 text-xs text-slate-500">{request.activity_type} · Requested {new Date(request.created_at).toLocaleDateString()}{request.invoice_number ? ` · ${request.invoice_number}` : request.invoice_reference ? ` · Invoice ${request.invoice_reference}` : ''}</p>{request.amount !== null && <p className="mt-1 text-xs font-semibold text-slate-600">Invoice amount {money(request.amount, request.currency || account.currency)}</p>}{request.charge_id && <button type="button" onClick={() => void viewActivityInvoice(request)} disabled={invoiceLoadingId === request.id} className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-blue-900 hover:underline disabled:opacity-60">{invoiceLoadingId === request.id ? <Loader2 size={13} className="animate-spin" /> : <Eye size={13} />}View invoice</button>}{request.status === 'approved' && <a href={request.activity_url} className="mt-2 ml-4 inline-flex items-center gap-1.5 text-xs font-bold text-blue-900 hover:underline">Open activity<ExternalLink size={13} /></a>}</div>
             <span className={`w-fit rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${request.status === 'approved' ? 'bg-emerald-50 text-emerald-700' : request.status === 'rejected' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-800'}`}>{request.status.replace('_', ' ')}</span>
           </article>)}</div>
         </section>}
@@ -525,6 +537,7 @@ export default function StudentBillingPage() {
             </div>
           </div>
         </div>}
+        {invoicePreview && <InvoicePreviewModal url={invoicePreview.url} fileName={invoicePreview.fileName} onClose={closeInvoicePreview} />}
       </>}
     </main>
   );

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Activity, AlertTriangle, Camera, Eye, RefreshCw, RotateCcw, Users, ZoomIn, ZoomOut } from 'lucide-react';
+import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import { ComposableMap, Geographies, Geography, Graticule, Marker, ZoomableGroup } from 'react-simple-maps';
 import { api } from '@/lib/api';
 
@@ -18,6 +19,30 @@ type VisitorLocation = {
   page_views: number | string;
 };
 
+type TechnologyStat = {
+  name: string;
+  visitors: number | string;
+  page_views: number | string;
+};
+
+type CountryStat = TechnologyStat & {
+  country_code: string | null;
+};
+
+type VisitorTechnology = {
+  devices: TechnologyStat[];
+  operating_systems: TechnologyStat[];
+  browsers: TechnologyStat[];
+  platforms: TechnologyStat[];
+};
+
+const EMPTY_TECHNOLOGY: VisitorTechnology = {
+  devices: [],
+  operating_systems: [],
+  browsers: [],
+  platforms: [],
+};
+
 type AnalyticsDashboard = {
   success: boolean;
   days: Period;
@@ -29,6 +54,8 @@ type AnalyticsDashboard = {
   trend: Array<{ day: string; visitors: number; page_views: number }>;
   top_pages: Array<{ page_path: string; page_views: number; visitors: number }>;
   locations: VisitorLocation[];
+  countries?: CountryStat[];
+  technology: VisitorTechnology;
   location_database_loaded: boolean;
   recent: Array<{
     event_type: 'page_view' | 'action';
@@ -36,9 +63,11 @@ type AnalyticsDashboard = {
     action_type: 'navigation' | 'button' | null;
     created_at: string;
   }>;
+  technologyAvailable: boolean;
 };
 
 const numberFormat = new Intl.NumberFormat();
+const chartColors = ['#1d4ed8', '#0891b2', '#7c3aed', '#059669', '#ea580c', '#db2777', '#64748b'];
 
 function formatDate(value: string) {
   const date = new Date(`${value.slice(0, 10)}T00:00:00`);
@@ -58,6 +87,10 @@ function getLocationName(location: VisitorLocation) {
     .join(', ') || location.country_code || 'Unknown location';
 }
 
+function getLocationKey(location: VisitorLocation, index: number) {
+  return `${location.country_code}-${location.city_name}-${location.region_name}-${location.latitude}-${location.longitude}-${index}`;
+}
+
 export default function WebsiteStatistics() {
   const [days, setDays] = useState<Period>(30);
   const [dashboard, setDashboard] = useState<AnalyticsDashboard | null>(null);
@@ -66,10 +99,15 @@ export default function WebsiteStatistics() {
   const [error, setError] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
   const [mapZoom, setMapZoom] = useState(1);
+  const [selectedLocationKey, setSelectedLocationKey] = useState('');
   const [screenshotError, setScreenshotError] = useState('');
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
+  const refreshInProgressRef = useRef(false);
 
   const refresh = useCallback(async () => {
+    if (refreshInProgressRef.current) return;
+    refreshInProgressRef.current = true;
     setRefreshing(true);
     setError('');
     try {
@@ -77,12 +115,25 @@ export default function WebsiteStatistics() {
       if (!response.success || !response.summary || !Array.isArray(response.trend)
         || !Array.isArray(response.top_pages) || !Array.isArray(response.locations)
         || !Array.isArray(response.recent)) {
-        throw new Error('The website analytics response was incomplete.');
+        throw new Error('The website analytics API returned an incomplete dashboard. Deploy the current logs/websiteAnalytics.php endpoint and try again.');
       }
-      setDashboard(response);
+      const technology = response.technology;
+      const technologyAvailable = Boolean(technology
+        && Array.isArray(technology.devices)
+        && Array.isArray(technology.operating_systems)
+        && Array.isArray(technology.browsers)
+        && Array.isArray(technology.platforms));
+      setDashboard({
+        ...response,
+        technology: technologyAvailable ? technology : EMPTY_TECHNOLOGY,
+        technologyAvailable,
+        countries: Array.isArray(response.countries) ? response.countries : [],
+      });
+      setLastUpdated(new Date());
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to load website analytics.');
     } finally {
+      refreshInProgressRef.current = false;
       setLoading(false);
       setRefreshing(false);
     }
@@ -92,6 +143,18 @@ export default function WebsiteStatistics() {
     const timer = window.setTimeout(() => void refresh(), 0);
     return () => window.clearTimeout(timer);
   }, [refresh, refreshKey]);
+
+  useEffect(() => {
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') void refresh();
+    };
+    const interval = window.setInterval(refreshWhenVisible, 15_000);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
+  }, [refresh]);
 
   const maxVisitors = Math.max(1, ...(dashboard?.trend || []).map((item) => item.visitors));
   const maxLocationVisitors = Math.max(1, ...(dashboard?.locations || []).map((item) => Number(item.visitors)));
@@ -107,6 +170,17 @@ export default function WebsiteStatistics() {
     { label: 'Page views', value: dashboard?.summary.page_views ?? 0, icon: Eye, tone: 'bg-violet-50 text-violet-700' },
     { label: 'Website actions', value: dashboard?.summary.actions ?? 0, icon: Activity, tone: 'bg-emerald-50 text-emerald-700' },
   ];
+  const selectedLocation = mappedLocations.find((location, index) => getLocationKey(location, index) === selectedLocationKey);
+  const technologySections: Array<{ title: string; stats: TechnologyStat[] }> = [
+    { title: 'Operating systems', stats: dashboard?.technology.operating_systems || [] },
+    { title: 'Browsers', stats: dashboard?.technology.browsers || [] },
+    { title: 'Platforms', stats: dashboard?.technology.platforms || [] },
+  ];
+  const deviceStats = dashboard?.technology.devices || [];
+  const deviceChartStats = deviceStats.map((item) => ({
+    ...item,
+    visitors: Number(item.visitors),
+  }));
 
   const downloadMapScreenshot = async () => {
     setScreenshotError('');
@@ -168,6 +242,13 @@ export default function WebsiteStatistics() {
           <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-900">Website statistics</h1>
           <p className="mt-1 max-w-2xl text-sm text-slate-500">
             Anonymous visitor counts, popular pages, and broad navigation/button activity. Form contents and visitor IDs are not shown.
+          </p>
+          <p className="mt-1 text-xs text-slate-400" role="status" aria-live="polite">
+            {refreshing
+              ? 'Updating visitor activity…'
+              : lastUpdated
+                ? `Auto-updates every 15 seconds · Last updated ${lastUpdated.toLocaleTimeString()}`
+                : 'Auto-updates every 15 seconds'}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -311,25 +392,25 @@ export default function WebsiteStatistics() {
                   </button>
                 </div>
               </div>
-              <div ref={mapContainerRef} className="mt-4 overflow-hidden rounded-xl border border-blue-200 bg-blue-50">
+              <div ref={mapContainerRef} className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-[#f7f9fc]">
                 <ComposableMap
                   role="img"
                   aria-label="World map showing approximate visitor locations"
                   projection="geoEqualEarth"
-                  projectionConfig={{ scale: 150 }}
+                  projectionConfig={{ scale: 145 }}
                   className="block h-auto w-full"
                 >
                   <ZoomableGroup zoom={mapZoom} minZoom={1} maxZoom={8}>
-                    <Graticule stroke="#003da5" strokeOpacity={0.22} strokeWidth={0.35} />
+                    <Graticule stroke="#94a3b8" strokeOpacity={0.2} strokeWidth={0.35} />
                     <Geographies geography="/world.json">
                       {({ geographies }) => geographies.map((geography) => (
                         <Geography
                           key={geography.rsmKey}
                           geography={geography}
-                          fill="#003da5"
-                          stroke="#c8102e"
+                          fill="#dce6f2"
+                          stroke="#a9bbd0"
                           strokeWidth={0.45}
-                          fillOpacity={0.16}
+                          fillOpacity={0.82}
                         />
                       ))}
                     </Geographies>
@@ -339,19 +420,49 @@ export default function WebsiteStatistics() {
                       const visitors = Number(location.visitors);
                       const title = getLocationName(location);
                       return (
-                        <Marker
-                          key={`${location.country_code}-${location.city_name}-${location.region_name}-${index}`}
-                          coordinates={[longitude, latitude]}
-                        >
-                          <circle
-                            r={Math.min(11, 3.5 + Math.sqrt(visitors / maxLocationVisitors) * 6)}
-                            fill="#c8102e"
-                            fillOpacity={0.9}
-                            stroke="white"
-                            strokeWidth={1.5}
+                        <Marker key={getLocationKey(location, index)} coordinates={[longitude, latitude]}>
+                          <g
+                            role="button"
+                            tabIndex={0}
+                            aria-label={`${title}: ${numberFormat.format(visitors)} visitors. Select to show location label.`}
+                            className="cursor-pointer outline-none"
+                            onClick={() => setSelectedLocationKey(getLocationKey(location, index))}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault();
+                                setSelectedLocationKey(getLocationKey(location, index));
+                              }
+                            }}
                           >
-                            <title>{`${title}: ${numberFormat.format(visitors)} visitors`}</title>
-                          </circle>
+                            <circle
+                              r={Math.min(11, 3.5 + Math.sqrt(visitors / maxLocationVisitors) * 6)}
+                              fill="#c8102e"
+                              fillOpacity={0.95}
+                              stroke="white"
+                              strokeWidth={1.8}
+                            >
+                              <title>{`${title}: ${numberFormat.format(visitors)} visitors`}</title>
+                            </circle>
+                            {selectedLocationKey === getLocationKey(location, index) && (
+                              <text
+                                x={10}
+                                y={-10}
+                                fontSize={8}
+                                fontWeight={700}
+                                fill="#172554"
+                                stroke="#f7f9fc"
+                                strokeWidth={2}
+                                paintOrder="stroke"
+                              >
+                                <tspan x={10} dy={0}>{location.city_name || location.region_name || 'Visitor location'}</tspan>
+                                {(location.country_name || location.country_code) && (
+                                  <tspan x={10} dy={10} fontSize={7} fontWeight={500}>
+                                    {location.country_name || location.country_code}
+                                  </tspan>
+                                )}
+                              </text>
+                            )}
+                          </g>
                         </Marker>
                       );
                     })}
@@ -367,13 +478,37 @@ export default function WebsiteStatistics() {
                 </p>
               )}
               {mappedLocations.length > 0 && (
-                <div className="mt-3 max-h-48 divide-y divide-slate-100 overflow-y-auto">
-                  {mappedLocations.slice(0, 10).map((location, index) => (
-                    <div key={`${location.country_code}-${location.city_name}-${index}`} className="flex items-center justify-between gap-3 py-2 text-xs">
-                      <span className="min-w-0 truncate text-slate-700">{getLocationName(location)}</span>
-                      <span className="shrink-0 font-bold text-slate-900">{numberFormat.format(Number(location.visitors))} visitors</span>
+                <div className="mt-3 overflow-hidden rounded-xl border border-slate-200">
+                  {selectedLocation && (
+                    <div className="border-b border-slate-200 bg-blue-50 px-3 py-2.5">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-blue-700">Selected location</p>
+                      <p className="mt-0.5 text-sm font-bold text-slate-900">{getLocationName(selectedLocation)}</p>
+                      <p className="text-xs text-slate-600">{numberFormat.format(Number(selectedLocation.visitors))} visitors · {numberFormat.format(Number(selectedLocation.page_views))} page views</p>
                     </div>
-                  ))}
+                  )}
+                  <div className="max-h-64 divide-y divide-slate-100 overflow-y-auto">
+                    {mappedLocations.map((location, index) => {
+                      const key = getLocationKey(location, index);
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          aria-pressed={selectedLocationKey === key}
+                          onClick={() => setSelectedLocationKey(key)}
+                          className={`flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-xs transition ${selectedLocationKey === key ? 'bg-blue-50' : 'bg-white hover:bg-slate-50'}`}
+                        >
+                          <span className="min-w-0">
+                            <span className="block truncate font-semibold text-slate-800">{location.city_name || location.region_name || location.country_name || 'Unknown city'}</span>
+                            <span className="mt-0.5 block truncate text-slate-500">{[location.region_name, location.country_name || location.country_code].filter(Boolean).join(', ') || 'Country unavailable'}</span>
+                          </span>
+                          <span className="shrink-0 text-right">
+                            <span className="block font-bold text-slate-900">{numberFormat.format(Number(location.visitors))}</span>
+                            <span className="text-[10px] text-slate-500">visitors</span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </section>
@@ -398,10 +533,94 @@ export default function WebsiteStatistics() {
                 </div>
               )}
             </section>
+
+            <section aria-label="Visitor devices and platforms" className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="mb-4">
+                <h2 className="text-sm font-black uppercase tracking-wider text-slate-900">Devices &amp; platforms</h2>
+                <p className="mt-1 text-xs text-slate-500">Approximate categories reported by visitor browsers. Raw user-agent strings are not stored.</p>
+              </div>
+
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                <h3 className="text-xs font-black text-slate-800">Devices</h3>
+                {!dashboard?.technologyAvailable ? (
+                  <p className="mt-3 text-xs leading-5 text-amber-800">
+                    Device and software analytics are not available from the PHP API yet. Deploy the current analytics endpoint to enable them.
+                  </p>
+                ) : !deviceStats.length ? (
+                  <p className="mt-3 text-xs text-slate-500">No device data recorded yet.</p>
+                ) : (
+                  <div className="mt-2 h-56">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={deviceChartStats}
+                          dataKey="visitors"
+                          nameKey="name"
+                          cx="50%"
+                          cy="46%"
+                          innerRadius={48}
+                          outerRadius={78}
+                          paddingAngle={3}
+                          label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
+                        >
+                          {deviceStats.map((item, index) => (
+                            <Cell key={item.name} fill={chartColors[index % chartColors.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip formatter={(value) => [numberFormat.format(Number(value)), 'Visitors']} />
+                        <Legend verticalAlign="bottom" height={28} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                {[...technologySections, { title: 'Countries', stats: dashboard?.countries || [] }].map(({ title, stats }) => {
+                  const maxVisitors = Math.max(1, ...stats.map((item) => Number(item.visitors)));
+                  return (
+                    <div key={title} className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                      <h3 className="text-xs font-black text-slate-800">{title}</h3>
+                      {!dashboard?.technologyAvailable && title !== 'Countries' ? (
+                        <p className="mt-3 text-xs leading-5 text-amber-800">
+                          Deploy the current analytics endpoint to enable this breakdown.
+                        </p>
+                      ) : !stats.length ? (
+                        <p className="mt-3 text-xs text-slate-500">
+                          {title === 'Countries' && !dashboard?.countries?.length
+                            ? 'Country totals are not available from the current PHP API.'
+                            : 'No data recorded yet.'}
+                        </p>
+                      ) : (
+                        <div className="mt-3 max-h-56 space-y-3 overflow-y-auto pr-1">
+                          {stats.map((item, index) => (
+                            <div key={item.name}>
+                              <div className="flex items-center justify-between gap-2 text-xs">
+                                <span className="truncate font-medium text-slate-700">{item.name || 'Unknown'}</span>
+                                <span className="shrink-0 font-bold text-slate-900">{numberFormat.format(Number(item.visitors))}</span>
+                              </div>
+                              <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-200">
+                                <div
+                                  className="h-full rounded-full"
+                                  style={{
+                                    width: `${Math.max(3, (Number(item.visitors) / maxVisitors) * 100)}%`,
+                                    backgroundColor: chartColors[index % chartColors.length],
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
           </div>
 
           <p className="text-xs leading-5 text-slate-500">
-            Visitor counts use a random first-party browser ID and are estimates, not verified individual identities. Approximate city/region is looked up locally from the request IP; raw IP addresses are discarded and never stored. Analytics data is retained for up to one year.
+            Visitor counts use a random first-party browser ID and are estimates, not verified individual identities. Approximate city/region is looked up locally from the request IP; raw IP addresses and raw user-agent strings are discarded and never stored. Analytics data is retained for up to one year.
           </p>
         </>
       )}
