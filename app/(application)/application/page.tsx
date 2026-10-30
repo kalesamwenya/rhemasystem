@@ -99,8 +99,12 @@ type AlertStatus = {
 
 type ApplicationRecord = {
   id: string;
+  statusToken: string;
+  trackingUrl: string;
   status: "Submitted" | "Recommendations pending" | "Payment pending" | "Under review" | "Interview scheduled" | "Approved";
   trackingEmailSent: boolean;
+  nextOfKinEmailSent: boolean;
+  recommendationEmailsSent: { pastoral: boolean; personal: boolean };
   feeRequired: boolean;
   feeAmount: number;
   currency: string;
@@ -374,7 +378,11 @@ export default function ApplicationPage() {
     setIsSubmitting(true);
     let responseData: {
       id?: string;
+      status_token?: string;
+      tracking_url?: string;
       tracking_email_sent?: boolean;
+      next_of_kin_email_sent?: boolean;
+      recommendation_emails_sent?: { pastoral?: boolean; personal?: boolean };
       fee_required?: boolean;
       fee_amount?: number;
       currency?: string;
@@ -389,7 +397,7 @@ export default function ApplicationPage() {
       }
       const response = await api.admissions.save(requestData) as { data?: typeof responseData };
       responseData = response.data ?? {};
-      if (!responseData.id) throw new Error("The admissions service did not return an application reference. Please contact admissions before retrying.");
+      if (!responseData.id || !responseData.status_token) throw new Error("The admissions service did not return a secure application reference. Please contact admissions before retrying.");
     } catch (cause) {
       setStatus({
         type: "error",
@@ -401,8 +409,15 @@ export default function ApplicationPage() {
     }
     const nextApplication: ApplicationRecord = {
       id: responseData.id!,
+      statusToken: responseData.status_token,
+      trackingUrl: responseData.tracking_url || "",
       status: "Recommendations pending",
       trackingEmailSent: responseData.tracking_email_sent === true,
+      nextOfKinEmailSent: responseData.next_of_kin_email_sent === true,
+      recommendationEmailsSent: {
+        pastoral: responseData.recommendation_emails_sent?.pastoral === true,
+        personal: responseData.recommendation_emails_sent?.personal === true,
+      },
       feeRequired: responseData.fee_required === true,
       feeAmount: Number(responseData.fee_amount ?? 0),
       currency: responseData.currency || applicationFeeCurrency,
@@ -414,11 +429,17 @@ export default function ApplicationPage() {
       title: nextApplication.feeRequired ? "" : "Application submitted",
       message: nextApplication.feeRequired ? "" : `Application ${nextApplication.id} has been received.`,
     });
-    if (!nextApplication.trackingEmailSent) {
+    const failedEmails = [
+      !nextApplication.trackingEmailSent && "your tracking link",
+      !nextApplication.nextOfKinEmailSent && "the next-of-kin notification",
+      !nextApplication.recommendationEmailsSent.pastoral && "the pastor recommendation invitation",
+      !nextApplication.recommendationEmailsSent.personal && "the personal recommendation invitation",
+    ].filter(Boolean);
+    if (failedEmails.length) {
       setStatus({
         type: "error",
-        title: "Application saved; tracking email not sent",
-        message: `Your application ${nextApplication.id} is saved, but we could not email your secure status link. Contact admissions with your application reference to check progress.`,
+        title: "Application saved; some emails were not sent",
+        message: `We could not send ${failedEmails.join(", ")}. Your application is saved; contact admissions with your application reference if needed.`,
       });
     }
     try {
@@ -434,13 +455,13 @@ export default function ApplicationPage() {
     }
     setIsDraftDirty(false);
     setIsSubmitting(false);
-    if (nextApplication.feeRequired) void startApplicationFeePayment(nextApplication.id);
+    if (nextApplication.feeRequired) void startApplicationFeePayment(nextApplication.id, nextApplication.statusToken);
   };
 
-  const startApplicationFeePayment = async (applicationId: string) => {
+  const startApplicationFeePayment = async (applicationId: string, statusToken: string) => {
     setIsSubmitting(true);
     try {
-      const initiation = await api.admissions.initiateFeePayment(applicationId) as { data: FlutterwaveInlineCheckout };
+      const initiation = await api.admissions.initiateFeePayment(applicationId, statusToken) as { data: FlutterwaveInlineCheckout };
       await openFlutterwaveInlineCheckout(initiation.data, async (transaction) => {
         const transactionId = String(transaction.transaction_id ?? "");
         if (!/^\d+$/.test(transactionId) || transaction.tx_ref !== initiation.data.reference) {
@@ -631,7 +652,8 @@ export default function ApplicationPage() {
       case 3:
         return (
           <section className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
-            <h3 className="mb-5 text-xl font-bold text-slate-900">Emergency contact</h3>
+            <h3 className="mb-2 text-xl font-bold text-slate-900">Emergency contact / next of kin</h3>
+            <p className="mb-5 text-sm text-slate-600">We will email this person a notification that you listed them as your emergency contact. Your private tracking link is sent only to you.</p>
             <div className="grid gap-6 md:grid-cols-2">
               {renderInput("Full name *", "emergencyContactName")}
               {renderInput("Relationship to you", "emergencyContactRelationship")}
@@ -877,7 +899,7 @@ export default function ApplicationPage() {
                     <p className="mt-2 text-sm leading-6 text-emerald-950">
                       {application.trackingEmailSent
                         ? "A private application-tracking link has been sent to your email address."
-                        : "We could not email your private tracking link. Contact admissions with your application reference to check progress."}
+                        : "We could not email your private tracking link. Use the secure tracking link below or contact admissions."}
                     </p>
                     {status.message ? (
                       <div className="mt-4">
@@ -892,11 +914,22 @@ export default function ApplicationPage() {
                     )}
                     {!application.feeRequired && <p className="mt-4 text-xs text-emerald-900">No application fee.</p>}
                     <p className="mt-2 text-xs text-emerald-900">Keep your private tracking link secure; anyone with the link can view this application&apos;s status.</p>
+                    {application.trackingUrl && (
+                      <a
+                        href={application.trackingUrl}
+                        className="mt-4 inline-flex items-center gap-2 text-sm font-bold text-blue-800 underline underline-offset-2 hover:text-blue-950"
+                      >
+                        View application progress and payment
+                      </a>
+                    )}
+                    <p className="mt-3 text-xs text-emerald-900">
+                      Email updates: pastor {application.recommendationEmailsSent.pastoral ? "sent" : "not sent"} · personal recommender {application.recommendationEmailsSent.personal ? "sent" : "not sent"} · next of kin {application.nextOfKinEmailSent ? "sent" : "not sent"}
+                    </p>
                     {application.feeRequired && application.paymentStatus !== "Paid" && (
                       <button
                         type="button"
                         disabled={isSubmitting}
-                        onClick={() => void startApplicationFeePayment(application.id)}
+                        onClick={() => void startApplicationFeePayment(application.id, application.statusToken)}
                         className="mt-5 inline-flex items-center gap-2 rounded-full bg-emerald-800 px-5 py-3 text-sm font-bold text-white transition hover:bg-emerald-900 disabled:cursor-wait disabled:opacity-60"
                       >
                         {isSubmitting ? "Processing payment…" : "Pay application fee"}

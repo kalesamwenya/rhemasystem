@@ -141,6 +141,7 @@ const navigationGroups: NavGroup[] = [
     items: [
       { title: 'Staff access', href: '/admin/staff-access', module: 'staff-access', icon: ShieldCheck },
       { title: 'Activity Logs', href: '/admin/performance-logs', module: 'performance', icon: Activity },
+      { title: 'Student Activity', href: '/admin/student-activity-logs', module: 'performance', icon: ClipboardCheck },
       { title: 'Error Logs', href: '/admin/error-logs', module: 'performance', icon: Bug },
       { title: 'System Settings', href: '/admin/settings', module: 'settings', icon: Sliders },
     ],

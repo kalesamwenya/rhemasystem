@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { AlertCircle, CheckCircle2, Clock3, LoaderCircle, RotateCw } from 'lucide-react';
 import { api } from '@/lib/api';
+import { openFlutterwaveInlineCheckout, type FlutterwaveInlineCheckout } from '@/lib/flutterwave-inline';
 
 type RecommendationStatus = {
   status: 'pending' | 'sent' | 'failed' | 'submitted';
@@ -15,6 +16,8 @@ type ApplicationStatus = {
   program: string;
   status: string;
   payment_status: string;
+  payment_amount: number | null;
+  payment_currency: string | null;
   submitted_at: string;
   recommendations: Partial<Record<'pastoral' | 'personal', RecommendationStatus>>;
 };
@@ -30,6 +33,8 @@ export default function ApplicationStatusPage() {
   const [application, setApplication] = useState<ApplicationStatus | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [paymentError, setPaymentError] = useState('');
+  const [paymentBusy, setPaymentBusy] = useState(false);
 
   const refresh = useCallback(async (trackingToken: string) => {
     setError('');
@@ -70,6 +75,37 @@ export default function ApplicationStatusPage() {
     if (status.status === 'failed') return 'Email delivery failed — contact admissions';
     if (status.status === 'sent') return 'Invitation emailed · awaiting referee';
     return 'Invitation pending';
+  };
+
+  const startPayment = async () => {
+    if (!application || !token) return;
+    setPaymentBusy(true);
+    setPaymentError('');
+    try {
+      const initiation = await api.admissions.initiateFeePayment(application.id, token) as { data: FlutterwaveInlineCheckout };
+      await openFlutterwaveInlineCheckout(initiation.data, async (transaction) => {
+        const transactionId = String(transaction.transaction_id ?? '');
+        if (!/^\d+$/.test(transactionId) || transaction.tx_ref !== initiation.data.reference) {
+          setPaymentError('Flutterwave returned invalid payment details. Your application fee remains unpaid.');
+          setPaymentBusy(false);
+          return;
+        }
+        try {
+          await api.admissions.verifyFeePayment(transactionId, initiation.data.reference);
+          await refresh(token);
+        } catch (cause) {
+          setPaymentError(cause instanceof Error ? cause.message : 'Payment confirmation is pending. Refresh your status shortly.');
+        } finally {
+          setPaymentBusy(false);
+        }
+      }, () => {
+        setPaymentError('Payment was not completed. Your application is saved and the fee remains due.');
+        setPaymentBusy(false);
+      });
+    } catch (cause) {
+      setPaymentError(cause instanceof Error ? cause.message : 'Unable to start application fee payment. Please try again.');
+      setPaymentBusy(false);
+    }
   };
 
   return (
@@ -114,6 +150,33 @@ export default function ApplicationStatusPage() {
                     <p className="mt-1 text-xs text-blue-800">Submitted {formatDate(application.submitted_at)}</p>
                   </div>
                 </div>
+
+                {application.payment_amount !== null ? (
+                  <div className="rounded-2xl border border-slate-200 p-4">
+                    <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Application fee</p>
+                    <p className="mt-1 font-bold text-slate-900">
+                      {new Intl.NumberFormat('en-ZM', {
+                        style: 'currency',
+                        currency: application.payment_currency || 'ZMW',
+                      }).format(application.payment_amount)}
+                      {' · '}{application.payment_status}
+                    </p>
+                    {application.payment_status === 'Pending' ? (
+                      <>
+                        <p className="mt-1 text-sm text-slate-600">Pay securely to complete your application.</p>
+                        <button
+                          type="button"
+                          onClick={() => void startPayment()}
+                          disabled={paymentBusy}
+                          className="mt-4 rounded-full bg-rhema-red px-5 py-3 text-sm font-bold text-white transition hover:bg-rhema-red-dark disabled:cursor-wait disabled:opacity-60"
+                        >
+                          {paymentBusy ? 'Processing payment…' : 'Pay application fee'}
+                        </button>
+                      </>
+                    ) : null}
+                    {paymentError ? <p className="mt-3 text-sm text-red-700" role="alert">{paymentError}</p> : null}
+                  </div>
+                ) : null}
 
                 <div>
                   <h2 className="text-lg font-black text-slate-900">Recommendation progress</h2>

@@ -79,6 +79,25 @@ export default function CourseQuizPage() {
   const handledReturn = useRef(false);
   const timeoutSubmitted = useRef(false);
   const timerDeadlineMs = useRef(0);
+  const activitySessionId = useRef<string | null>(null);
+
+  const trackActivity = useCallback(async (errorMessage: string) => {
+    const activityId = quiz?.quiz.id ?? Number(quizId);
+    if (!courseId || !Number.isInteger(activityId) || activityId < 1) return;
+    try {
+      await api.studentActivityLogs.track({
+        action: 'error',
+        course_id: courseId,
+        activity_type: quiz?.quiz.assessment_type ?? 'quiz',
+        activity_id: activityId,
+        ...(activitySessionId.current ? { session_id: activitySessionId.current } : {}),
+        error_message: errorMessage,
+      });
+      activitySessionId.current = null;
+    } catch (cause) {
+      console.warn('Could not record quiz activity.', cause);
+    }
+  }, [courseId, quiz, quizId]);
 
   const applyQuizData = useCallback((data: QuizData) => {
     setQuiz(data);
@@ -195,11 +214,14 @@ export default function CourseQuizPage() {
       const response = await api.courses.startStudentQuiz({
         course_id: courseId,
         quiz_id: quiz.quiz.id,
-      }) as { success?: boolean; message?: string };
+      }) as { success?: boolean; message?: string; data?: { activity_session_id?: string } };
       if (!response.success) throw new Error(response.message || 'Unable to start this assessment.');
+      activitySessionId.current = response.data?.activity_session_id ?? null;
       await loadQuiz();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Unable to start this assessment.');
+      const message = cause instanceof Error ? cause.message : 'Unable to start this assessment.';
+      setError(message);
+      await trackActivity(message);
     } finally {
       setStartingAttempt(false);
     }
@@ -278,6 +300,16 @@ export default function CourseQuizPage() {
     setSubmitting(true);
     setError('');
     try {
+      if (!activitySessionId.current) {
+        const startResponse = await api.courses.startStudentQuiz({
+          course_id: courseId,
+          quiz_id: quiz.quiz.id,
+        }) as { success?: boolean; message?: string; data?: { activity_session_id?: string } };
+        if (!startResponse.success) {
+          throw new Error(startResponse.message || 'Unable to start this assessment attempt.');
+        }
+        activitySessionId.current = startResponse.data?.activity_session_id ?? null;
+      }
       const response = await api.courses.submitStudentQuiz({
         course_id: courseId,
         quiz_id: quiz.quiz.id,
@@ -285,12 +317,15 @@ export default function CourseQuizPage() {
       }) as { success?: boolean; message?: string; data?: SubmissionResult };
       if (!response.success || !response.data) throw new Error(response.message || 'Unable to submit your assessment.');
       setResult(response.data);
+      activitySessionId.current = null;
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Unable to submit your assessment.');
+      const message = cause instanceof Error ? cause.message : 'Unable to submit your assessment.';
+      setError(message);
+      await trackActivity(message);
     } finally {
       setSubmitting(false);
     }
-  }, [courseId, quiz, selectedAnswers, submitting]);
+  }, [courseId, quiz, selectedAnswers, submitting, trackActivity]);
 
   useEffect(() => {
     timeoutSubmitted.current = false;

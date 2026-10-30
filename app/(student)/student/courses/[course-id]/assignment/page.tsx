@@ -86,7 +86,54 @@ export default function AssignmentSubmissionPage() {
   const [notice, setNotice] = useState('');
   const [saved, setSaved] = useState(false);
   const handledReturn = useRef(false);
+  const activitySessionId = useRef<string | null>(null);
+  const activityStartRequest = useRef<Promise<string | null> | null>(null);
   const submittedParagraphs = assignmentTextParagraphs(assignment?.submission_text);
+
+  const startActivity = useCallback(async () => {
+    if (activitySessionId.current) return activitySessionId.current;
+    if (activityStartRequest.current) return activityStartRequest.current;
+    const activityNumber = assignment?.id ?? Number(assignmentId);
+    if (!courseId || !Number.isInteger(activityNumber) || activityNumber < 1) return null;
+
+    activityStartRequest.current = (async () => {
+      try {
+        const response = await api.studentActivityLogs.track({
+          action: 'start',
+          course_id: courseId,
+          activity_type: 'assignment',
+          activity_id: activityNumber,
+        }) as { data?: { session_id?: string } };
+        activitySessionId.current = response.data?.session_id ?? null;
+        return activitySessionId.current;
+      } catch (cause) {
+        console.warn('Could not record assignment activity start.', cause);
+        return null;
+      } finally {
+        activityStartRequest.current = null;
+      }
+    })();
+    return activityStartRequest.current;
+  }, [assignment?.id, assignmentId, courseId]);
+
+  const finishActivity = useCallback(async (errorMessage: string) => {
+    const activityNumber = assignment?.id ?? Number(assignmentId);
+    if (!courseId || !Number.isInteger(activityNumber) || activityNumber < 1) return;
+    try {
+      await api.studentActivityLogs.track({
+        action: 'error',
+        course_id: courseId,
+        activity_type: 'assignment',
+        activity_id: activityNumber,
+        ...(activitySessionId.current ? { session_id: activitySessionId.current } : {}),
+        ...(errorMessage ? { error_message: errorMessage } : {}),
+      });
+    } catch (cause) {
+      console.warn('Could not record assignment activity result.', cause);
+    } finally {
+      activitySessionId.current = null;
+    }
+  }, [assignment?.id, assignmentId, courseId]);
 
   const loadAssignment = useCallback(async () => {
     if (!courseId || !assignmentId) return;
@@ -225,6 +272,7 @@ export default function AssignmentSubmissionPage() {
     setSaving(true);
     setError('');
     setSaved(false);
+    await startActivity();
     try {
       const response = await api.courses.saveStudentAssignment({
         course_id: courseId,
@@ -247,8 +295,11 @@ export default function AssignmentSubmissionPage() {
         payment_required: false,
         paid_access: false,
       } : current);
+      activitySessionId.current = null;
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Unable to save this assignment.');
+      const message = cause instanceof Error ? cause.message : 'Unable to save this assignment.';
+      setError(message);
+      await finishActivity(message);
     } finally {
       setSaving(false);
     }
@@ -359,7 +410,18 @@ export default function AssignmentSubmissionPage() {
       <form onSubmit={(event) => void submit(event)} className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
         <div><label className="block text-xs font-bold uppercase tracking-wider text-slate-600">Assignment response</label><p className="mt-1 text-xs text-slate-500">Use the editor to format your answer. The default is Arial, 14 pt. Changes are saved when you submit.</p></div>
         <div className="overflow-hidden rounded-xl border border-slate-200 [&_.ql-container]:min-h-[280px] [&_.ql-editor]:[font-family:Arial] [&_.ql-editor]:text-[14pt] [&_.ql-toolbar]:border-0 [&_.ql-toolbar]:border-b [&_.ql-toolbar]:border-slate-200 [&_.ql-toolbar]:bg-slate-50 [&_.ql-container]:border-0">
-          <ReactQuill theme="snow" value={textSubmission} onChange={setTextSubmission} modules={editorModules} formats={editorFormats} readOnly={saving} placeholder="Write your assignment response..." />
+          <ReactQuill
+            theme="snow"
+            value={textSubmission}
+            onChange={(value) => {
+              setTextSubmission(value);
+              void startActivity();
+            }}
+            modules={editorModules}
+            formats={editorFormats}
+            readOnly={saving}
+            placeholder="Write your assignment response..."
+          />
         </div>
         {assignment.closed && <p className="text-xs font-semibold text-amber-800">This is a late submission. A paid late-submission authorization has unlocked the editor.</p>}
         {assignment.paid_access && <p className="text-xs font-semibold text-emerald-800">Verified payment has unlocked one submission. The authorization is used when you submit.</p>}
