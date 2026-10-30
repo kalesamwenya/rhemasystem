@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { AlertCircle, ArrowRight, GraduationCap, Loader2, Lock, Mail } from 'lucide-react';
+import { AlertCircle, ArrowRight, Eye, EyeOff, GraduationCap, Loader2, Lock, Mail } from 'lucide-react';
 import { api } from '@/lib/api';
 import { getAdminLandingPath } from '@/lib/admin-access';
 import { setAuthSession } from '@/lib/auth';
@@ -49,6 +49,7 @@ function getSafeReturnPath(accountType: AccountType, requestedPath: string | nul
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -86,10 +87,10 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 lg:grid lg:grid-cols-[1.08fr_0.92fr]">
+    <main className="min-h-screen bg-[#f6f7f4] lg:grid lg:grid-cols-[1.08fr_0.92fr]">
       <section
         aria-label="Welcome to Rhema Bible Training Center"
-        className="relative isolate hidden min-h-screen items-end overflow-hidden bg-blue-950 px-7 py-10 lg:flex lg:px-16 lg:py-16"
+        className="relative isolate hidden min-h-screen items-end overflow-hidden bg-rhema-blue px-7 py-10 lg:flex lg:px-16 lg:py-16"
       >
         <Image
           src="/login-study.jpg"
@@ -99,33 +100,33 @@ export default function LoginPage() {
           sizes="(min-width: 1024px) 54vw, 100vw"
           className="object-cover object-center"
         />
-        <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-br from-blue-950/85 via-blue-950/55 to-slate-950/85" />
-        <div aria-hidden="true" className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(234,179,8,0.22),transparent_48%)]" />
+        <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-br from-rhema-blue/90 via-blue-950/65 to-slate-950/85" />
+        <div aria-hidden="true" className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(242,181,68,0.24),transparent_48%),radial-gradient(ellipse_at_bottom_right,rgba(200,16,46,0.2),transparent_48%)]" />
         <div className="relative max-w-xl text-white">
-          <div className="mb-8 flex h-12 w-12 items-center justify-center rounded-2xl border border-white/20 bg-white/10 text-amber-300 backdrop-blur-sm">
+          <div className="mb-8 flex h-12 w-12 items-center justify-center rounded-2xl border border-white/20 bg-white/10 text-rhema-accent backdrop-blur-sm">
             <GraduationCap className="h-6 w-6" />
           </div>
-          <p className="text-xs font-black uppercase tracking-[0.22em] text-amber-300">Rhema Bible Training Center</p>
+          <p className="text-xs font-black uppercase tracking-[0.22em] text-rhema-accent">Rhema Bible Training Center</p>
           <h2 className="mt-4 text-4xl font-black leading-tight tracking-tight sm:text-5xl">
             Grow in faith.
             <br />
             Prepare for purpose.
           </h2>
-          <p className="mt-5 max-w-lg text-sm leading-7 text-blue-50/90 sm:text-base">
+          <p className="mt-5 max-w-lg text-sm leading-7 text-white/90 sm:text-base">
             Learn, serve, and grow in a community devoted to the Word and to preparing leaders for a life of purpose.
           </p>
-          <div aria-hidden="true" className="mt-8 h-1 w-16 rounded-full bg-amber-300" />
+          <div aria-hidden="true" className="mt-8 h-1 w-16 rounded-full bg-rhema-red" />
         </div>
       </section>
 
       <section className="relative flex min-h-screen items-center justify-center px-5 py-10 sm:px-8 lg:px-12">
-        <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(234,179,8,0.1),transparent_38%),radial-gradient(ellipse_at_bottom_left,rgba(37,99,235,0.08),transparent_42%)]" />
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(242,181,68,0.14),transparent_38%),radial-gradient(ellipse_at_bottom_left,rgba(0,61,165,0.09),transparent_42%)]" />
         <div className="relative w-full max-w-md rounded-3xl border border-slate-100 bg-white p-7 shadow-xl shadow-slate-900/5 sm:p-10">
           <header className="text-center">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-950 text-amber-400 shadow-lg shadow-blue-950/15">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-rhema-blue text-rhema-accent shadow-lg shadow-rhema-blue/20">
               <GraduationCap className="h-7 w-7" />
             </div>
-            <p className="mt-5 text-xs font-black uppercase tracking-[0.2em] text-blue-900">Rhema Bible Training Center</p>
+            <p className="mt-5 text-xs font-black uppercase tracking-[0.2em] text-rhema-red">Rhema Bible Training Center</p>
             <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">Welcome back</h1>
             <p className="mt-2 text-sm text-slate-500">Sign in with your school account.</p>
           </header>
@@ -150,7 +151,7 @@ export default function LoginPage() {
                   required
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
-                  className="block w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm outline-none transition focus:border-blue-900 focus:bg-white focus:ring-2 focus:ring-blue-900/10"
+                  className="block w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm text-slate-950 outline-none transition focus:border-rhema-blue focus:bg-white focus:ring-2 focus:ring-rhema-blue/10"
                   placeholder="name@school.org"
                 />
               </div>
@@ -158,27 +159,36 @@ export default function LoginPage() {
             <div>
               <div className="flex items-center justify-between gap-3">
                 <label htmlFor="login-password" className="block text-xs font-bold uppercase tracking-wider text-slate-700">Password</label>
-                <Link href="/forgot-password" className="text-xs font-semibold text-blue-900 hover:underline">Forgot password?</Link>
+                <Link href="/forgot-password" className="text-xs font-semibold text-rhema-blue hover:text-rhema-red hover:underline">Forgot password?</Link>
               </div>
               <div className="relative mt-1.5">
                 <Lock className="pointer-events-none absolute inset-y-0 my-auto ml-3 h-5 w-5 text-slate-400" />
                 <input
                   id="login-password"
                   name="password"
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   autoComplete="current-password"
                   required
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
-                  className="block w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm outline-none transition focus:border-blue-900 focus:bg-white focus:ring-2 focus:ring-blue-900/10"
+                  className="block w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-12 text-sm text-slate-950 outline-none transition focus:border-rhema-blue focus:bg-white focus:ring-2 focus:ring-rhema-blue/10"
                   placeholder="Enter your password"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((shown) => !shown)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  aria-pressed={showPassword}
+                  className="absolute inset-y-0 right-0 flex items-center px-3 text-rhema-blue transition hover:text-rhema-red focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-rhema-blue"
+                >
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
               </div>
             </div>
             <button
               type="submit"
               disabled={isLoading}
-              className="group flex w-full items-center justify-center gap-2 rounded-xl bg-blue-950 px-4 py-3.5 text-sm font-bold text-white shadow-lg shadow-blue-950/15 transition hover:bg-blue-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-900 disabled:cursor-not-allowed disabled:opacity-70"
+              className="group flex w-full items-center justify-center gap-2 rounded-xl bg-rhema-red px-4 py-3.5 text-sm font-bold text-white shadow-lg shadow-rhema-red/20 transition hover:bg-rhema-red-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rhema-red disabled:cursor-not-allowed disabled:opacity-70"
             >
               {isLoading ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking your account...</> : <>Sign in <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" /></>}
             </button>

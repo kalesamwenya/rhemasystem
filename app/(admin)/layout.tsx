@@ -7,6 +7,7 @@ import AdminSidebar from '@/components/admin/AdminSidebar';
 import AdminAudioPlayerProvider from '@/components/admin/AdminAudioPlayer';
 import AdminErrorMonitor from '@/components/admin/AdminErrorMonitor';
 import { CommunicationProvider } from '@/components/communications/CommunicationProvider';
+import AdminNotificationToasts from '@/components/communications/AdminNotificationToasts';
 import FloatingChatBubble from '@/components/communications/FloatingChatBubble';
 import LoadingPlaceholder from '@/components/ui/LoadingPlaceholder';
 import { api, clearAuthSession } from '@/lib/api';
@@ -253,7 +254,10 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         </main>
       </div>
     </div>
-    {canAccessAdminModule(adminProfile.admin_role, adminProfile.department, 'communications') && <FloatingChatBubble />}
+    {canAccessAdminModule(adminProfile.admin_role, adminProfile.department, 'communications') && <>
+      <AdminNotificationToasts />
+      <FloatingChatBubble />
+    </>}
     </AdminAudioPlayerProvider>
     </CommunicationProvider>
   );

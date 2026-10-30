@@ -1,11 +1,14 @@
 import { api } from '@/lib/api';
 
+export type RhemaSessionPeriod = 'morning' | 'evening';
+
 export type RhemaSession = {
   id: string;
   date: string;
   start: string;
   end: string;
   notes: string;
+  period: RhemaSessionPeriod;
 };
 
 export type RhemaSchedule = {
@@ -20,6 +23,7 @@ export type RhemaSchedule = {
 export type RhemaSchedulesPayload = {
   schedules: RhemaSchedule[];
   enrollments: Record<string, string[]>;
+  enrollmentPeriods?: Record<string, Record<string, RhemaSessionPeriod>>;
 };
 
 export type RhemaStudent = {

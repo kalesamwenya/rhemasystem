@@ -40,6 +40,7 @@ export interface CommunicationSnapshot {
 interface CommunicationContextValue {
   snapshot: CommunicationSnapshot;
   loading: boolean;
+  hasLoaded: boolean;
   soundsEnabled: boolean;
   error: string;
   refresh: () => Promise<void>;
@@ -64,6 +65,7 @@ export function isChatNotification(notification: CommunicationNotification) {
 const CommunicationContext = createContext<CommunicationContextValue>({
   snapshot: emptySnapshot,
   loading: false,
+  hasLoaded: false,
   soundsEnabled: true,
   error: '',
   refresh: async () => {},
@@ -76,6 +78,7 @@ const CommunicationContext = createContext<CommunicationContextValue>({
 export function CommunicationProvider({ children, enabled = true }: { children: React.ReactNode; enabled?: boolean }) {
   const [snapshot, setSnapshot] = useState(emptySnapshot);
   const [loading, setLoading] = useState(false);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [soundsEnabled, setSoundsEnabled] = useState(() => {
     if (typeof window === 'undefined') return true;
     try {
@@ -177,6 +180,7 @@ export function CommunicationProvider({ children, enabled = true }: { children: 
         Number(conversation.last_message_id) || 0,
       ]));
       const visibleNotifications = allNotifications.filter((item) => !isChatNotification(item));
+      setHasLoaded(true);
       setSnapshot({
         conversations,
         notifications: visibleNotifications,
@@ -274,6 +278,7 @@ export function CommunicationProvider({ children, enabled = true }: { children: 
   const value = useMemo(() => ({
     snapshot,
     loading,
+    hasLoaded,
     soundsEnabled,
     error,
     refresh,
@@ -281,7 +286,7 @@ export function CommunicationProvider({ children, enabled = true }: { children: 
     markNotificationRead,
     markAllNotificationsRead,
     toggleSounds,
-  }), [snapshot, loading, soundsEnabled, error, refresh, retry, markNotificationRead, markAllNotificationsRead, toggleSounds]);
+  }), [snapshot, loading, hasLoaded, soundsEnabled, error, refresh, retry, markNotificationRead, markAllNotificationsRead, toggleSounds]);
   return <CommunicationContext.Provider value={value}>{children}</CommunicationContext.Provider>;
 }
 

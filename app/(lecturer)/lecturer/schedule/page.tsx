@@ -13,6 +13,7 @@ type TeachingSession = {
   course_id: string;
   course_name: string;
   cohort_name: string;
+  session_period: 'morning' | 'evening';
 };
 
 const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -149,7 +150,7 @@ export default function LecturerSchedulePage() {
                     <div className="mt-1 space-y-1">
                       {dateSessions.slice(0, 2).map((session) => (
                         <span key={session.id} className="block truncate rounded bg-blue-100 px-1.5 py-1 text-[9px] font-bold text-blue-900 sm:text-[10px]">
-                          <span className="hidden sm:inline">{session.start_time.slice(0, 5)} </span>{session.course_name}
+                          <span className="hidden sm:inline">{session.start_time.slice(0, 5)} · {session.session_period} </span>{session.course_name}
                         </span>
                       ))}
                       {dateSessions.length > 2 && (
@@ -178,7 +179,10 @@ export default function LecturerSchedulePage() {
               <article key={session.id} className="rounded-xl border border-slate-100 bg-slate-50/60 p-4">
                 <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
                   <div>
-                    <p className="font-bold text-slate-900">{session.course_name}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-bold text-slate-900">{session.course_name}</p>
+                      <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[9px] font-black uppercase text-blue-800">{session.session_period} session</span>
+                    </div>
                     <p className="mt-1 text-xs text-slate-500">{session.course_id}</p>
                   </div>
                   <p className="flex items-center gap-1.5 text-xs font-bold text-slate-800">

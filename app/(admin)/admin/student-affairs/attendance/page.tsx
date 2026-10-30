@@ -177,7 +177,9 @@ function localDateValue(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-function getClassPeriod(start: string, notes = ''): ScheduledClassSlot['period'] {
+function getClassPeriod(start: string, notes = '', assignedPeriod?: 'morning' | 'evening'): ScheduledClassSlot['period'] {
+  if (assignedPeriod === 'morning') return 'Morning';
+  if (assignedPeriod === 'evening') return 'Evening';
   const time = start.toLowerCase();
   if (/\bpm\b/.test(time)) return 'Evening';
   if (/\bam\b/.test(time)) return 'Morning';
@@ -191,6 +193,19 @@ function getClassPeriod(start: string, notes = ''): ScheduledClassSlot['period']
   if (description.includes('evening')) return 'Evening';
   if (description.includes('morning')) return 'Morning';
   return 'Daytime';
+}
+
+function getStudentOpportunities(
+  opportunities: AttendanceOpportunity[],
+  studentId: string,
+  enrollmentPeriods: RhemaSchedulesPayload['enrollmentPeriods'],
+): AttendanceOpportunity[] {
+  return opportunities.flatMap((opportunity) => {
+    const slots = opportunity.slots.filter((slot) =>
+      (enrollmentPeriods?.[slot.courseId]?.[studentId] ?? 'morning') === slot.session.period
+    );
+    return slots.length ? [{ ...opportunity, slots }] : [];
+  });
 }
 
 function groupCourseSchedules(schedules: RhemaSchedule[]): CourseScheduleGroup[] {
@@ -218,7 +233,7 @@ function buildAttendanceOpportunities(schedules: RhemaSchedule[]): AttendanceOpp
       slots.push({
         courseId: schedule.id,
         session,
-        period: getClassPeriod(session.start, session.notes),
+        period: getClassPeriod(session.start, session.notes, session.period),
       });
       slotsByDate.set(session.date, slots);
     });
@@ -542,21 +557,33 @@ export default function AttendanceDashboardPage() {
           const enrolledIds = [...new Set(course.schedules.flatMap((schedule) =>
             scheduleData.enrollments[schedule.id] ?? []))];
           return buildAttendanceOpportunities(course.schedules)
-            .filter((opportunity) => Math.max(...opportunity.slots.map(({ session }) =>
-              new Date(`${session.date}T${session.end || '23:59'}`).getTime())) < Date.now())
             .flatMap((opportunity) => {
-              const hasAttendance = (studentId: string) => findOpportunityAttendance(opportunity, course.course, String(studentId), records);
-              const sessionIds = opportunity.slots.map((slot) => String(slot.session.id));
-              const courseIds = [...new Set(opportunity.slots.map((slot) => slot.courseId))];
-              if (courseIds.length === 0) return [];
               return enrolledIds
-                .filter((studentId) => !hasAttendance(String(studentId)))
-                .map((studentId) => ({
-                  student_id: String(studentId),
-                  course_ids: courseIds,
-                  date: opportunity.date,
-                  session_ids: sessionIds,
-                }));
+                .flatMap((studentId) => {
+                  const studentOpportunities = getStudentOpportunities(
+                    [opportunity],
+                    String(studentId),
+                    scheduleData.enrollmentPeriods,
+                  );
+                  const studentOpportunity = studentOpportunities[0];
+                  if (
+                    !studentOpportunity
+                    || Math.max(...studentOpportunity.slots.map(({ session }) =>
+                      new Date(`${session.date}T${session.end || '23:59'}`).getTime())) >= Date.now()
+                    || findOpportunityAttendance(
+                    studentOpportunity,
+                    course.course,
+                    String(studentId),
+                    records,
+                    )
+                  ) return [];
+                  return [{
+                    student_id: String(studentId),
+                    course_ids: [...new Set(studentOpportunity.slots.map((slot) => slot.courseId))],
+                    date: studentOpportunity.date,
+                    session_ids: studentOpportunity.slots.map((slot) => String(slot.session.id)),
+                  }];
+                });
             });
         });
         void (async () => {
@@ -577,7 +604,11 @@ export default function AttendanceDashboardPage() {
           return ids.map((id) => {
             const student = studentMap.get(String(id));
             const studentRecords = records.filter((record) => String(record.student_id) === String(id));
-            const completedSessions = course.sessions.filter((session) => new Date(`${session.date}T${session.end || '23:59'}`).getTime() < Date.now());
+            const studentPeriod = scheduleData.enrollmentPeriods?.[course.id]?.[String(id)] ?? 'morning';
+            const completedSessions = course.sessions.filter((session) =>
+              session.period === studentPeriod
+              && new Date(`${session.date}T${session.end || '23:59'}`).getTime() < Date.now()
+            );
             const attended = completedSessions.filter((session) => studentRecords.some((record) =>
               String(record.schedule_id) === String(session.id)
               || (!record.schedule_id && record.course === course.course && record.date === session.date)
@@ -610,10 +641,7 @@ export default function AttendanceDashboardPage() {
       const opportunities = buildAttendanceOpportunities(course.schedules).filter((opportunity) =>
         opportunity.date >= reportDateRange.start
         && opportunity.date <= reportDateRange.end
-        && Math.max(...opportunity.slots.map(({ session }) =>
-          new Date(`${session.date}T${session.end || '23:59'}`).getTime())) < attendanceAsOf
       );
-      if (opportunities.length === 0) return [];
       const enrolledIds = [...new Set(course.schedules.flatMap((schedule) =>
         schedulePayload.enrollments[schedule.id] ?? []))];
       const recordIds = [...new Set(attendanceRecords
@@ -621,16 +649,23 @@ export default function AttendanceDashboardPage() {
           && (!record.profile_cohort || record.profile_cohort.toUpperCase() === course.cohortName.toUpperCase()))
         .map((record) => String(record.student_id)))];
       const studentIds = enrolledIds.length ? enrolledIds : recordIds;
-      return studentIds.map((studentId) => {
+      return studentIds.flatMap((studentId) => {
+        const studentOpportunities = getStudentOpportunities(
+          opportunities,
+          String(studentId),
+          schedulePayload.enrollmentPeriods,
+        ).filter((opportunity) => Math.max(...opportunity.slots.map(({ session }) =>
+          new Date(`${session.date}T${session.end || '23:59'}`).getTime())) < attendanceAsOf);
+        if (studentOpportunities.length === 0) return [];
         const matches = attendanceRecords.filter((record) => String(record.student_id) === String(studentId));
-        const attended = opportunities.filter((opportunity) =>
+        const attended = studentOpportunities.filter((opportunity) =>
           findOpportunityAttendance(opportunity, course.course, String(studentId), matches)).length;
-        const total = opportunities.length;
+        const total = studentOpportunities.length;
         const rate = total ? Math.min(100, Math.round((attended / total) * 100)) : 0;
         const baseline = liveStudentData.find((student) => student.id === String(studentId));
         const name = matches[0]?.name || baseline?.name || String(studentId);
         const cohort = matches.find((record) => record.profile_cohort)?.profile_cohort || baseline?.cohort || course.cohortName;
-        return {
+        return [{
           id: String(studentId),
           name,
           cohort,
@@ -645,15 +680,13 @@ export default function AttendanceDashboardPage() {
           term: reportDateRange.label,
           phone: baseline?.phone || '',
           email: baseline?.email || '',
-        };
+        }];
       });
     });
     const courses = courseGroups.map((course) => {
       const opportunities = buildAttendanceOpportunities(course.schedules).filter((opportunity) =>
         opportunity.date >= reportDateRange.start
         && opportunity.date <= reportDateRange.end
-        && Math.max(...opportunity.slots.map(({ session }) =>
-          new Date(`${session.date}T${session.end || '23:59'}`).getTime())) < attendanceAsOf
       );
       const enrolledIds = [...new Set(course.schedules.flatMap((schedule) =>
         schedulePayload.enrollments[schedule.id] ?? []))];
@@ -661,16 +694,32 @@ export default function AttendanceDashboardPage() {
         .filter((record) => record.course === course.course
           && (!record.profile_cohort || record.profile_cohort.toUpperCase() === course.cohortName.toUpperCase()))
         .map((record) => String(record.student_id)))];
-      const present = studentIds.reduce((count, studentId) => count + opportunities.filter((opportunity) =>
-        findOpportunityAttendance(opportunity, course.course, String(studentId), attendanceRecords)
-      ).length, 0);
-      const possible = opportunities.length * studentIds.length;
+      const attendanceTotals = studentIds.reduce((totals, studentId) => {
+        const studentOpportunities = getStudentOpportunities(
+          opportunities,
+          String(studentId),
+          schedulePayload.enrollmentPeriods,
+        ).filter((opportunity) => Math.max(...opportunity.slots.map(({ session }) =>
+          new Date(`${session.date}T${session.end || '23:59'}`).getTime())) < attendanceAsOf);
+        return {
+          present: totals.present + studentOpportunities.filter((opportunity) =>
+            findOpportunityAttendance(opportunity, course.course, String(studentId), attendanceRecords)
+          ).length,
+          possible: totals.possible + studentOpportunities.length,
+        };
+      }, { present: 0, possible: 0 });
+      const present = attendanceTotals.present;
+      const possible = attendanceTotals.possible;
       const absent = Math.max(0, possible - present);
       return {
         code: course.course,
         title: course.course,
         cohort: course.cohortName,
-        sessions: opportunities.length,
+        sessions: studentIds.length ? Math.max(...studentIds.map((studentId) =>
+          getStudentOpportunities(opportunities, String(studentId), schedulePayload.enrollmentPeriods)
+            .filter((opportunity) => Math.max(...opportunity.slots.map(({ session }) =>
+              new Date(`${session.date}T${session.end || '23:59'}`).getTime())) < attendanceAsOf)
+            .length)) : 0,
         attendance: present + absent ? Math.round((present / (present + absent)) * 100) : 0,
         present,
         absent,
@@ -817,7 +866,11 @@ export default function AttendanceDashboardPage() {
   const selectedStudentSessionLog = useMemo<StudentSessionLog[]>(() => {
     if (!selectedRecord || !('id' in selectedRecord)) return [];
     const now = attendanceAsOf;
-    return selectedStudentCourses.flatMap((course) => buildAttendanceOpportunities(course.schedules)
+    return selectedStudentCourses.flatMap((course) => getStudentOpportunities(
+      buildAttendanceOpportunities(course.schedules),
+      selectedRecord.id,
+      schedulePayload?.enrollmentPeriods ?? {},
+    )
       .filter((opportunity) => !reportDateRange
         || (opportunity.date >= reportDateRange.start && opportunity.date <= reportDateRange.end))
       .map((opportunity) => {
@@ -847,7 +900,7 @@ export default function AttendanceDashboardPage() {
         audioBought: sessionIds.some((sessionId) => audioAccessKeys.has(`${selectedRecord.id}:${sessionId}`)),
       };
     })).sort((a, b) => `${b.date} ${b.start}`.localeCompare(`${a.date} ${a.start}`));
-  }, [selectedRecord, selectedStudentCourses, attendanceRecords, attendanceAsOf, audioAccessKeys, reportDateRange]);
+  }, [selectedRecord, selectedStudentCourses, attendanceRecords, attendanceAsOf, audioAccessKeys, reportDateRange, schedulePayload]);
 
   const selectedCourseStudents = useMemo(() => {
     if (!selectedCourseReport) return [];

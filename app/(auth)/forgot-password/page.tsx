@@ -1,34 +1,24 @@
 // src/app/(auth)/forgot-password/page.tsx
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { KeyRound, Mail, ArrowLeft, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { api } from '@/lib/api';
 
-type AccountType = 'student' | 'admin' | 'lecturer';
-
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
-  const [accountType, setAccountType] = useState<AccountType>('student');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
-
-  useEffect(() => {
-    const type = new URLSearchParams(window.location.search).get('type');
-    if (type !== 'student' && type !== 'admin' && type !== 'lecturer') return;
-    const timer = window.setTimeout(() => setAccountType(type), 0);
-    return () => window.clearTimeout(timer);
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
     try {
-      const response = await api.forgotPassword({ account_type: accountType, email }) as { message?: string };
+      const response = await api.forgotPassword({ email }) as { message?: string };
       setMessage(response.message || 'If an active account matches those details, a reset link will be emailed.');
       setIsSubmitted(true);
     } catch (requestError) {
@@ -41,21 +31,22 @@ export default function ForgotPasswordPage() {
   const loginPath = '/login';
 
   return (
-    <div className="flex min-h-screen w-full items-center justify-center bg-slate-50 px-4 py-12 sm:px-6 lg:px-8">
-      <div className="w-full max-w-md space-y-8 rounded-2xl border border-slate-200 bg-white p-8 shadow-xl shadow-slate-100">
+    <div className="flex min-h-screen w-full items-center justify-center bg-[#f6f7f4] px-4 py-12 sm:px-6 lg:px-8">
+      <div className="w-full max-w-md space-y-8 rounded-2xl border border-slate-200 bg-white p-8 shadow-xl shadow-slate-900/5">
         
         {!isSubmitted ? (
           <>
             {/* Form State View Header */}
             <div className="flex flex-col items-center text-center">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-900 text-yellow-500 shadow-md">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-rhema-blue text-rhema-accent shadow-md">
                 <KeyRound className="h-6 w-6" />
               </div>
               <h2 className="mt-6 text-3xl font-black tracking-tight text-slate-900">
                 Reset your password
               </h2>
+              <div aria-hidden="true" className="mt-3 h-1 w-12 rounded-full bg-rhema-red" />
               <p className="mt-2 text-sm text-slate-500 max-w-xs">
-                Select your portal and enter its registered email address.
+                Enter the email address registered with your account.
               </p>
             </div>
 
@@ -63,14 +54,6 @@ export default function ForgotPasswordPage() {
 
             {/* Input Action Form */}
             <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-              <div>
-                <label htmlFor="account-type" className="block text-xs font-bold uppercase tracking-wider text-slate-700">Account type</label>
-                <select id="account-type" value={accountType} onChange={(event) => setAccountType(event.target.value as AccountType)} className="mt-1 block w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
-                  <option value="student">Student</option>
-                  <option value="admin">Administrator</option>
-                  <option value="lecturer">Lecturer</option>
-                </select>
-              </div>
               <div>
                 <label htmlFor="email-address" className="block text-xs font-bold uppercase tracking-wider text-slate-700">
                   Academic Email Address
@@ -87,7 +70,7 @@ export default function ForgotPasswordPage() {
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="block w-full rounded-xl border border-slate-200 bg-slate-50/50 py-3 pl-10 pr-4 text-sm placeholder-slate-400 transition-all focus:border-blue-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-900/10"
+                    className="block w-full rounded-xl border border-slate-200 bg-slate-50/50 py-3 pl-10 pr-4 text-sm placeholder-slate-400 transition-all focus:border-rhema-blue focus:bg-white focus:outline-none focus:ring-2 focus:ring-rhema-blue/10"
                     placeholder="name@university.edu"
                   />
                 </div>
@@ -98,7 +81,7 @@ export default function ForgotPasswordPage() {
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="flex w-full justify-center items-center gap-2 rounded-xl bg-blue-900 px-4 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:bg-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-900 disabled:opacity-70"
+                  className="flex w-full justify-center items-center gap-2 rounded-xl bg-rhema-red px-4 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:bg-rhema-red-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rhema-red disabled:opacity-70"
                 >
                   {isLoading ? (
                     <>
@@ -112,7 +95,7 @@ export default function ForgotPasswordPage() {
 
                 <Link
                   href={loginPath}
-                  className="flex w-full justify-center items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 transition-all hover:bg-slate-50"
+                  className="flex w-full justify-center items-center gap-2 rounded-xl border border-rhema-blue/20 bg-white px-4 py-3 text-sm font-semibold text-rhema-blue transition-all hover:bg-blue-50"
                 >
                   <ArrowLeft className="h-4 w-4" />
                   Back to Login
@@ -133,12 +116,10 @@ export default function ForgotPasswordPage() {
               <p className="mt-2 text-sm text-slate-500">
                 {message}
               </p>
-              <p className="mt-2 text-sm text-slate-500">Requested for <span className="font-semibold text-slate-800">{email}</span>.</p>
-
               <div className="mt-8 w-full pt-6 border-t border-slate-100">
                 <Link
                   href={loginPath}
-                  className="flex w-full justify-center items-center gap-2 rounded-xl bg-blue-900 px-4 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:bg-slate-900"
+                  className="flex w-full justify-center items-center gap-2 rounded-xl bg-rhema-red px-4 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:bg-rhema-red-dark"
                 >
                   Return to Login Panel
                 </Link>

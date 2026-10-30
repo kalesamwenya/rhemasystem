@@ -6,7 +6,7 @@ import { ArrowDownWideNarrow, CalendarDays, ChevronLeft, ChevronRight, Code2, Da
 import { requestRhemaSchedules, syncRhemaSchedules, type RhemaSchedule } from '@/lib/rhema-schedule-api';
 
 const inputClass = 'w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-900 outline-none focus:border-slate-400 focus:bg-white';
-const emptyForm = { startDate: '', endDate: '', date: '', start: '09:00', end: '15:00', notes: '' };
+const emptyForm = { startDate: '', endDate: '', date: '', start: '09:00', end: '15:00', notes: '', period: 'morning' as const };
 const cohortOptions = ['FYM', 'FYE', 'SYM', 'SYE'] as const;
 const cohortNumbers: Record<(typeof cohortOptions)[number], number> = { FYM: 1, FYE: 2, SYM: 3, SYE: 4 };
 
@@ -103,11 +103,90 @@ export default function AcademicRegistryPage() {
 }
 
 function CreateCourse({ onClose, onSaved }: { onClose: () => void; onSaved: (schedule: RhemaSchedule) => void }) {
-  const [course, setCourse] = useState(''); const [description, setDescription] = useState(''); const [cohort, setCohort] = useState<(typeof cohortOptions)[number] | ''>(''); const [mode, setMode] = useState<'auto' | 'single'>('auto'); const [form, setForm] = useState(emptyForm); const [error, setError] = useState('');
+  const [course, setCourse] = useState('');
+  const [description, setDescription] = useState('');
+  const [cohort, setCohort] = useState<(typeof cohortOptions)[number] | ''>('');
+  const [mode, setMode] = useState<'auto' | 'single'>('auto');
+  const [form, setForm] = useState(emptyForm);
+  const [error, setError] = useState('');
   const setField = (field: keyof typeof emptyForm, value: string) => setForm((current) => ({ ...current, [field]: value }));
-  const sessions = () => { if (mode === 'single') return form.date ? [{ id: `s_${Date.now()}_0`, date: form.date, start: form.start, end: form.end, notes: form.notes }] : []; if (!form.startDate || !form.endDate) return []; const result: RhemaSchedule['sessions'] = []; const cursor = new Date(`${form.startDate}T00:00:00`); const last = new Date(`${form.endDate}T00:00:00`); while (cursor <= last) { if (cursor.getDay() !== 0 && cursor.getDay() !== 6) result.push({ id: `s_${Date.now()}_${result.length}`, date: cursor.toISOString().slice(0, 10), start: form.start, end: form.end, notes: form.notes }); cursor.setDate(cursor.getDate() + 1); } return result; };
-  const save = async () => { const generated = sessions(); if (!course.trim() || !cohort || !generated.length) return setError('Course, cohort, and at least one valid session are required.'); const schedule = { id: `c_${Date.now()}`, course: course.toUpperCase(), description: description.trim(), cohort: cohortNumbers[cohort], cohortName: cohort, sessions: generated }; try { await syncRhemaSchedules({ schedules: [schedule], enrollments: { [schedule.id]: [] } }); onSaved(schedule); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to save this course.'); } };
-  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4"><div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl"><div className="flex items-start justify-between"><div><p className="text-[10px] font-black uppercase tracking-[0.2em] text-red-600">Course record</p><h2 className="mt-1 text-2xl font-black text-slate-900">Create course</h2></div><button onClick={onClose} className="text-2xl text-slate-400" aria-label="Close">×</button></div><div className="mt-6 grid gap-4 sm:grid-cols-2"><Field label="Course code"><input value={course} onChange={(event) => setCourse(event.target.value)} className={inputClass} placeholder="TAE" /></Field><Field label="Cohort / class"><select value={cohort} onChange={(event) => setCohort(event.target.value as (typeof cohortOptions)[number] | '')} className={inputClass}><option value="">Select cohort</option>{cohortOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></Field></div><Field label="Course description"><textarea rows={3} value={description} onChange={(event) => setDescription(event.target.value)} className={inputClass} placeholder="Course outline, outcomes, and learning details" /></Field><div className="mt-7 flex gap-2"><button onClick={() => setMode('auto')} className={`rounded-xl px-4 py-2 text-xs font-black ${mode === 'auto' ? 'bg-slate-900 text-white' : 'border border-slate-200 text-slate-600'}`}>Auto-generate sessions</button><button onClick={() => setMode('single')} className={`rounded-xl px-4 py-2 text-xs font-black ${mode === 'single' ? 'bg-slate-900 text-white' : 'border border-slate-200 text-slate-600'}`}>Single session</button></div>{mode === 'auto' ? <div className="mt-4 grid gap-4 sm:grid-cols-2"><Field label="Start date"><input type="date" value={form.startDate} onChange={(event) => setField('startDate', event.target.value)} className={inputClass} /></Field><Field label="End date"><input type="date" value={form.endDate} onChange={(event) => setField('endDate', event.target.value)} className={inputClass} /></Field></div> : <div className="mt-4"><Field label="Session date"><input type="date" value={form.date} onChange={(event) => setField('date', event.target.value)} className={inputClass} /></Field></div>}<div className="mt-4 grid gap-4 sm:grid-cols-2"><Field label="Start time"><input type="time" value={form.start} onChange={(event) => setField('start', event.target.value)} className={inputClass} /></Field><Field label="End time"><input type="time" value={form.end} onChange={(event) => setField('end', event.target.value)} className={inputClass} /></Field></div><Field label="Notes"><textarea value={form.notes} onChange={(event) => setField('notes', event.target.value)} className={`${inputClass} mt-4 min-h-20`} /></Field>{error && <p role="alert" className="mt-3 text-xs font-bold text-red-600">{error}</p>}<div className="mt-6 flex justify-end gap-2 border-t border-slate-100 pt-4"><button type="button" onClick={onClose} className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600">Cancel</button><button type="button" onClick={() => void save()} className="rounded-xl bg-slate-900 px-5 py-2.5 text-xs font-black text-white">Create course</button></div></div></div>;
+  const sessions = (): RhemaSchedule['sessions'] => {
+    if (mode === 'single') return form.date ? [{
+      id: `s_${Date.now()}_0`, date: form.date, start: form.start, end: form.end, notes: form.notes, period: form.period,
+    }] : [];
+    if (!form.startDate || !form.endDate) return [];
+    const result: RhemaSchedule['sessions'] = [];
+    const cursor = new Date(`${form.startDate}T00:00:00`);
+    const last = new Date(`${form.endDate}T00:00:00`);
+    while (cursor <= last) {
+      if (cursor.getDay() !== 0 && cursor.getDay() !== 6) {
+        result.push({
+          id: `s_${Date.now()}_${result.length}`,
+          date: cursor.toISOString().slice(0, 10),
+          start: form.start,
+          end: form.end,
+          notes: form.notes,
+          period: form.period,
+        });
+      }
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    return result;
+  };
+  const save = async () => {
+    const generated = sessions();
+    if (!course.trim() || !cohort || !generated.length) return setError('Course, cohort, and at least one valid session are required.');
+    const schedule = {
+      id: `c_${Date.now()}`,
+      course: course.toUpperCase(),
+      description: description.trim(),
+      cohort: cohortNumbers[cohort],
+      cohortName: cohort,
+      sessions: generated,
+    };
+    try {
+      await syncRhemaSchedules({ schedules: [schedule], enrollments: { [schedule.id]: [] } });
+      onSaved(schedule);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to save this course.');
+    }
+  };
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+      <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
+        <div className="flex items-start justify-between">
+          <div><p className="text-[10px] font-black uppercase tracking-[0.2em] text-red-600">Course record</p><h2 className="mt-1 text-2xl font-black text-slate-900">Create course</h2></div>
+          <button onClick={onClose} className="text-2xl text-slate-400" aria-label="Close">×</button>
+        </div>
+        <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          <Field label="Course code"><input value={course} onChange={(event) => setCourse(event.target.value)} className={inputClass} placeholder="TAE" /></Field>
+          <Field label="Cohort / class"><select value={cohort} onChange={(event) => setCohort(event.target.value as (typeof cohortOptions)[number] | '')} className={inputClass}><option value="">Select cohort</option>{cohortOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></Field>
+        </div>
+        <Field label="Course description"><textarea rows={3} value={description} onChange={(event) => setDescription(event.target.value)} className={inputClass} placeholder="Course outline, outcomes, and learning details" /></Field>
+        <div className="mt-7 flex gap-2">
+          <button onClick={() => setMode('auto')} className={`rounded-xl px-4 py-2 text-xs font-black ${mode === 'auto' ? 'bg-slate-900 text-white' : 'border border-slate-200 text-slate-600'}`}>Auto-generate sessions</button>
+          <button onClick={() => setMode('single')} className={`rounded-xl px-4 py-2 text-xs font-black ${mode === 'single' ? 'bg-slate-900 text-white' : 'border border-slate-200 text-slate-600'}`}>Single session</button>
+        </div>
+        {mode === 'auto' ? (
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <Field label="Start date"><input type="date" value={form.startDate} onChange={(event) => setField('startDate', event.target.value)} className={inputClass} /></Field>
+            <Field label="End date"><input type="date" value={form.endDate} onChange={(event) => setField('endDate', event.target.value)} className={inputClass} /></Field>
+          </div>
+        ) : <div className="mt-4"><Field label="Session date"><input type="date" value={form.date} onChange={(event) => setField('date', event.target.value)} className={inputClass} /></Field></div>}
+        <div className="mt-4 grid gap-4 sm:grid-cols-3">
+          <Field label="Start time"><input type="time" value={form.start} onChange={(event) => setField('start', event.target.value)} className={inputClass} /></Field>
+          <Field label="End time"><input type="time" value={form.end} onChange={(event) => setField('end', event.target.value)} className={inputClass} /></Field>
+          <Field label="Session group"><select value={form.period} onChange={(event) => setField('period', event.target.value)} className={inputClass}><option value="morning">Morning</option><option value="evening">Evening</option></select></Field>
+        </div>
+        <Field label="Notes"><textarea value={form.notes} onChange={(event) => setField('notes', event.target.value)} className={`${inputClass} mt-4 min-h-20`} /></Field>
+        {error && <p role="alert" className="mt-3 text-xs font-bold text-red-600">{error}</p>}
+        <div className="mt-6 flex justify-end gap-2 border-t border-slate-100 pt-4">
+          <button type="button" onClick={onClose} className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600">Cancel</button>
+          <button type="button" onClick={() => void save()} className="rounded-xl bg-slate-900 px-5 py-2.5 text-xs font-black text-white">Create course</button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function Metric({ icon, label, value }: { icon: React.ReactNode; label: string; value: number }) { return <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">{label}</p><span className="text-blue-700">{icon}</span></div><p className="mt-4 text-3xl font-black text-slate-900">{value}</p></div>; }

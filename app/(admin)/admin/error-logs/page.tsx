@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { AlertTriangle, Bug, ChevronLeft, ChevronRight, Clock3, RefreshCw, Search, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, Bug, ChevronLeft, ChevronRight, Clock3, Download, Printer, RefreshCw, Search, ShieldAlert, X } from 'lucide-react';
 import { api } from '@/lib/api';
 
 type ErrorSeverity = 'all' | 'error' | 'warning' | 'notice' | 'info';
@@ -29,6 +29,10 @@ function formatDate(value: string) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
+function escapeCsv(value: string) {
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
 const severityStyles: Record<Exclude<ErrorSeverity, 'all'>, string> = {
   error: 'bg-rose-50 text-rose-700 ring-rose-200',
   warning: 'bg-amber-50 text-amber-800 ring-amber-200',
@@ -49,6 +53,7 @@ export default function ErrorLogsPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
+  const [selectedLog, setSelectedLog] = useState<ErrorLog | null>(null);
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
@@ -83,10 +88,32 @@ export default function ErrorLogsPage() {
 
   const pageNumber = Math.floor(offset / PAGE_SIZE) + 1;
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const downloadCurrentPage = useCallback(() => {
+    const header = ['Timestamp', 'Severity', 'Source', 'Request ID', 'Message'];
+    const rows = logs.map((log) => [log.timestamp, log.severity, log.source, log.request_id, log.message]);
+    const csv = [header, ...rows].map((row) => row.map(escapeCsv).join(',')).join('\r\n');
+    const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }));
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `error-logs-page-${pageNumber}.csv`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }, [logs, pageNumber]);
+
+  useEffect(() => {
+    if (!selectedLog) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSelectedLog(null);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [selectedLog]);
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-col gap-4 border-b border-slate-200 pb-4 md:flex-row md:items-center md:justify-between">
+      <header className="error-log-no-print flex flex-col gap-4 border-b border-slate-200 pb-4 md:flex-row md:items-center md:justify-between">
         <div>
           <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">System monitoring</div>
           <h1 className="mt-1 flex items-center gap-2 text-2xl font-black tracking-tight text-slate-900">
@@ -96,17 +123,25 @@ export default function ErrorLogsPage() {
             Review PHP/API and administrator-browser errors. Logs are access-controlled, rotated automatically, and sensitive values are redacted before display.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setRefreshKey((current) => current + 1)}
-          disabled={refreshing}
-          className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-60"
-        >
-          <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={downloadCurrentPage} disabled={!logs.length} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50">
+            <Download className="h-4 w-4" /> Download page
+          </button>
+          <button type="button" onClick={() => window.print()} disabled={!logs.length} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50">
+            <Printer className="h-4 w-4" /> Print page
+          </button>
+          <button
+            type="button"
+            onClick={() => setRefreshKey((current) => current + 1)}
+            disabled={refreshing}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-60"
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
+          </button>
+        </div>
       </header>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="error-log-no-print grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {([
           ['Errors', summary.error, 'bg-rose-50 text-rose-700'],
           ['Warnings', summary.warning, 'bg-amber-50 text-amber-800'],
@@ -120,7 +155,7 @@ export default function ErrorLogsPage() {
         ))}
       </div>
 
-      <section aria-label="Filter error logs" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <section aria-label="Filter error logs" className="error-log-no-print rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="grid gap-3 lg:grid-cols-[minmax(240px,1fr)_auto_auto_auto]">
           <label className="flex min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
             <Search className="h-4 w-4 shrink-0 text-slate-400" />
@@ -174,10 +209,14 @@ export default function ErrorLogsPage() {
           <p className="mt-1 text-xs text-slate-400">New PHP errors are captured after this logging configuration is deployed.</p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="error-log-print-area space-y-3">
+          <div className="error-log-print-only mb-6 hidden">
+            <h1 className="text-xl font-bold">Error Logs</h1>
+            <p>Page {pageNumber} · {total.toLocaleString()} matching records · Printed {new Date().toLocaleString()}</p>
+          </div>
           {logs.map((log) => (
-            <details key={log.id} className="group rounded-2xl border border-slate-200 bg-white shadow-sm">
-              <summary className="flex cursor-pointer list-none flex-col gap-3 p-4 md:flex-row md:items-start md:justify-between">
+            <article key={log.id} className="error-log-print-item rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className="flex flex-col gap-3 p-4 md:flex-row md:items-start md:justify-between">
                 <div className="flex min-w-0 items-start gap-3">
                   <div className={`mt-0.5 rounded-xl p-2 ${log.severity === 'error' ? 'bg-rose-50 text-rose-700' : log.severity === 'warning' ? 'bg-amber-50 text-amber-800' : 'bg-slate-100 text-slate-600'}`}>
                     {log.severity === 'error' ? <AlertTriangle className="h-4 w-4" /> : <Bug className="h-4 w-4" />}
@@ -188,23 +227,23 @@ export default function ErrorLogsPage() {
                       {log.source && <code className="break-all text-xs font-bold text-slate-700">{log.source}</code>}
                     </div>
                     <p className="mt-2 line-clamp-3 break-words font-mono text-xs leading-5 text-slate-700">{log.message}</p>
+                    <pre className="error-log-print-only mt-2 hidden whitespace-pre-wrap break-words font-mono text-xs leading-5 text-slate-700">{log.message}</pre>
                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
                       <span className="inline-flex items-center gap-1"><Clock3 className="h-3 w-3" />{formatDate(log.timestamp)}</span>
                       {log.request_id && <span className="break-all font-mono">Request: {log.request_id}</span>}
                     </div>
                   </div>
                 </div>
-                <span className="shrink-0 text-xs font-bold text-slate-500 group-open:text-slate-800">View details</span>
-              </summary>
-              <div className="border-t border-slate-100 p-4">
-                <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-slate-950 p-4 font-mono text-xs leading-5 text-slate-100">{log.message}</pre>
+                <button type="button" onClick={() => setSelectedLog(log)} className="error-log-no-print shrink-0 self-start text-xs font-bold text-slate-600 underline-offset-2 hover:text-slate-900 hover:underline">
+                  View details
+                </button>
               </div>
-            </details>
+            </article>
           ))}
         </div>
       )}
 
-      <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between">
+      <div className="error-log-no-print flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between">
         <span>{total ? `Showing ${offset + 1}–${Math.min(offset + logs.length, total)} of ${total}` : 'No matching error records'}</span>
         <div className="flex items-center gap-2">
           <button type="button" onClick={() => setOffset((current) => Math.max(0, current - PAGE_SIZE))} disabled={offset === 0 || loading} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-2 font-semibold hover:bg-slate-50 disabled:opacity-40">
@@ -215,6 +254,36 @@ export default function ErrorLogsPage() {
             Next <ChevronRight className="h-4 w-4" />
           </button>
         </div>
+        {selectedLog && <div className="error-log-no-print fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setSelectedLog(null);
+        }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="error-log-modal-title" className="flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+            <header className="flex items-start justify-between gap-4 border-b border-slate-100 p-5">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-wider ring-1 ${severityStyles[selectedLog.severity]}`}>{selectedLog.severity}</span>
+                  {selectedLog.source && <code className="break-all text-xs font-bold text-slate-700">{selectedLog.source}</code>}
+                </div>
+                <h2 id="error-log-modal-title" className="mt-2 text-lg font-black text-slate-900">Error log details</h2>
+                <p className="mt-1 text-xs text-slate-500">{formatDate(selectedLog.timestamp)}{selectedLog.request_id ? ` · Request ${selectedLog.request_id}` : ''}</p>
+              </div>
+              <button type="button" aria-label="Close error log details" onClick={() => setSelectedLog(null)} className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900">
+                <X className="h-5 w-5" />
+              </button>
+            </header>
+            <pre className="overflow-auto whitespace-pre-wrap break-words p-5 font-mono text-xs leading-5 text-slate-800">{selectedLog.message}</pre>
+          </section>
+        </div>}
+        <style jsx global>{`
+          @media print {
+            body * { visibility: hidden !important; }
+            .error-log-no-print { display: none !important; }
+            .error-log-print-area, .error-log-print-area * { visibility: visible !important; }
+            .error-log-print-area { position: absolute !important; inset: 0 !important; width: 100% !important; }
+            .error-log-print-only { display: block !important; }
+            .error-log-print-item { break-inside: avoid; border: 1px solid #cbd5e1 !important; box-shadow: none !important; }
+          }
+        `}</style>
       </div>
     </div>
   );

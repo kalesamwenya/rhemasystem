@@ -798,7 +798,7 @@ export default function MessageCenter() {
 
   return (
     <>
-    <section className="relative flex h-[min(78vh,900px)] min-h-[560px] overflow-hidden rounded-[26px] border border-slate-200 bg-white shadow-xl shadow-slate-900/5">
+    <section className="fixed inset-x-0 bottom-0 top-16 z-40 flex min-h-0 overflow-hidden border-y border-slate-200 bg-white shadow-xl shadow-slate-900/5 md:relative md:inset-auto md:z-auto md:h-[min(78vh,900px)] md:min-h-[560px] md:rounded-[26px] md:border">
       <aside className={`h-full w-full shrink-0 flex-col border-slate-200 bg-white md:w-[300px] md:border-r xl:w-[320px] ${sidebarOpen ? 'flex' : 'hidden md:flex'}`}>
         <div className="border-b border-slate-200/80 bg-gradient-to-b from-slate-50/80 to-white p-4 sm:p-5">
           <div className="flex items-center justify-between gap-2">
@@ -837,7 +837,7 @@ export default function MessageCenter() {
               >
                 {label}
                 <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${activeListTab === tab ? 'bg-slate-100 text-slate-600' : 'bg-slate-200/70 text-slate-500'}`}>{count}</span>
-                {tab === 'inbox' && snapshot.unread_messages > 0 && <span className="rounded-full bg-indigo-600 px-1.5 py-0.5 text-[9px] font-bold text-white">{snapshot.unread_messages > 99 ? '99+' : snapshot.unread_messages}</span>}
+                {tab === 'inbox' && snapshot.unread_messages > 0 && <span className="rounded-full bg-rhema-red px-1.5 py-0.5 text-[9px] font-bold text-white">{snapshot.unread_messages > 99 ? '99+' : snapshot.unread_messages}</span>}
               </button>
             ))}
           </div>
@@ -871,11 +871,11 @@ export default function MessageCenter() {
               const { conversation } = item;
               return <button key={`conversation:${conversation.id}`} type="button" onClick={() => { clearMessageSearch(); setMessages([]); setSelectedContact(null); selectConversation(conversation.id); showSelectedChat(); }} className={`relative flex w-full items-start gap-3 border-b border-slate-100 p-3.5 text-left transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 ${selectedId === conversation.id ? 'bg-indigo-50/80' : ''}`}>
                 {selectedId === conversation.id && <span aria-hidden="true" className="absolute inset-y-0 left-0 w-1 rounded-r-full bg-indigo-600" />}
-                <span aria-hidden="true" className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-xs font-bold ${conversation.conversation_type === 'group' ? 'bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-sm' : 'bg-indigo-100 text-indigo-800'}`}>{getInitials(conversation.display_title)}</span>
+                <span aria-hidden="true" className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-xs font-bold ${conversation.conversation_type === 'group' ? 'bg-gradient-to-br from-rhema-blue to-rhema-red text-white shadow-sm' : 'bg-indigo-100 text-indigo-800'}`}>{getInitials(conversation.display_title)}</span>
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center justify-between gap-2">
                     <span className="truncate text-[13px] font-bold text-slate-900">{conversation.display_title}</span>
-                    {conversation.unread_count > 0 && <span className="rounded-full bg-indigo-600 px-2 py-0.5 text-xs font-bold text-white">{conversation.unread_count}</span>}
+                    {conversation.unread_count > 0 && <span className="rounded-full bg-rhema-red px-2 py-0.5 text-xs font-bold text-white">{conversation.unread_count}</span>}
                   </span>
                   <span className="mt-1 block truncate text-xs text-slate-500">{conversation.last_message || 'No messages yet'}</span>
                   {conversation.last_message_at && <time className="mt-1 block text-[10px] text-slate-400">{formatTime(conversation.last_message_at)}</time>}
@@ -949,7 +949,7 @@ export default function MessageCenter() {
                 </button>}
               </div>
             </div>}
-            <div ref={messagePaneRef} className="flex-1 space-y-3 overflow-y-auto p-5">
+            <div ref={messagePaneRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
               {displayedMessages.map((message) => {
                 const isMine = isCurrentUserMessage(message);
                 const attachmentUrl = message.attachment_id ? attachmentUrls[Number(message.attachment_id)] : undefined;
@@ -991,7 +991,7 @@ export default function MessageCenter() {
               {!displayedMessages.length && messageSearchLoading && <p className="text-center text-sm text-slate-500">Searching this conversation…</p>}
               {!messages.length && !messageSearch.trim() && <p className="text-center text-sm text-slate-500">This conversation is ready. Send the first message.</p>}
             </div>
-            <form onSubmit={(event) => void sendMessage(event)} className="border-t border-slate-100 p-3 sm:p-4">
+            <form onSubmit={(event) => void sendMessage(event)} className="shrink-0 border-t border-slate-100 bg-white p-3 sm:p-4">
               {recording && <div className="mb-3 flex items-center gap-3 rounded-xl border border-rose-100 bg-rose-50 px-3 py-2.5 text-rose-700">
                 <span className="relative flex h-2.5 w-2.5 shrink-0">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-400 opacity-75" />
@@ -1028,7 +1028,7 @@ export default function MessageCenter() {
                   <button type="button" onClick={() => setShowEmojiPicker((shown) => !shown)} aria-label="Insert emoji" title="Insert emoji" className="rounded-lg p-2 text-slate-600 hover:bg-slate-100"><Smile className="h-4 w-4" /></button>
                   <button type="button" onClick={() => fileInput.current?.click()} aria-label="Attach media" title="Attach media" className="rounded-lg p-2 text-slate-600 hover:bg-slate-100"><Paperclip className="h-4 w-4" /></button>
                   <button type="button" onClick={() => void toggleRecording()} aria-label={recording ? 'Stop voice note' : 'Record voice note'} title={recording ? 'Stop recording' : 'Record voice note'} className={`rounded-lg p-2 ${recording ? 'text-rose-600' : 'text-slate-600 hover:bg-slate-100'}`}>{recording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}</button>
-                  <button type="submit" disabled={(!draft.trim() && !attachment) || busy} className="rounded-lg bg-indigo-600 p-2.5 text-white hover:bg-indigo-700 disabled:opacity-50" aria-label="Send message"><Send className="h-4 w-4" /></button>
+                  <button type="submit" disabled={(!draft.trim() && !attachment) || busy} className="rounded-lg bg-rhema-red p-2.5 text-white hover:bg-rhema-red-dark disabled:opacity-50" aria-label="Send message"><Send className="h-4 w-4" /></button>
                 </div>
               </div>
               <input
@@ -1068,7 +1068,7 @@ export default function MessageCenter() {
           <h2 className="text-sm font-bold text-slate-900">Conversation details</h2>
         </div>
         <div className="border-b border-slate-100 px-5 py-6 text-center">
-          <span aria-hidden="true" className="mx-auto flex h-16 w-16 items-center justify-center rounded-[22px] bg-gradient-to-br from-indigo-500 to-violet-600 text-lg font-black text-white shadow-lg shadow-indigo-200">
+          <span aria-hidden="true" className="mx-auto flex h-16 w-16 items-center justify-center rounded-[22px] bg-gradient-to-br from-rhema-blue to-rhema-red text-lg font-black text-white shadow-lg shadow-indigo-200">
             {getInitials(selectedConversation.display_title)}
           </span>
           <h3 className="mt-3 font-bold text-slate-900">{selectedConversation.display_title}</h3>

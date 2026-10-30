@@ -11,6 +11,7 @@ type ScheduleEntry = {
   start_time: string;
   end_time: string;
   notes: string;
+  session_period: 'morning' | 'evening';
 };
 
 type UpcomingAssessment = {
@@ -41,6 +42,7 @@ type CalendarEvent = {
   title: string;
   course: string;
   type: 'session' | UpcomingAssessment['type'];
+  sessionPeriod?: 'morning' | 'evening';
   startTime?: string;
   endTime?: string;
   notes?: string;
@@ -124,6 +126,7 @@ export default function StudentSchedulePage() {
       title: session.course,
       course: session.course,
       type: 'session',
+      sessionPeriod: session.session_period,
       startTime: session.start_time,
       endTime: session.end_time,
       notes: session.notes,
@@ -227,7 +230,7 @@ export default function StudentSchedulePage() {
                   <div className="mt-1 space-y-1">
                     {dayEvents.slice(0, 2).map((event) => (
                       <span key={event.key} className={`block truncate rounded border px-1 py-0.5 text-[9px] font-bold sm:text-[10px] ${eventStyles[event.type]}`}>
-                        <span className="hidden sm:inline">{event.type === 'session' && event.startTime ? `${timeLabel(event.startTime)} ` : ''}</span>{event.title}
+                        <span className="hidden sm:inline">{event.type === 'session' && event.startTime ? `${timeLabel(event.startTime)} · ${event.sessionPeriod} ` : ''}</span>{event.title}
                       </span>
                     ))}
                     {dayEvents.length > 2 && <span className="block truncate px-1 text-[9px] font-bold text-slate-500">+{dayEvents.length - 2} more</span>}
@@ -264,6 +267,7 @@ export default function StudentSchedulePage() {
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="text-sm font-black text-slate-900">{event.title}</h3>
                     <span className={`rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-wide ${eventStyles[event.type]}`}>{eventLabels[event.type]}</span>
+                    {event.sessionPeriod && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[9px] font-black uppercase text-blue-800">{event.sessionPeriod} session</span>}
                   </div>
                   <p className="mt-1 text-xs font-semibold text-slate-600">{event.course}</p>
                   <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500">

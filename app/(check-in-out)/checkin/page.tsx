@@ -22,17 +22,10 @@ import {
 import { api } from '@/lib/api';
 import { requestRhemaSchedules, requestRhemaStudents, type RhemaSchedule, type RhemaStudent } from '@/lib/rhema-schedule-api';
 
-type AttendanceAction = 'check-in' | 'check-out';
-type AttendanceDeskPhase = 'closed' | 'checkin' | 'sessions' | 'checkout';
+type AttendanceAction = 'check-in';
+type AttendanceDeskPhase = 'closed' | 'checkin';
+type AttendanceScanMode = 'campus' | 'course';
 type AttendanceStatus = 'Absent' | 'Present' | 'Checked in' | 'Checked out';
-const attendancePhases: Array<{ id: AttendanceDeskPhase; label: string }> = [
-  { id: 'checkin', label: 'Check-in' },
-  { id: 'sessions', label: 'Class sessions' },
-  { id: 'checkout', label: 'Check-out' },
-];
-const phaseLabel = (phase: AttendanceDeskPhase) => phase === 'closed'
-  ? 'Stopped'
-  : attendancePhases.find((item) => item.id === phase)?.label || 'Stopped';
 type CheckInRow = {
   student_id: string;
   student_name: string;
@@ -98,7 +91,8 @@ export default function StudentCheckInPage() {
   const today = dateValue(new Date());
   const [students, setStudents] = useState<RhemaStudent[]>([]);
   const [schedules, setSchedules] = useState<RhemaSchedule[]>([]);
-  const [selectedSchedule, setSelectedSchedule] = useState('');
+  const [selectedCourseId, setSelectedCourseId] = useState('');
+  const [scanMode, setScanMode] = useState<AttendanceScanMode>('campus');
   const [dayPhase, setDayPhase] = useState<AttendanceDeskPhase>('closed');
   const [dayControlLoading, setDayControlLoading] = useState(true);
   const [phaseSaving, setPhaseSaving] = useState(false);
@@ -152,30 +146,22 @@ export default function StudentCheckInPage() {
     return matchingNames.length === 1 ? matchingNames[0] : undefined;
   }, [studentId, students]);
 
-  const todaySessions = useMemo(() => schedules.flatMap((schedule) => schedule.sessions
-    .filter((session) => session.date === today)
-    .map((session) => ({ schedule, session })))
-    .sort((left, right) => left.session.start.localeCompare(right.session.start)
-      || left.schedule.course.localeCompare(right.schedule.course)), [schedules, today]);
-  const activeScheduleId = todaySessions.some(({ session }) => session.id === selectedSchedule)
-    ? selectedSchedule
-    : todaySessions[0]?.session.id || '';
-  const selectedSession = todaySessions.find(({ session }) => session.id === activeScheduleId);
-  const action: AttendanceAction = dayPhase === 'checkout' ? 'check-out' : 'check-in';
+  const todayCourses = useMemo(() => schedules
+    .filter((schedule) => schedule.sessions.some((session) => session.date === today))
+    .sort((left, right) => left.course.localeCompare(right.course)), [schedules, today]);
+  const activeCourse = todayCourses.find((schedule) => schedule.id === selectedCourseId);
 
-  const loadTodayRows = useCallback(async (scheduleId: string) => {
-    const filters: Record<string, string> = { from: today, to: today };
-    if (scheduleId) filters.schedule_id = scheduleId;
-    const response = await api.attendance.studentCheckIns(filters) as ApiResponse<CheckInRow[]>;
+  const loadTodayRows = useCallback(async () => {
+    const response = await api.attendance.studentCheckIns({ from: today, to: today }) as ApiResponse<CheckInRow[]>;
     if (!response.success || !response.data) throw new Error(response.message || 'Unable to load attendance records.');
     setTodayRows(response.data);
   }, [today]);
   const loadDayControl = useCallback(async () => {
-    const response = await api.attendance.dayControl() as ApiResponse<{ phase?: AttendanceDeskPhase }>;
+    const response = await api.attendance.dayControl() as ApiResponse<{ phase?: string }>;
     if (!response.success || !response.data || !['closed', 'checkin', 'sessions', 'checkout'].includes(response.data.phase || '')) {
       throw new Error(response.message || 'Unable to load the attendance desk status.');
     }
-    setDayPhase(response.data.phase!);
+    setDayPhase(response.data.phase === 'closed' ? 'closed' : 'checkin');
   }, []);
 
   useEffect(() => {
@@ -203,7 +189,7 @@ export default function StudentCheckInPage() {
     let active = true;
     const refresh = async () => {
       try {
-        await Promise.all([loadTodayRows(selectedSchedule), loadDayControl()]);
+        await Promise.all([loadTodayRows(), loadDayControl()]);
         if (active) setError('');
       } catch (cause) {
         if (active) setError(cause instanceof Error ? cause.message : 'Unable to refresh attendance records.');
@@ -218,7 +204,7 @@ export default function StudentCheckInPage() {
       window.clearTimeout(timer);
       window.clearInterval(poll);
     };
-  }, [loadDayControl, loadTodayRows, selectedSchedule]);
+  }, [loadDayControl, loadTodayRows]);
 
   const handleAttendanceAction = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -243,15 +229,15 @@ export default function StudentCheckInPage() {
     try {
       const response = await api.attendance.saveStudentCheckIn({
         student_id: exactStudent.id,
-        schedule_id: dayPhase === 'sessions' ? activeScheduleId : null,
-        schedule_mode: dayPhase === 'sessions' ? 'scheduled' : 'general',
-        action,
+        course_id: scanMode === 'course' ? selectedCourseId : null,
+        schedule_mode: scanMode === 'course' ? 'scheduled' : 'general',
+        action: 'check-in',
       }) as ApiResponse<{ action: AttendanceAction; schedule_id: string | null }>;
       if (!response.success) throw new Error(response.message || 'Unable to record this attendance action.');
-      setNotice(response.message || (action === 'check-in' ? 'Student checked in.' : 'Student checked out.'));
+      setNotice(response.message || 'Student attendance recorded.');
       setStudentId('');
       setShowStudentMatches(false);
-      await loadTodayRows(selectedSchedule);
+      await loadTodayRows();
       studentInputRef.current?.focus();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to record attendance. Please try again.');
@@ -262,21 +248,15 @@ export default function StudentCheckInPage() {
   };
 
   const advanceDayPhase = async () => {
-    const nextPhase: Record<AttendanceDeskPhase, AttendanceDeskPhase> = {
-      closed: 'checkin',
-      checkin: 'sessions',
-      sessions: 'checkout',
-      checkout: 'closed',
-    };
+    const nextPhase: AttendanceDeskPhase = dayPhase === 'closed' ? 'checkin' : 'closed';
     setPhaseSaving(true);
     setError('');
     setNotice('');
     try {
-      const response = await api.attendance.setDayControl(nextPhase[dayPhase]) as ApiResponse<{ phase?: AttendanceDeskPhase }>;
+      const response = await api.attendance.setDayControl(nextPhase) as ApiResponse<{ phase?: AttendanceDeskPhase }>;
       if (!response.success || !response.data?.phase) throw new Error(response.message || 'Unable to change the attendance desk stage.');
       setDayPhase(response.data.phase);
-      setNotice(`Attendance stage is now ${phaseLabel(response.data.phase)}.`);
-      setSelectedSchedule(response.data.phase === 'sessions' ? todaySessions[0]?.session.id || '' : '');
+      setNotice(`Attendance desk is now ${response.data.phase === 'closed' ? 'stopped' : 'active'}.`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to change the attendance desk stage.');
     } finally {
@@ -287,7 +267,11 @@ export default function StudentCheckInPage() {
   const filteredRows = useMemo(() => {
     const query = search.trim().toLowerCase();
     const direction = sortDirection === 'asc' ? 1 : -1;
-    return todayRows
+    const rows = scanMode === 'course' && activeCourse
+      ? todayRows.filter((row) => row.course_name === activeCourse.course
+        && (!activeCourse.cohortName || row.cohort.toUpperCase() === activeCourse.cohortName.toUpperCase()))
+      : todayRows;
+    return rows
       .filter((row) => statusFilter === 'all' || row.attendance_status === statusFilter)
       .filter((row) => !query || `${row.student_id} ${row.student_name} ${row.cohort}`.toLowerCase().includes(query))
       .sort((left, right) => {
@@ -295,7 +279,7 @@ export default function StudentCheckInPage() {
         const b = right[sortColumn] || '';
         return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' }) * direction;
       });
-  }, [search, sortColumn, sortDirection, statusFilter, todayRows]);
+  }, [activeCourse, scanMode, search, sortColumn, sortDirection, statusFilter, todayRows]);
   const pageCount = Math.max(1, Math.ceil(filteredRows.length / pageSize));
   const visiblePage = Math.min(page, pageCount);
   const pageRows = filteredRows.slice((visiblePage - 1) * pageSize, visiblePage * pageSize);
@@ -311,8 +295,10 @@ export default function StudentCheckInPage() {
   const reportPageCount = Math.max(1, Math.ceil(filteredReportRows.length / reportPageSize));
   const visibleReportPage = Math.min(reportPage, reportPageCount);
   const reportPageRows = filteredReportRows.slice((visibleReportPage - 1) * reportPageSize, visibleReportPage * reportPageSize);
-  const checkedInCount = todayRows.filter((row) => row.attendance_status === 'Checked in' || row.attendance_status === 'Checked out').length;
-  const checkedOutCount = todayRows.filter((row) => row.attendance_status === 'Checked out').length;
+  const checkedInCount = todayRows.filter((row) => row.course_name === 'General check-in'
+    && (row.attendance_status === 'Checked in' || row.attendance_status === 'Checked out')).length;
+  const checkedOutCount = todayRows.filter((row) => row.course_name === 'General check-in'
+    && row.attendance_status === 'Checked out').length;
 
   const loadReport = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -342,11 +328,11 @@ export default function StudentCheckInPage() {
             <ArrowLeft className="h-4 w-4" /> Student Affairs dashboard
           </Link>
           <p className="text-[11px] font-black uppercase tracking-[0.22em] text-red-600">Student affairs · Attendance desk</p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-900">Student check-in / check-out</h1>
-          <p className="mt-2 max-w-2xl text-sm text-slate-500">Scan a student card or enter an ID to record a check-in at any time. When a matching scheduled session is available, the check-in is linked to its class attendance record.</p>
+          <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-900">Student check-in &amp; attendance</h1>
+          <p className="mt-2 max-w-2xl text-sm text-slate-500">Record campus arrival or scan students during class. Course sessions are selected automatically from the timetable, and attendance at a student’s final class of the day also records campus check-out.</p>
         </div>
         <span className={`inline-flex items-center gap-2 self-start rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] sm:self-auto ${dayPhase === 'closed' ? 'bg-slate-100 text-slate-600' : 'bg-emerald-50 text-emerald-700'}`}>
-          <span className={`h-2 w-2 rounded-full ${dayPhase === 'closed' ? 'bg-slate-400' : 'animate-pulse bg-emerald-500'}`} /> {dayControlLoading ? 'Loading desk…' : dayPhase === 'closed' ? 'Desk stopped' : `${phaseLabel(dayPhase)} active`}
+          <span className={`h-2 w-2 rounded-full ${dayPhase === 'closed' ? 'bg-slate-400' : 'animate-pulse bg-emerald-500'}`} /> {dayControlLoading ? 'Loading desk…' : dayPhase === 'closed' ? 'Desk stopped' : 'Desk active'}
         </span>
       </div>
 
@@ -356,26 +342,17 @@ export default function StudentCheckInPage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-red-600">Daily attendance controls · {today}</p>
-            <h2 className="mt-1 text-xl font-black text-slate-900">{dayControlLoading ? 'Loading attendance stages…' : `Current stage: ${phaseLabel(dayPhase)}`}</h2>
-            <p className="mt-1 max-w-2xl text-sm text-slate-500">Run the tablets in order: campus check-in → class-session attendance → campus check-out. Attendance at a student’s last scheduled class also records their check-out.</p>
+            <h2 className="mt-1 text-xl font-black text-slate-900">{dayControlLoading ? 'Loading attendance desk…' : `Desk ${dayPhase === 'closed' ? 'stopped' : 'active'}`}</h2>
+            <p className="mt-1 max-w-2xl text-sm text-slate-500">The tablet can record campus arrivals and course attendance while the desk is active. Course attendance automatically checks a student out after their final scheduled course session of the day; there is no separate check-out stage.</p>
           </div>
-          <button type="button" onClick={advanceDayPhase} disabled={dayControlLoading || loading || phaseSaving} className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-black text-white disabled:cursor-wait disabled:opacity-50 ${dayPhase === 'checkout' ? 'bg-slate-900 hover:bg-slate-800' : 'bg-red-700 hover:bg-red-800'}`}>
-            {phaseSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : dayPhase === 'checkout' ? <LogOut className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
-            {phaseSaving ? 'Updating…' : dayPhase === 'closed' ? 'Start check-in' : dayPhase === 'checkin' ? 'Start class sessions' : dayPhase === 'sessions' ? 'Start check-out' : 'Stop attendance desk'}
+          <button type="button" onClick={advanceDayPhase} disabled={dayControlLoading || loading || phaseSaving} className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-black text-white disabled:cursor-wait disabled:opacity-50 ${dayPhase === 'closed' ? 'bg-red-700 hover:bg-red-800' : 'bg-slate-900 hover:bg-slate-800'}`}>
+            {phaseSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+            {phaseSaving ? 'Updating…' : dayPhase === 'closed' ? 'Start attendance desk' : 'Stop attendance desk'}
           </button>
         </div>
-        <ol className="mt-5 grid gap-2 sm:grid-cols-3">
-          {attendancePhases.map((phase, index) => {
-            const currentIndex = attendancePhases.findIndex((item) => item.id === dayPhase);
-            const complete = dayPhase === 'closed' ? false : currentIndex > index;
-            const current = dayPhase === phase.id;
-            return <li key={phase.id} className={`flex items-center gap-3 rounded-xl border px-3 py-3 ${current ? 'border-red-200 bg-red-50 text-red-800' : complete ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-slate-50 text-slate-500'}`}>
-              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white text-xs font-black">{complete ? '✓' : index + 1}</span>
-              <span className="text-sm font-bold">{phase.label}</span>
-              <span className="ml-auto text-[10px] font-black uppercase">{current ? 'Active' : complete ? 'Done' : 'Waiting'}</span>
-            </li>;
-          })}
-        </ol>
+        <p className={`mt-4 rounded-xl px-4 py-3 text-sm font-semibold ${dayPhase === 'closed' ? 'bg-slate-50 text-slate-600' : 'bg-emerald-50 text-emerald-800'}`}>
+          {dayPhase === 'closed' ? 'Start the desk before recording attendance.' : 'Campus check-in and scheduled class attendance are available now.'}
+        </p>
       </section>
 
       <div className="grid gap-4 sm:grid-cols-3">
@@ -415,17 +392,22 @@ export default function StudentCheckInPage() {
               </div>
               <CalendarDays className="h-5 w-5 text-slate-400" />
             </div>
-            <div className={`mb-5 flex items-center gap-3 rounded-xl p-3 ${dayPhase === 'checkout' ? 'bg-slate-900 text-white' : 'bg-emerald-50 text-emerald-900'}`}>
-              {dayPhase === 'checkout' ? <LogOut className="h-5 w-5" /> : dayPhase === 'sessions' ? <CalendarDays className="h-5 w-5" /> : <LogIn className="h-5 w-5" />}
-              <div><p className="text-sm font-black">{phaseLabel(dayPhase)} scan</p><p className="text-xs opacity-75">{dayPhase === 'closed' ? 'The attendance desk is stopped.' : dayPhase === 'sessions' ? 'Choose the student’s scheduled class to record attendance.' : dayPhase === 'checkout' ? 'Scan students who still need to check out.' : 'Scan students as they arrive on campus.'}</p></div>
+            <div className={`mb-5 flex items-center gap-3 rounded-xl p-3 ${dayPhase === 'closed' ? 'bg-slate-100 text-slate-700' : 'bg-emerald-50 text-emerald-900'}`}>
+              {scanMode === 'course' ? <CalendarDays className="h-5 w-5" /> : <LogIn className="h-5 w-5" />}
+              <div><p className="text-sm font-black">{scanMode === 'course' ? 'Course attendance' : 'Campus check-in'}</p><p className="text-xs opacity-75">{dayPhase === 'closed' ? 'The attendance desk is stopped.' : scanMode === 'course' ? 'Choose the class; the active session is matched by timetable and scan time.' : 'Scan students as they arrive on campus.'}</p></div>
             </div>
-            {dayPhase === 'sessions' ? <label className="mb-4 block text-xs font-bold uppercase tracking-wide text-slate-600">Class session <span className="text-red-600">*</span>
-              <select required value={activeScheduleId} onChange={(event) => { setSelectedSchedule(event.target.value); setPage(1); }} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-medium normal-case tracking-normal text-slate-800 outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100">
-                <option value="">Select today’s class session</option>
-                {todaySessions.map(({ schedule, session }) => (
-                  <option key={session.id} value={session.id}>{schedule.course} · {schedule.cohortName || schedule.cohort} · {session.start}–{session.end}</option>
+            <div className="mb-4 grid grid-cols-2 gap-2">
+              <button type="button" aria-pressed={scanMode === 'campus'} onClick={() => setScanMode('campus')} className={`rounded-xl border px-3 py-2.5 text-xs font-bold transition ${scanMode === 'campus' ? 'border-emerald-300 bg-emerald-50 text-emerald-900' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>Campus check-in</button>
+              <button type="button" aria-pressed={scanMode === 'course'} onClick={() => setScanMode('course')} className={`rounded-xl border px-3 py-2.5 text-xs font-bold transition ${scanMode === 'course' ? 'border-blue-300 bg-blue-50 text-blue-900' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>Course attendance</button>
+            </div>
+            {scanMode === 'course' ? <label className="mb-4 block text-xs font-bold uppercase tracking-wide text-slate-600">Class / cohort <span className="text-red-600">*</span>
+              <select required value={selectedCourseId} onChange={(event) => setSelectedCourseId(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-medium normal-case tracking-normal text-slate-800 outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100">
+                <option value="">Select today’s class</option>
+                {todayCourses.map((schedule) => (
+                  <option key={schedule.id} value={schedule.id}>{schedule.course} · {schedule.cohortName || schedule.cohort}</option>
                 ))}
               </select>
+              <span className="mt-2 block text-[11px] font-medium normal-case tracking-normal text-slate-500">The current session switches automatically according to its scheduled time.</span>
             </label> : null}
             <form onSubmit={handleAttendanceAction}>
               <label className="block text-xs font-bold uppercase tracking-wide text-slate-600">Student name or ID
@@ -502,19 +484,19 @@ export default function StudentCheckInPage() {
                 </div>
               ) : null}
               {exactStudent ? <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-emerald-700"><UserRound className="h-3.5 w-3.5" />Ready: {exactStudent.name} · {exactStudent.id}</p> : null}
-              <button disabled={saving || loading || dayControlLoading || dayPhase === 'closed' || !studentId.trim() || (dayPhase === 'sessions' && !activeScheduleId)} className={`mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3.5 text-sm font-black text-white shadow-sm transition disabled:cursor-not-allowed disabled:opacity-50 ${action === 'check-in' ? 'bg-emerald-700 hover:bg-emerald-800' : 'bg-slate-900 hover:bg-slate-800'}`}>
-                {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : action === 'check-in' ? <LogIn className="h-4 w-4" /> : <LogOut className="h-4 w-4" />}
-                {saving ? 'Saving attendance…' : action === 'check-in' ? 'Record check-in' : 'Record check-out'}
+              <button disabled={saving || loading || dayControlLoading || dayPhase === 'closed' || !studentId.trim() || (scanMode === 'course' && !selectedCourseId)} className={`mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3.5 text-sm font-black text-white shadow-sm transition disabled:cursor-not-allowed disabled:opacity-50 ${scanMode === 'course' ? 'bg-blue-700 hover:bg-blue-800' : 'bg-emerald-700 hover:bg-emerald-800'}`}>
+                {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : scanMode === 'course' ? <CalendarDays className="h-4 w-4" /> : <LogIn className="h-4 w-4" />}
+                {saving ? 'Saving attendance…' : scanMode === 'course' ? 'Record course attendance' : 'Record campus check-in'}
               </button>
             </form>
-            <p className="mt-4 flex items-start gap-2 text-xs leading-5 text-slate-500"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />{dayPhase === 'sessions' ? 'A student’s final scheduled class attendance also records their campus check-out. Students without a later class remain available for the check-out stage.' : dayPhase === 'checkout' ? 'The check-out stage updates the original campus check-in record. The desk cannot be stopped while students remain checked in.' : 'Campus check-in is recorded first; class sessions and check-out are unlocked in order by the attendance administrator.'}</p>
+            <p className="mt-4 flex items-start gap-2 text-xs leading-5 text-slate-500"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />Course attendance requires an open campus check-in. Attendance at the student’s final scheduled class of the day automatically records their campus check-out.</p>
           </section>
 
           <section className="min-w-0 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
             <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Today&apos;s register</p>
-                <h2 className="mt-1 text-xl font-black text-slate-900">{selectedSession ? `${selectedSession.schedule.course} · ${selectedSession.schedule.cohortName || selectedSession.schedule.cohort}` : selectedSchedule === 'general' ? 'General check-ins' : 'All today’s attendance'}</h2>
+                <h2 className="mt-1 text-xl font-black text-slate-900">{activeCourse ? `${activeCourse.course} · ${activeCourse.cohortName || activeCourse.cohort}` : 'All today’s attendance'}</h2>
               </div>
               <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600"><Clock3 className="h-3.5 w-3.5" /> Auto-refreshes every 15s</span>
             </div>
