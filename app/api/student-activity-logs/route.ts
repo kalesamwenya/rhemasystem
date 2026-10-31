@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-const PRODUCTION_API_URL = "https://firebrick-snail-772746.hostingersite.com";
+const PRODUCTION_API_URL = "systemtest.citydrivehire.com";
 const SESSION_COOKIE_NAMES = new Set(["rhema_admin_session", "rhema_student_session"]);
 
 export const dynamic = "force-dynamic";
