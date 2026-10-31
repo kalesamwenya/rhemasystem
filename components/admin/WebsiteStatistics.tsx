@@ -91,7 +91,7 @@ function getLocationKey(location: VisitorLocation, index: number) {
   return `${location.country_code}-${location.city_name}-${location.region_name}-${location.latitude}-${location.longitude}-${index}`;
 }
 
-export default function WebsiteStatistics() {
+export default function WebsiteStatistics({ summaryOnly = false }: { summaryOnly?: boolean }) {
   const [days, setDays] = useState<Period>(30);
   const [dashboard, setDashboard] = useState<AnalyticsDashboard | null>(null);
   const [loading, setLoading] = useState(true);
@@ -236,13 +236,15 @@ export default function WebsiteStatistics() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
+      <div className={`flex flex-col gap-4 border-slate-200 md:flex-row md:items-end md:justify-between ${summaryOnly ? 'border-b pb-3' : 'border-b pb-4'}`}>
         <div>
-          <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">Public website</div>
-          <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-900">Website statistics</h1>
-          <p className="mt-1 max-w-2xl text-sm text-slate-500">
-            Anonymous visitor counts, popular pages, and broad navigation/button activity. Form contents and visitor IDs are not shown.
-          </p>
+          {!summaryOnly && <>
+            <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">Public website</div>
+            <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-900">Website statistics</h1>
+            <p className="mt-1 max-w-2xl text-sm text-slate-500">
+              Anonymous visitor counts, popular pages, and broad navigation/button activity. Form contents and visitor IDs are not shown.
+            </p>
+          </>}
           <p className="mt-1 text-xs text-slate-400" role="status" aria-live="polite">
             {refreshing
               ? 'Updating visitor activity…'
@@ -282,7 +284,7 @@ export default function WebsiteStatistics() {
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      {!summaryOnly && <div className="grid gap-4 sm:grid-cols-3">
         {summaryCards.map(({ label, value, icon: Icon, tone }) => (
           <div key={label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <span className={`inline-flex items-center gap-2 rounded-lg px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ${tone}`}>
@@ -291,12 +293,13 @@ export default function WebsiteStatistics() {
             <div className="mt-3 text-2xl font-black text-slate-900">{numberFormat.format(value)}</div>
           </div>
         ))}
-      </div>
+      </div>}
 
       {loading && !dashboard ? (
         <p role="status" className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">Loading website statistics…</p>
       ) : (
         <>
+        <div className={summaryOnly ? 'grid items-start gap-4 lg:grid-cols-2' : 'space-y-6'}>
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div>
               <h2 className="text-sm font-black uppercase tracking-wider text-slate-900">Daily visitors</h2>
@@ -305,7 +308,7 @@ export default function WebsiteStatistics() {
             {!dashboard?.trend.length ? (
               <p className="py-12 text-center text-sm text-slate-500">No visitor activity for this period yet.</p>
             ) : (
-              <div className="mt-6 flex h-52 items-end gap-1 overflow-x-auto pb-7">
+              <div className={`mt-6 flex items-end gap-1 overflow-x-auto pb-7 ${summaryOnly ? 'h-44' : 'h-52'}`}>
                 {dashboard.trend.map((item) => (
                   <div key={item.day} className="group relative flex h-full min-w-3 flex-1 flex-col justify-end">
                     <div
@@ -322,7 +325,8 @@ export default function WebsiteStatistics() {
             )}
           </section>
 
-          <div className="grid gap-6 xl:grid-cols-2">
+          <div className={summaryOnly ? 'contents' : 'grid gap-6 xl:grid-cols-2'}>
+            {!summaryOnly && <>
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="text-sm font-black uppercase tracking-wider text-slate-900">Most visited pages</h2>
               {!dashboard?.top_pages.length ? (
@@ -533,6 +537,7 @@ export default function WebsiteStatistics() {
                 </div>
               )}
             </section>
+            </>}
 
             <section aria-label="Visitor devices and platforms" className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="mb-4">
@@ -618,10 +623,11 @@ export default function WebsiteStatistics() {
               </div>
             </section>
           </div>
+        </div>
 
-          <p className="text-xs leading-5 text-slate-500">
+          {!summaryOnly && <p className="text-xs leading-5 text-slate-500">
             Visitor counts use a random first-party browser ID and are estimates, not verified individual identities. Approximate city/region is looked up locally from the request IP; raw IP addresses and raw user-agent strings are discarded and never stored. Analytics data is retained for up to one year.
-          </p>
+          </p>}
         </>
       )}
     </div>

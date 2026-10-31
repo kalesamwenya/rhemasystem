@@ -1,24 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { isIP } from "node:net";
-
-const PRODUCTION_API_URL = "https://firebrick-snail-772746.hostingersite.com";
-const DEVELOPMENT_API_URL = "http://localruntest.com";
+import { getServerApiBaseUrl } from "@/lib/server-api-url";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-function getApiBaseUrl() {
-  const configuredUrl = process.env.NEXT_PUBLIC_API_URL
-    || (process.env.NODE_ENV === "production" ? PRODUCTION_API_URL : DEVELOPMENT_API_URL);
-  const parsedUrl = new URL(configuredUrl.trim());
-  if (process.env.NODE_ENV === "production" && parsedUrl.hostname === "localruntest.com") {
-    return PRODUCTION_API_URL;
-  }
-  if (!["http:", "https:"].includes(parsedUrl.protocol)) {
-    throw new Error("The website analytics API URL must use HTTP or HTTPS.");
-  }
-  return parsedUrl.toString().replace(/\/$/, "");
-}
 
 async function handleRequest(request: Request) {
   if (request.method !== "GET" && request.method !== "POST") {
@@ -27,7 +12,7 @@ async function handleRequest(request: Request) {
 
   const requestId = randomUUID();
   try {
-    const apiBaseUrl = getApiBaseUrl();
+    const apiBaseUrl = getServerApiBaseUrl();
     const upstreamUrl = new URL("logs/websiteAnalytics.php", `${apiBaseUrl}/`);
     if (request.method === "GET") upstreamUrl.search = new URL(request.url).search;
 

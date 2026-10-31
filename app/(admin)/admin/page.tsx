@@ -1,11 +1,11 @@
 'use client';
 
-import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import { Activity, ArrowUpRight, CalendarDays, CheckSquare, CircleDollarSign, GraduationCap, LifeBuoy, RefreshCw, Search, Users } from 'lucide-react';
+import { Activity, CalendarDays, CheckSquare, CircleDollarSign, GraduationCap, LifeBuoy, RefreshCw, Users } from 'lucide-react';
 import { CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { api } from '@/lib/api';
-import { canAccessAdminModule, isMediaOrItDepartment, type AdminModule } from '@/lib/admin-access';
+import { isMediaOrItDepartment } from '@/lib/admin-access';
+import WebsiteStatistics from '@/components/admin/WebsiteStatistics';
 
 interface DashboardProfile {
   admin_role: string;
@@ -20,55 +20,6 @@ interface Metric {
   icon: typeof Users;
   records: Record<string, unknown>[];
 }
-
-interface DepartmentLink {
-  label: string;
-  description: string;
-  href: string;
-  module: AdminModule;
-}
-
-const departmentLinks: Record<string, DepartmentLink[]> = {
-  finance: [
-    { label: 'Payments & ledgers', description: 'Review student payment records and receipts.', href: '/admin/payments', module: 'finance' },
-    { label: 'Financial reports', description: 'Review finance summaries and reporting.', href: '/admin/financials', module: 'finance' },
-    { label: 'Store purchases', description: 'Review store orders and payment status.', href: '/admin/store/purchases', module: 'store' },
-    { label: 'Budgets', description: 'Manage departmental budgets.', href: '/admin/budgets', module: 'finance' },
-  ],
-  registrar: [
-    { label: 'Student records', description: 'Review and maintain student records.', href: '/admin/students', module: 'students' },
-    { label: 'Admissions', description: 'Manage admissions and enrolment.', href: '/admin/admissions', module: 'admissions' },
-    { label: 'Attendance & follow-ups', description: 'Review attendance and student follow-ups.', href: '/admin/student-affairs', module: 'student-affairs' },
-    { label: 'Events', description: 'Manage event registrations and attendance.', href: '/admin/events', module: 'events' },
-  ],
-  academic: [
-    { label: 'Courses & assessments', description: 'Manage courses, grades and assessments.', href: '/admin/courses', module: 'academics' },
-    { label: 'Academic schedule', description: 'Review course and class schedules.', href: '/admin/schedule', module: 'schedule' },
-    { label: 'Library', description: 'Manage academic library resources.', href: '/admin/library', module: 'library' },
-    { label: 'Student affairs', description: 'Review attendance and student support activity.', href: '/admin/student-affairs', module: 'student-affairs' },
-  ],
-  support: [
-    { label: 'Help desk', description: 'Review and respond to support requests.', href: '/admin/help-desk', module: 'help-desk' },
-    { label: 'Communications', description: 'Manage administrator communications.', href: '/admin/communications', module: 'communications' },
-    { label: 'Contact messages', description: 'Review website contact enquiries.', href: '/admin/contact-messages', module: 'contact-messages' },
-    { label: 'Website content', description: 'Edit public pages and published website content.', href: '/admin/site-content', module: 'social-media' },
-    { label: 'Social media', description: 'Plan and manage social media posts.', href: '/admin/social-media', module: 'social-media' },
-    { label: 'Website chatbot', description: 'Manage chatbot answers and contact leads.', href: '/admin/chatbot', module: 'chatbot' },
-  ],
-  operations: [
-    { label: 'Tasks', description: 'Coordinate and track operational work.', href: '/admin/tasks', module: 'tasks' },
-    { label: 'Events', description: 'Coordinate events and registrations.', href: '/admin/events', module: 'events' },
-    { label: 'Schedules', description: 'Review published schedules.', href: '/admin/schedule', module: 'schedule' },
-  ],
-};
-
-const mediaItLinks: DepartmentLink[] = [
-  { label: 'Website content', description: 'Edit public pages and published website content.', href: '/admin/site-content', module: 'social-media' },
-  { label: 'Social media', description: 'Plan and manage social media posts.', href: '/admin/social-media', module: 'social-media' },
-  { label: 'Website chatbot', description: 'Manage chatbot answers and contact leads.', href: '/admin/chatbot', module: 'chatbot' },
-  { label: 'Website contact messages', description: 'Review incoming website enquiries.', href: '/admin/contact-messages', module: 'contact-messages' },
-  { label: 'Communications', description: 'Open the internal communications workspace.', href: '/admin/communications', module: 'communications' },
-];
 
 const metricDefinitions: Record<string, Array<{ label: string; icon: typeof Users; load: () => Promise<unknown> }>> = {
   finance: [
@@ -162,7 +113,6 @@ export default function AdminDashboard() {
   const [metrics, setMetrics] = useState<Metric[]>([]);
   const [loading, setLoading] = useState(true);
   const [profileError, setProfileError] = useState('');
-  const [toolQuery, setToolQuery] = useState('');
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
@@ -211,19 +161,12 @@ export default function AdminDashboard() {
   }, [loadDashboard]);
 
   const department = profile ? departmentForRole(profile.admin_role) : null;
-  const isMediaItAdmin = profile ? isMediaOrItDepartment(profile.department) : false;
+  const isMediaItAdmin = profile
+    ? profile.admin_role.toLowerCase() === 'it' || isMediaOrItDepartment(profile.department)
+    : false;
   const title = isMediaItAdmin
     ? 'Media & IT Dashboard'
     : department === 'director' ? 'Director Dashboard' : department ? `${departmentTitles[department]} Dashboard` : 'Administrator Dashboard';
-  const roleLinks = department === 'director'
-    ? Object.entries(departmentLinks).flatMap(([role, items]) => items.map((item) => ({ ...item, group: departmentTitles[role] })))
-    : department ? (departmentLinks[department] ?? []).map((item) => ({ ...item, group: '' })) : [];
-  const links = [...roleLinks, ...(isMediaItAdmin ? mediaItLinks.map((item) => ({ ...item, group: 'Media & IT' })) : [])]
-    .filter((item, index, all) => all.findIndex((candidate) => candidate.href === item.href) === index);
-  const accessibleLinks = links.filter((item) => profile && canAccessAdminModule(profile.admin_role, profile.department, item.module));
-  const filteredLinks = accessibleLinks.filter((item) =>
-    `${item.label} ${item.description}`.toLowerCase().includes(toolQuery.trim().toLowerCase())
-  );
   const availableMetrics = metrics.filter((metric) => metric.value !== null);
   const monthlyActivity = getMonthlyActivity(availableMetrics);
   const hasMonthlyActivity = availableMetrics.some((metric) => metric.records.some((record) => {
@@ -234,30 +177,49 @@ export default function AdminDashboard() {
     <main className="pb-8">
       <div className="grid items-start gap-5">
         <div className="min-w-0 space-y-5">
-          <header className="relative isolate overflow-hidden rounded-3xl bg-[#10283a] px-5 py-6 text-white shadow-lg shadow-slate-900/10 sm:px-8 sm:py-8">
-            <div aria-hidden="true" className="absolute -right-12 -top-28 -z-10 h-72 w-72 rounded-full border-[34px] border-white/10" />
-            <div aria-hidden="true" className="absolute -bottom-28 right-40 -z-10 h-48 w-48 rounded-full border-[26px] border-amber-300/10" />
-            <div className="flex flex-wrap items-center justify-between gap-5">
-              <div className="max-w-2xl">
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-300">Rhema · Admin workspace</p>
-                <h1 className="mt-2 text-2xl font-black tracking-tight sm:text-4xl">{profile ? `Welcome, ${profile.name.split(' ')[0]}` : title}</h1>
-                <p className="mt-2 text-sm leading-6 text-slate-100">{profile ? `${title.replace(' Dashboard', '')} workspace · ${profile.department}` : 'Loading your department workspace.'}</p>
+          {isMediaItAdmin ? (
+            <header className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#31584c]">Rhema · Admin workspace</p>
+                <h1 className="mt-1 text-xl font-black tracking-tight text-slate-950">Media &amp; IT Dashboard</h1>
+                <p className="mt-1 text-xs text-slate-500">{profile ? `${profile.department} workspace` : 'Loading your department workspace.'}</p>
               </div>
               <button
                 type="button"
                 onClick={() => void loadDashboard()}
                 disabled={loading}
-                className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white px-4 py-2.5 text-sm font-bold text-[#10283a] transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-amber-300 focus:ring-offset-2 focus:ring-offset-[#10283a] disabled:cursor-wait disabled:opacity-70"
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#0f4c5c] focus:ring-offset-2 disabled:cursor-wait disabled:opacity-70"
               >
-                <RefreshCw className={`h-4 w-4 text-[#10283a] ${loading ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                 Refresh data
               </button>
-            </div>
-            <div className="mt-6 flex flex-wrap gap-2 text-xs font-semibold">
-              <span className="rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-white">{loading ? 'Updating summaries…' : `${availableMetrics.length} live summaries`}</span>
-              <span className="rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-white">Auto-refreshes every minute</span>
-            </div>
-          </header>
+            </header>
+          ) : (
+            <header className="relative isolate overflow-hidden rounded-3xl bg-[#10283a] px-5 py-6 text-white shadow-lg shadow-slate-900/10 sm:px-8 sm:py-8">
+              <div aria-hidden="true" className="absolute -right-12 -top-28 -z-10 h-72 w-72 rounded-full border-[34px] border-white/10" />
+              <div aria-hidden="true" className="absolute -bottom-28 right-40 -z-10 h-48 w-48 rounded-full border-[26px] border-amber-300/10" />
+              <div className="flex flex-wrap items-center justify-between gap-5">
+                <div className="max-w-2xl">
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-300">Rhema · Admin workspace</p>
+                  <h1 className="mt-2 text-2xl font-black tracking-tight sm:text-4xl">{profile ? `Welcome, ${profile.name.split(' ')[0]}` : title}</h1>
+                  <p className="mt-2 text-sm leading-6 text-slate-100">{profile ? `${title.replace(' Dashboard', '')} workspace · ${profile.department}` : 'Loading your department workspace.'}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void loadDashboard()}
+                  disabled={loading}
+                  className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white px-4 py-2.5 text-sm font-bold text-[#10283a] transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-amber-300 focus:ring-offset-2 focus:ring-offset-[#10283a] disabled:cursor-wait disabled:opacity-70"
+                >
+                  <RefreshCw className={`h-4 w-4 text-[#10283a] ${loading ? 'animate-spin' : ''}`} />
+                  Refresh data
+                </button>
+              </div>
+              <div className="mt-6 flex flex-wrap gap-2 text-xs font-semibold">
+                <span className="rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-white">{loading ? 'Updating summaries…' : `${availableMetrics.length} live summaries`}</span>
+                <span className="rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-white">Auto-refreshes every minute</span>
+              </div>
+            </header>
+          )}
 
           {profileError && (
             <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
@@ -268,37 +230,62 @@ export default function AdminDashboard() {
 
           {department && (
             <>
-              <section aria-label="Department summaries" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {metrics.map((metric, index) => {
-                  const Icon = metric.icon;
-                  const iconStyles = [
-                    'bg-rose-100 text-rose-800',
-                    'bg-emerald-100 text-emerald-900',
-                    'bg-amber-100 text-amber-900',
-                  ];
-                  return (
-                    <article key={metric.label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:shadow-md sm:p-6">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-slate-700">{metric.label}</p>
+              {isMediaItAdmin ? (
+                <section aria-label="Department summaries" className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                  <div className="border-b border-slate-100 px-5 py-3">
+                    <h2 className="text-sm font-bold text-slate-900">Workspace summary</h2>
+                    <p className="mt-0.5 text-xs text-slate-500">Live totals across your available systems.</p>
+                  </div>
+                  {metrics.length ? (
+                    <dl className="grid grid-cols-2 gap-px bg-slate-200 md:grid-cols-4">
+                      {metrics.map((metric) => (
+                        <div key={metric.label} className="min-w-0 bg-white px-4 py-3.5">
+                          <dt className="truncate text-xs font-semibold text-slate-600">{metric.label}</dt>
                           {loading
-                            ? <div className="mt-3 h-8 w-20 animate-pulse rounded-lg bg-slate-100" />
+                            ? <dd className="mt-2 h-7 w-16 animate-pulse rounded bg-slate-100" />
                             : metric.error
-                              ? <p className="mt-3 text-sm font-bold text-amber-900">Unavailable</p>
-                              : <p className="mt-2 text-4xl font-black tracking-tight text-[#10283a]">{metric.value?.toLocaleString()}</p>}
+                              ? <dd className="mt-1 text-xs font-semibold text-amber-800" title={metric.error}>Unavailable</dd>
+                              : <dd className="mt-1 text-2xl font-black tracking-tight text-[#10283a]">{metric.value?.toLocaleString()}</dd>}
                         </div>
-                        <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${iconStyles[index % iconStyles.length]}`}><Icon className="h-5 w-5" /></span>
-                      </div>
-                      {metric.error && <p className="mt-2 text-xs leading-5 text-amber-900">{metric.error}</p>}
-                    </article>
-                  );
-                })}
-                {!loading && metrics.length === 0 && !profileError && (
-                  <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">No dashboard summaries are configured for this account.</p>
-                )}
-              </section>
+                      ))}
+                    </dl>
+                  ) : !loading && !profileError ? (
+                    <p className="p-4 text-sm text-slate-600">No dashboard summaries are configured for this account.</p>
+                  ) : null}
+                </section>
+              ) : (
+                <section aria-label="Department summaries" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  {metrics.map((metric, index) => {
+                    const Icon = metric.icon;
+                    const iconStyles = [
+                      'bg-rose-100 text-rose-800',
+                      'bg-emerald-100 text-emerald-900',
+                      'bg-amber-100 text-amber-900',
+                    ];
+                    return (
+                      <article key={metric.label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:shadow-md sm:p-6">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-slate-700">{metric.label}</p>
+                            {loading
+                              ? <div className="mt-3 h-8 w-20 animate-pulse rounded-lg bg-slate-100" />
+                              : metric.error
+                                ? <p className="mt-3 text-sm font-bold text-amber-900">Unavailable</p>
+                                : <p className="mt-2 text-4xl font-black tracking-tight text-[#10283a]">{metric.value?.toLocaleString()}</p>}
+                          </div>
+                          <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${iconStyles[index % iconStyles.length]}`}><Icon className="h-5 w-5" /></span>
+                        </div>
+                        {metric.error && <p className="mt-2 text-xs leading-5 text-amber-900">{metric.error}</p>}
+                      </article>
+                    );
+                  })}
+                  {!loading && metrics.length === 0 && !profileError && (
+                    <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">No dashboard summaries are configured for this account.</p>
+                  )}
+                </section>
+              )}
 
-              <section aria-label="Live dashboard charts" className="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
+              {!isMediaItAdmin && <section aria-label="Live dashboard charts" className="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
                 <article className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
                   <div className="flex items-start justify-between gap-3">
                     <div>
@@ -353,7 +340,13 @@ export default function AdminDashboard() {
                     ))}
                   </div>
                 </article>
-              </section>
+              </section>}
+
+              {isMediaItAdmin && (
+                <section aria-label="Website visitor analytics">
+                  <WebsiteStatistics summaryOnly />
+                </section>
+              )}
 
               {department === 'operations' && (
                 <p className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
@@ -361,46 +354,6 @@ export default function AdminDashboard() {
                 </p>
               )}
 
-              <section aria-label="Department tools">
-                <div className="mb-3 flex items-end justify-between gap-3">
-                  <div>
-                    <h2 className="text-lg font-bold text-slate-950">Workspace options</h2>
-                    <p className="mt-1 text-sm text-slate-700">Quick access to tools available for your role and department.</p>
-                  </div>
-                </div>
-                <label className="mb-4 flex max-w-md items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-slate-700 shadow-sm focus-within:border-[#0f4c5c] focus-within:ring-2 focus-within:ring-[#0f4c5c]/20">
-                  <Search className="h-4 w-4 shrink-0 text-slate-600" aria-hidden="true" />
-                  <span className="sr-only">Filter workspace options</span>
-                  <input
-                    type="search"
-                    value={toolQuery}
-                    onChange={(event) => setToolQuery(event.target.value)}
-                    placeholder="Search your workspace options"
-                    className="w-full bg-transparent text-sm text-slate-950 outline-none placeholder:text-slate-500"
-                  />
-                </label>
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                  {filteredLinks.map((item) => (
-                    <Link
-                      key={`${item.group}-${item.href}`}
-                      href={item.href}
-                      className="group rounded-2xl border border-slate-300 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-[#0f4c5c] hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#0f4c5c] focus:ring-offset-2"
-                    >
-                      {item.group && <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-red-800">{item.group}</p>}
-                      <div className="flex items-center justify-between gap-3">
-                        <h3 className="font-bold text-slate-900">{item.label}</h3>
-                        <ArrowUpRight className="h-4 w-4 shrink-0 text-slate-600 transition group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-[#0f4c5c]" />
-                      </div>
-                      <p className="mt-2 text-sm leading-5 text-slate-700">{item.description}</p>
-                    </Link>
-                  ))}
-                  {filteredLinks.length === 0 && (
-                    <p className="rounded-xl border border-slate-300 bg-white p-4 text-sm font-medium text-slate-700 sm:col-span-2 xl:col-span-3">
-                      {toolQuery ? 'No workspace options match your search.' : 'No workspace options are available for this account.'}
-                    </p>
-                  )}
-                </div>
-              </section>
             </>
           )}
         </div>

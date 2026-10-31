@@ -8,6 +8,7 @@ export type FlutterwaveInlineCheckout = {
     name: string;
     phone_number?: string;
   };
+  redirect_url?: string;
   payment_options?: string;
   description: string;
 };
@@ -24,12 +25,13 @@ type FlutterwaveInlineOptions = {
   amount: number;
   currency: string;
   customer: FlutterwaveInlineCheckout['customer'];
+  redirect_url?: string;
   payment_options?: string;
   customizations: {
     title: string;
     description: string;
   };
-  callback: (response: FlutterwaveCallback) => void;
+  callback?: (response: FlutterwaveCallback) => void;
   onclose: () => void;
 };
 
@@ -291,15 +293,18 @@ export async function openFlutterwaveInlineCheckout(
     amount: checkout.amount,
     currency: checkout.currency,
     customer: checkout.customer,
+    ...(checkout.redirect_url ? { redirect_url: checkout.redirect_url } : {}),
     ...(checkout.payment_options ? { payment_options: checkout.payment_options } : {}),
     customizations: {
       title: 'Rhema Bible School',
       description: checkout.description,
     },
-    callback: (response) => {
-      callbackReceived = true;
-      onSuccess(response);
-    },
+    ...(!checkout.redirect_url ? {
+      callback: (response: FlutterwaveCallback) => {
+        callbackReceived = true;
+        onSuccess(response);
+      },
+    } : {}),
     onclose: () => {
       if (!callbackReceived) onClose();
     },

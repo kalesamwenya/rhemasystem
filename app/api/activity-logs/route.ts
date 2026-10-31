@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { getServerApiBaseUrl } from "@/lib/server-api-url";
 
-const PRODUCTION_API_URL = "https://firebrick-snail-772746.hostingersite.com";
-const DEVELOPMENT_API_URL = PRODUCTION_API_URL;
 const SESSION_COOKIE_NAMES = new Set([
   "rhema_admin_session",
   "rhema_lecturer_session",
@@ -10,19 +9,6 @@ const SESSION_COOKIE_NAMES = new Set([
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-function getApiBaseUrl() {
-  const configuredUrl = process.env.NEXT_PUBLIC_API_URL
-    || (process.env.NODE_ENV === "production" ? PRODUCTION_API_URL : DEVELOPMENT_API_URL);
-  const parsedUrl = new URL(configuredUrl.trim());
-  if (parsedUrl.hostname === "localruntest.com") {
-    return PRODUCTION_API_URL;
-  }
-  if (!["http:", "https:"].includes(parsedUrl.protocol)) {
-    throw new Error("The activity log API URL must use HTTP or HTTPS.");
-  }
-  return parsedUrl.toString().replace(/\/$/, "");
-}
 
 function getAuthenticationAttempts(request: Request) {
   const attempts: Array<{ authorization?: string; cookie?: string }> = [];
@@ -100,7 +86,7 @@ async function handleRequest(request: Request) {
         return Response.json({ success: false, message: "Cross-origin activity records are not accepted." }, { status: 403 });
       }
     }
-    const apiBaseUrl = getApiBaseUrl();
+    const apiBaseUrl = getServerApiBaseUrl();
     const upstreamUrl = new URL("logs/activity.php", `${apiBaseUrl}/`);
     upstreamUrl.search = new URL(request.url).search;
     let body: ArrayBuffer | undefined;

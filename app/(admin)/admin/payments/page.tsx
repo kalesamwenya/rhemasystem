@@ -59,6 +59,13 @@ type PaymentAccount = {
   records: PaymentLedgerRecord[];
 };
 
+type PaymentAlert = {
+  tone: 'success' | 'error' | 'info';
+  title: string;
+  message: string;
+  reference?: string;
+};
+
 const formatMoney = (amount: number, currency: string) =>
   new Intl.NumberFormat('en-ZM', { style: 'currency', currency, maximumFractionDigits: 2 }).format(amount);
 
@@ -96,6 +103,7 @@ export default function AdminPaymentsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [paymentAlert, setPaymentAlert] = useState<PaymentAlert | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [cohortFilter, setCohortFilter] = useState('All');
@@ -121,6 +129,20 @@ export default function AdminPaymentsPage() {
   const [syncingLiabilities, setSyncingLiabilities] = useState(false);
   const receiptRequestId = useRef(0);
   const pageSize = 8;
+
+  useEffect(() => {
+    if (!paymentAlert) return;
+    const previousOverflow = document.body.style.overflow;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setPaymentAlert(null);
+    };
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [paymentAlert]);
 
   useEffect(() => {
     let active = true;
@@ -159,7 +181,14 @@ export default function AdminPaymentsPage() {
     window.history.replaceState({}, '', window.location.pathname);
     if (checkoutStatus !== 'successful') {
       queueMicrotask(() => {
-        if (active) setNotice('Flutterwave checkout was not completed. The transaction remains available in the ledger for status review.');
+        if (active) {
+          setPaymentAlert({
+            tone: 'info',
+            title: 'Payment not completed',
+            message: 'Flutterwave did not confirm a successful payment. No amount has been credited to the student account.',
+            reference,
+          });
+        }
       });
       return () => { active = false; };
     }
@@ -169,10 +198,11 @@ export default function AdminPaymentsPage() {
       setError('');
     });
     const completeCheckout = async () => {
+      let verifiedPayment: PaymentLedgerRecord | null = null;
       try {
         const verified = await api.students.verifyAdminPayment(transactionId, reference) as { data: PaymentLedgerRecord };
         if (!active) return;
-        const verifiedPayment = verified.data;
+        verifiedPayment = verified.data;
         if (!verifiedPayment.receipt_token) throw new Error('Flutterwave verified the payment but did not return a receipt verification token.');
         const paymentReceipt: PaymentReceiptData = {
           student_name: verifiedPayment.student_name,
@@ -199,9 +229,26 @@ export default function AdminPaymentsPage() {
           const latest = await api.students.adminPaymentLedger() as PaymentLedgerResponse;
           setRecords(latest.data);
           setNotice(updated.message || 'Flutterwave payment verified. The paid amount and receipt are now attached to the student account.');
+          setPaymentAlert({
+            tone: 'success',
+            title: 'Payment confirmed',
+            message: `${formatMoney(verifiedPayment.amount, verifiedPayment.currency)} was verified with Flutterwave and recorded for ${verifiedPayment.student_name}. The receipt is attached to the student account.`,
+            reference: verifiedPayment.reference,
+          });
         }
       } catch (reason) {
-        if (active) setError(reason instanceof Error ? reason.message : 'Could not verify the Flutterwave payment. You can update the transaction status after checking the payment.');
+        if (active) {
+          const message = reason instanceof Error ? reason.message : 'Could not verify the Flutterwave payment.';
+          setError(message);
+          setPaymentAlert({
+            tone: verifiedPayment ? 'info' : 'error',
+            title: verifiedPayment ? 'Payment verified; receipt needs attention' : 'Payment could not be verified',
+            message: verifiedPayment
+              ? `${formatMoney(verifiedPayment.amount, verifiedPayment.currency)} was verified and recorded for ${verifiedPayment.student_name}, but its receipt could not be prepared: ${message} Check the student ledger before retrying.`
+              : `${message} The student account has not been credited.`,
+            reference,
+          });
+        }
       } finally {
         if (active) setVerifyingFlutterwave(false);
       }
@@ -383,15 +430,23 @@ export default function AdminPaymentsPage() {
         await openFlutterwaveInlineCheckout(response.data, async (transaction) => {
           const transactionId = String(transaction.transaction_id ?? '');
           if (!/^\d+$/.test(transactionId) || transaction.tx_ref !== response.data.reference) {
-            setError('Flutterwave returned invalid payment details. The payment has not been confirmed.');
+            const message = 'Flutterwave returned invalid payment details. The payment has not been confirmed.';
+            setError(message);
+            setPaymentAlert({
+              tone: 'error',
+              title: 'Payment could not be verified',
+              message,
+              reference: response.data.reference,
+            });
             setSubmittingPayment(false);
             return;
           }
 
           setVerifyingFlutterwave(true);
+          let verifiedPayment: PaymentLedgerRecord | null = null;
           try {
             const verified = await api.students.verifyAdminPayment(transactionId, response.data.reference) as { data: PaymentLedgerRecord };
-            const verifiedPayment = verified.data;
+            verifiedPayment = verified.data;
             if (!verifiedPayment.receipt_token) {
               throw new Error('Flutterwave verified the payment but did not return a receipt verification token.');
             }
@@ -424,8 +479,23 @@ export default function AdminPaymentsPage() {
             setPaymentAmount('');
             setPaymentDescription('');
             setNotice(receiptResult.message || 'Flutterwave payment verified and receipt attached to the student account.');
+            setPaymentAlert({
+              tone: 'success',
+              title: 'Payment confirmed',
+              message: `${formatMoney(verifiedPayment.amount, verifiedPayment.currency)} was verified with Flutterwave and recorded for ${verifiedPayment.student_name}. The receipt is attached to the student account.`,
+              reference: verifiedPayment.reference,
+            });
           } catch (reason) {
-            setError(reason instanceof Error ? reason.message : 'Could not verify the Flutterwave payment.');
+            const message = reason instanceof Error ? reason.message : 'Could not verify the Flutterwave payment.';
+            setError(message);
+            setPaymentAlert({
+              tone: verifiedPayment ? 'info' : 'error',
+              title: verifiedPayment ? 'Payment verified; receipt needs attention' : 'Payment could not be verified',
+              message: verifiedPayment
+                ? `${formatMoney(verifiedPayment.amount, verifiedPayment.currency)} was verified and recorded for ${verifiedPayment.student_name}, but its receipt could not be prepared: ${message} Check the student ledger before retrying.`
+                : `${message} The student account has not been credited.`,
+              reference: response.data.reference,
+            });
           } finally {
             setVerifyingFlutterwave(false);
             setSubmittingPayment(false);
@@ -433,6 +503,12 @@ export default function AdminPaymentsPage() {
         }, () => {
           setSubmittingPayment(false);
           setNotice('Checkout closed. No payment was confirmed.');
+          setPaymentAlert({
+            tone: 'info',
+            title: 'Checkout closed',
+            message: 'No payment was confirmed. You can try again whenever you are ready.',
+            reference: response.data.reference,
+          });
         });
         inlineCheckoutOpened = true;
         return;
@@ -553,6 +629,84 @@ export default function AdminPaymentsPage() {
 
   return (
     <main className="relative min-h-screen space-y-6 pb-10">
+      {paymentAlert && (
+        <div
+          className="fixed inset-0 z-[11000] flex items-center justify-center bg-slate-950/65 px-4 py-8 backdrop-blur-sm"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setPaymentAlert(null);
+          }}
+          style={{ animation: 'payment-alert-fade-in 180ms ease-out both' }}
+        >
+          <style>{`
+            @keyframes payment-alert-fade-in { from { opacity: 0; } to { opacity: 1; } }
+            @keyframes payment-alert-pop-in { 0% { opacity: 0; transform: translateY(14px) scale(.94); } 70% { opacity: 1; transform: translateY(-2px) scale(1.01); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
+            @keyframes payment-alert-icon-in { 0% { opacity: 0; transform: scale(.4) rotate(-18deg); } 70% { opacity: 1; transform: scale(1.12) rotate(4deg); } 100% { opacity: 1; transform: scale(1) rotate(0); } }
+            @media (prefers-reduced-motion: reduce) { .payment-alert-motion { animation: none !important; } }
+          `}</style>
+          <section
+            aria-labelledby="payment-alert-title"
+            aria-modal="true"
+            className="payment-alert-motion relative w-full max-w-md overflow-hidden rounded-[1.75rem] bg-white shadow-2xl ring-1 ring-black/5"
+            role="alertdialog"
+            style={{ animation: 'payment-alert-pop-in 360ms cubic-bezier(.2,.8,.2,1) both' }}
+          >
+            <div className={`h-1.5 ${paymentAlert.tone === 'success' ? 'bg-emerald-500' : paymentAlert.tone === 'error' ? 'bg-rose-500' : 'bg-amber-400'}`} />
+            <button
+              aria-label="Close payment message"
+              className="absolute right-4 top-4 rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
+              onClick={() => setPaymentAlert(null)}
+              type="button"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <div className="px-7 pb-7 pt-8 text-center sm:px-9">
+              <div
+                className={`payment-alert-motion mx-auto flex h-[4.5rem] w-[4.5rem] items-center justify-center rounded-full ${
+                  paymentAlert.tone === 'success'
+                    ? 'bg-emerald-50 text-emerald-600 ring-8 ring-emerald-50/60'
+                    : paymentAlert.tone === 'error'
+                      ? 'bg-rose-50 text-rose-600 ring-8 ring-rose-50/60'
+                      : 'bg-amber-50 text-amber-600 ring-8 ring-amber-50/60'
+                }`}
+                style={{ animation: 'payment-alert-icon-in 520ms cubic-bezier(.2,.8,.2,1) 100ms both' }}
+              >
+                {paymentAlert.tone === 'success'
+                  ? <CheckCircle2 className="h-10 w-10" strokeWidth={1.8} />
+                  : <AlertCircle className="h-10 w-10" strokeWidth={1.8} />}
+              </div>
+              <p className={`mt-7 text-[10px] font-black uppercase tracking-[0.2em] ${
+                paymentAlert.tone === 'success' ? 'text-emerald-700' : paymentAlert.tone === 'error' ? 'text-rose-700' : 'text-amber-700'
+              }`}>
+                {paymentAlert.tone === 'success' ? 'Verified by Flutterwave' : 'Rhema student finance'}
+              </p>
+              <h2 id="payment-alert-title" className="mt-2 text-2xl font-black tracking-tight text-slate-950">
+                {paymentAlert.title}
+              </h2>
+              <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-slate-600">{paymentAlert.message}</p>
+              {paymentAlert.reference && (
+                <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-left">
+                  <p className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400">Payment reference</p>
+                  <p className="mt-1 break-all font-mono text-xs font-bold text-slate-800">{paymentAlert.reference}</p>
+                </div>
+              )}
+              <button
+                autoFocus
+                className={`mt-6 w-full rounded-xl px-5 py-3 text-sm font-black text-white shadow-lg transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-60 ${
+                  paymentAlert.tone === 'success'
+                    ? 'bg-emerald-600 shadow-emerald-900/10 hover:bg-emerald-700 focus-visible:outline-emerald-600'
+                    : paymentAlert.tone === 'error'
+                      ? 'bg-rose-600 shadow-rose-900/10 hover:bg-rose-700 focus-visible:outline-rose-600'
+                      : 'bg-slate-900 shadow-slate-900/10 hover:bg-slate-800 focus-visible:outline-slate-700'
+                }`}
+                onClick={() => setPaymentAlert(null)}
+                type="button"
+              >
+                {paymentAlert.tone === 'success' ? 'Continue to student accounts' : 'Return to student accounts'}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
       <header className="flex flex-col gap-3 border-b border-slate-200/80 pb-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
