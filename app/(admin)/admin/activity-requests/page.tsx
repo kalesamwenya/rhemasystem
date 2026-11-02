@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Check, ClipboardList, Download, Eye, Loader2, RefreshCw, X } from 'lucide-react';
 import { InvoicePreviewModal } from '@/components/activity-requests/InvoicePreviewModal';
 import { api } from '@/lib/api';
+import { createActivityRequestInvoicePdf, type ActivityRequestInvoiceData } from '@/lib/activity-request-invoice';
 
 type AccessRequest = {
   id: number;
@@ -24,6 +25,7 @@ type AccessRequest = {
   charge_id: number | null;
   invoice_reference: string | null;
   invoice_number: string | null;
+  invoice_date: string | null;
   has_invoice: boolean;
   invoice_emailed_at: string | null;
   paid_amount: number;
@@ -101,11 +103,55 @@ export default function ActivityRequestsPage() {
         action,
         ...(action === 'invoice' ? { amount: Number(amount) } : {}),
         ...(note ? { note } : {}),
-      }) as { message?: string };
-      setNotice(response.message || 'Request updated.');
+      }) as { message?: string; data?: { invoice_data?: ActivityRequestInvoiceData } };
+      if (action === 'invoice') {
+        if (!response.data?.invoice_data) throw new Error('The finance service did not return invoice details.');
+        await generateUploadAndEmailInvoice(request.id, response.data.invoice_data);
+      }
+      setNotice(action === 'invoice' ? 'Branded invoice uploaded, saved, and emailed to the student.' : response.message || 'Request updated.');
       await loadRequests();
     } catch (reason) {
+      if (action === 'invoice') await loadRequests();
       setError(reason instanceof Error ? reason.message : 'Unable to update the request.');
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  async function generateUploadAndEmailInvoice(requestId: number, invoice: ActivityRequestInvoiceData) {
+    const pdf = await createActivityRequestInvoicePdf(invoice);
+    await api.activityRequests.uploadInvoice(requestId, pdf, `${invoice.invoice_number}.pdf`);
+  }
+
+  async function retryInvoiceDelivery(request: AccessRequest) {
+    if (!request.invoice_number || !request.invoice_date || !request.invoice_reference || !request.amount || !request.currency) {
+      setError('The finance invoice details are incomplete. Contact Finance before retrying.');
+      return;
+    }
+    setSavingId(request.id);
+    setError('');
+    setNotice('');
+    try {
+      const invoice: ActivityRequestInvoiceData = {
+        invoice_number: request.invoice_number,
+        invoice_date: request.invoice_date,
+        student_name: request.student_name,
+        student_id: request.student_id,
+        cohort: request.cohort,
+        activity_name: request.activity_name,
+        activity_type: request.activity_type,
+        description: `${request.activity_type[0].toUpperCase()}${request.activity_type.slice(1)} access fee: ${request.activity_name}`,
+        amount: request.amount,
+        currency: request.currency,
+        reference: request.invoice_reference,
+        portal_url: `${window.location.origin}/student/billing`,
+      };
+      await generateUploadAndEmailInvoice(request.id, invoice);
+      setNotice('Branded invoice uploaded, saved, and emailed to the student.');
+      await loadRequests();
+    } catch (reason) {
+      await loadRequests();
+      setError(reason instanceof Error ? reason.message : 'Unable to generate or email the invoice.');
     } finally {
       setSavingId(null);
     }
@@ -181,6 +227,9 @@ export default function ActivityRequestsPage() {
                 <button type="button" onClick={() => void viewInvoice(request)} disabled={invoiceLoadingId === request.id} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60">{invoiceLoadingId === request.id ? <Loader2 size={14} className="animate-spin" /> : <Eye size={14} />}View {request.invoice_number || 'invoice'}</button>
                 {canFinance && <button type="button" onClick={() => void resendInvoice(request)} disabled={savingId === request.id} className="text-xs font-bold text-blue-900 hover:underline disabled:opacity-60">{request.invoice_emailed_at ? 'Resend invoice email' : 'Send invoice email'}</button>}
                 <span className="text-[11px] text-slate-500">{request.invoice_emailed_at ? `Emailed ${new Date(request.invoice_emailed_at).toLocaleString()}` : 'Email not confirmed'}</span>
+              </div>}
+              {canFinance && request.charge_id && request.invoice_number && !request.has_invoice && <div className="mt-3">
+                <button type="button" onClick={() => void retryInvoiceDelivery(request)} disabled={savingId === request.id} className="inline-flex items-center gap-2 text-xs font-bold text-blue-900 hover:underline disabled:opacity-60">{savingId === request.id ? <Loader2 size={14} className="animate-spin" /> : null}Generate and email branded invoice</button>
               </div>}
               {request.review_note && <p className="mt-2 text-xs text-slate-500">Review note: {request.review_note}</p>}
             </div>

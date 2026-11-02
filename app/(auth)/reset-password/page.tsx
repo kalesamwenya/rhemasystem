@@ -27,6 +27,10 @@ export default function ResetPasswordPage() {
     event.preventDefault();
     setError('');
     setMessage('');
+    if (!/^[a-f0-9]{64}$/i.test(token)) {
+      setError('This reset link is missing or invalid. Request a new one.');
+      return;
+    }
     if (password.length < 12) {
       setError('Choose a password with at least 12 characters.');
       return;

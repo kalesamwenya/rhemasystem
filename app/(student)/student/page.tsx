@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { AlertCircle, ArrowRight, BookOpen, Calendar, Clock, FileText, GraduationCap } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ArrowRight, BookOpen, Calendar, Clock, FileText, GraduationCap } from 'lucide-react';
 import { api } from '@/lib/api';
 
 type StudentCourse = {
@@ -69,12 +69,15 @@ type StudentDataStatusResponse = {
   data?: StudentDataStatus;
 };
 
+const ASSESSMENTS_PER_SLIDE = 3;
+
 export default function StudentDashboardPage() {
   const [studentName, setStudentName] = useState('');
   const [cohort, setCohort] = useState('');
   const [courses, setCourses] = useState<StudentCourse[]>([]);
   const [sessions, setSessions] = useState<CourseSession[]>([]);
   const [assessments, setAssessments] = useState<UpcomingAssessment[]>([]);
+  const [assessmentSlide, setAssessmentSlide] = useState(0);
   const [assessmentError, setAssessmentError] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -140,6 +143,11 @@ export default function StudentDashboardPage() {
     .filter((session) => new Date(`${session.session_date}T12:00:00`) >= today)
     .sort((a, b) => `${a.session_date} ${a.start_time}`.localeCompare(`${b.session_date} ${b.start_time}`))
     .slice(0, 5);
+  const assessmentSlideCount = Math.ceil(assessments.length / ASSESSMENTS_PER_SLIDE);
+  const visibleAssessments = assessments.slice(
+    assessmentSlide * ASSESSMENTS_PER_SLIDE,
+    (assessmentSlide + 1) * ASSESSMENTS_PER_SLIDE,
+  );
 
   return (
     <div className="space-y-8">
@@ -164,7 +172,7 @@ export default function StudentDashboardPage() {
           {dataStatus.available_courses === 0 && <p className="mt-2 text-amber-800">No courses are configured for this cohort. The administrator should run php-api/courses/seedBibleSchoolCourses.sql against the same database used by the student API.</p>}
           {dataStatus.available_courses > 0 && dataStatus.active_enrollments === 0 && <p className="mt-2 text-amber-800">You have eligible courses but no active enrollments. Open Course Catalog and enroll in the courses for your cohort.</p>}
           {!dataStatus.learning_tables_installed && <p className="mt-2 text-amber-800">The learning database tables are incomplete. Missing: {dataStatus.missing_learning_tables.join(', ')}. Ask the administrator to import php-api/moodle_learning_extension.sql in the same database.</p>}
-          {dataStatus.learning_tables_installed && !dataStatus.student_moodle_mapped && <p className="mt-2 text-amber-800">Your student account is not linked to the gradebook user record. Grades cannot appear until the school links those accounts.</p>}
+          {dataStatus.learning_tables_installed && !dataStatus.student_moodle_mapped && <p className="mt-2 text-amber-800">We could not safely match your school email to exactly one gradebook account. Ask the school office to confirm that the same email is on both accounts and is not shared with another student.</p>}
         </section>
       )}
 
@@ -187,15 +195,42 @@ export default function StudentDashboardPage() {
         })}
       </div>
 
-      <section aria-labelledby="upcoming-assessments-heading" className="space-y-4">
-        <div className="flex items-center justify-between">
+      <section aria-labelledby="upcoming-assessments-heading" aria-roledescription="carousel" className="space-y-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 id="upcoming-assessments-heading" className="text-xl font-bold tracking-tight text-slate-900">Upcoming Assessments</h2>
             <p className="mt-1 text-xs text-slate-500">Assignments, quizzes, and exams for your active courses.</p>
           </div>
-          <Link href="/student/assignments" className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-blue-900 hover:underline">
-            All assignments <ArrowRight className="h-3 w-3" />
-          </Link>
+          <div className="flex flex-wrap items-center gap-3">
+            {assessmentSlideCount > 1 && (
+              <>
+                <span aria-live="polite" className="text-xs font-semibold text-slate-500">
+                  Slide {assessmentSlide + 1} of {assessmentSlideCount}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setAssessmentSlide((slide) => Math.max(0, slide - 1))}
+                  disabled={assessmentSlide === 0}
+                  aria-label="Previous assessment slide"
+                  className="rounded-lg border border-slate-200 bg-white p-2 text-blue-900 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAssessmentSlide((slide) => Math.min(assessmentSlideCount - 1, slide + 1))}
+                  disabled={assessmentSlide >= assessmentSlideCount - 1}
+                  aria-label="Next assessment slide"
+                  className="rounded-lg border border-slate-200 bg-white p-2 text-blue-900 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+              </>
+            )}
+            <Link href="/student/assignments" className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-blue-900 hover:underline">
+              All assignments <ArrowRight className="h-3 w-3" />
+            </Link>
+          </div>
         </div>
         {assessmentError && <div role="alert" className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"><AlertCircle className="h-4 w-4 shrink-0" />{assessmentError}</div>}
         {loading ? (
@@ -203,8 +238,14 @@ export default function StudentDashboardPage() {
         ) : assessments.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-center text-sm text-slate-500">There are no upcoming assignments, quizzes, or exams for your active courses.</div>
         ) : (
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {assessments.slice(0, 6).map((assessment) => {
+          <div
+            role="group"
+            aria-roledescription="slide"
+            aria-label={`Assessments ${assessmentSlide * ASSESSMENTS_PER_SLIDE + 1} to ${Math.min((assessmentSlide + 1) * ASSESSMENTS_PER_SLIDE, assessments.length)} of ${assessments.length}`}
+            aria-live="polite"
+            className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3"
+          >
+            {visibleAssessments.map((assessment) => {
               const assessmentPath = assessment.type === 'assignment'
                 ? `/student/courses/${encodeURIComponent(assessment.course_id)}/assignment?assessment_id=${assessment.id}`
                 : `/student/courses/${encodeURIComponent(assessment.course_id)}/quiz?assessment_id=${assessment.id}`;

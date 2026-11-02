@@ -5,6 +5,7 @@ import { Activity, AlertTriangle, Camera, Eye, RefreshCw, RotateCcw, Users, Zoom
 import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import { ComposableMap, Geographies, Geography, Graticule, Marker, ZoomableGroup } from 'react-simple-maps';
 import { api } from '@/lib/api';
+import { getWebsitePageName } from '@/lib/website-page-name';
 
 type Period = 7 | 30 | 365;
 
@@ -53,6 +54,12 @@ type AnalyticsDashboard = {
   };
   trend: Array<{ day: string; visitors: number; page_views: number }>;
   top_pages: Array<{ page_path: string; page_views: number; visitors: number }>;
+  top_activities: Array<{
+    page_path: string;
+    action_type: 'navigation' | 'button';
+    interactions: number | string;
+    visitors: number | string;
+  }>;
   locations: VisitorLocation[];
   countries?: CountryStat[];
   technology: VisitorTechnology;
@@ -113,7 +120,7 @@ export default function WebsiteStatistics({ summaryOnly = false }: { summaryOnly
     try {
       const response = await api.websiteAnalytics.dashboard(days) as AnalyticsDashboard;
       if (!response.success || !response.summary || !Array.isArray(response.trend)
-        || !Array.isArray(response.top_pages) || !Array.isArray(response.locations)
+        || !Array.isArray(response.top_pages) || !Array.isArray(response.top_activities) || !Array.isArray(response.locations)
         || !Array.isArray(response.recent)) {
         throw new Error('The website analytics API returned an incomplete dashboard. Deploy the current logs/websiteAnalytics.php endpoint and try again.');
       }
@@ -299,7 +306,8 @@ export default function WebsiteStatistics({ summaryOnly = false }: { summaryOnly
         <p role="status" className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">Loading website statistics…</p>
       ) : (
         <>
-        <div className={summaryOnly ? 'grid items-start gap-4 lg:grid-cols-2' : 'space-y-6'}>
+        <div className={summaryOnly ? 'space-y-4' : 'space-y-6'}>
+          <div className={summaryOnly ? 'grid items-start gap-4 lg:grid-cols-2' : 'space-y-6'}>
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div>
               <h2 className="text-sm font-black uppercase tracking-wider text-slate-900">Daily visitors</h2>
@@ -325,8 +333,37 @@ export default function WebsiteStatistics({ summaryOnly = false }: { summaryOnly
             )}
           </section>
 
-          <div className={summaryOnly ? 'contents' : 'grid gap-6 xl:grid-cols-2'}>
-            {!summaryOnly && <>
+          <section aria-label="Most performed website activities" className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div>
+              <h2 className="text-sm font-black uppercase tracking-wider text-slate-900">Most performed website activities</h2>
+              <p className="mt-1 text-xs text-slate-500">Most selected navigation links and buttons in this date range.</p>
+            </div>
+            {!dashboard?.top_activities.length ? (
+              <p className="py-10 text-center text-sm text-slate-500">No website interactions recorded for this period.</p>
+            ) : (
+              <div className="mt-4 divide-y divide-slate-100">
+                {dashboard.top_activities.map((activity) => (
+                  <div key={`${activity.page_path}-${activity.action_type}`} className="flex items-center justify-between gap-4 py-3">
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-semibold text-slate-800">
+                        {activity.action_type === 'navigation' ? 'Navigation to' : 'Buttons on'} {getWebsitePageName(activity.page_path)}
+                      </span>
+                      <span className="mt-0.5 block truncate font-mono text-xs text-slate-500">{activity.page_path}</span>
+                    </span>
+                    <span className="shrink-0 text-right text-xs text-slate-500">
+                      <strong className="text-slate-900">{numberFormat.format(Number(activity.interactions))}</strong> interactions
+                      <span className="mx-1.5 text-slate-300">·</span>
+                      {numberFormat.format(Number(activity.visitors))} visitors
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          </div>
+
+          {!summaryOnly && <div className="grid gap-6 xl:grid-cols-2">
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="text-sm font-black uppercase tracking-wider text-slate-900">Most visited pages</h2>
               {!dashboard?.top_pages.length ? (
@@ -335,7 +372,10 @@ export default function WebsiteStatistics({ summaryOnly = false }: { summaryOnly
                 <div className="mt-4 divide-y divide-slate-100">
                   {dashboard.top_pages.map((page) => (
                     <div key={page.page_path} className="flex items-center justify-between gap-4 py-3">
-                      <span className="min-w-0 truncate font-mono text-sm text-slate-700">{page.page_path}</span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-semibold text-slate-800">{getWebsitePageName(page.page_path)}</span>
+                        <span className="mt-0.5 block truncate font-mono text-xs text-slate-500">{page.page_path}</span>
+                      </span>
                       <span className="shrink-0 text-right text-xs text-slate-500">
                         <strong className="text-slate-900">{numberFormat.format(Number(page.page_views))}</strong> views
                         <span className="mx-1.5 text-slate-300">·</span>
@@ -529,7 +569,8 @@ export default function WebsiteStatistics({ summaryOnly = false }: { summaryOnly
                         <div className="text-xs font-bold text-slate-800">
                           {item.event_type === 'page_view' ? 'Page viewed' : `${item.action_type === 'navigation' ? 'Navigation' : 'Button'} selected`}
                         </div>
-                        <div className="mt-1 truncate font-mono text-xs text-slate-500">{item.page_path}</div>
+                        <div className="mt-1 truncate text-xs font-semibold text-slate-700">{getWebsitePageName(item.page_path)}</div>
+                        <div className="mt-0.5 truncate font-mono text-[10px] text-slate-500">{item.page_path}</div>
                       </div>
                       <time className="shrink-0 text-right text-[10px] text-slate-400">{formatDateTime(item.created_at)}</time>
                     </div>
@@ -537,9 +578,9 @@ export default function WebsiteStatistics({ summaryOnly = false }: { summaryOnly
                 </div>
               )}
             </section>
-            </>}
+          </div>}
 
-            <section aria-label="Visitor devices and platforms" className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <section aria-label="Visitor devices and platforms" className="w-full rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="mb-4">
                 <h2 className="text-sm font-black uppercase tracking-wider text-slate-900">Devices &amp; platforms</h2>
                 <p className="mt-1 text-xs text-slate-500">Approximate categories reported by visitor browsers. Raw user-agent strings are not stored.</p>
@@ -622,7 +663,6 @@ export default function WebsiteStatistics({ summaryOnly = false }: { summaryOnly
                 })}
               </div>
             </section>
-          </div>
         </div>
 
           {!summaryOnly && <p className="text-xs leading-5 text-slate-500">

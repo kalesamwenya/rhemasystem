@@ -11,6 +11,7 @@ import {
   ChevronRight,
   GraduationCap,
   IdCard,
+  Loader2,
   Save,
   ShieldCheck,
   Upload,
@@ -130,6 +131,7 @@ export default function ApplicationPage() {
   const [application, setApplication] = useState<ApplicationRecord | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [savedDraftAvailable, setSavedDraftAvailable] = useState(false);
+  const [draftToken, setDraftToken] = useState<string | null>(null);
   const [isDraftDirty, setIsDraftDirty] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [enrollmentOpen, setEnrollmentOpen] = useState(false);
@@ -175,6 +177,7 @@ export default function ApplicationPage() {
       setCurrentStep(typeof draft.currentStep === "number" && Number.isInteger(draft.currentStep)
         ? Math.min(Math.max(draft.currentStep, 0), steps.length - 1)
         : 0);
+      setDraftToken(typeof draft.draftToken === "string" ? draft.draftToken : null);
       setSavedDraftAvailable(true);
       return true;
     } catch (cause) {
@@ -188,8 +191,76 @@ export default function ApplicationPage() {
   }, []);
 
   useEffect(() => {
-    const timer = window.setTimeout(restoreDraft, 0);
-    return () => window.clearTimeout(timer);
+    let active = true;
+    const token = new URLSearchParams(window.location.hash.slice(1)).get("draft");
+    if (!token) {
+      const timer = window.setTimeout(restoreDraft, 0);
+      return () => {
+        active = false;
+        window.clearTimeout(timer);
+      };
+    }
+
+    window.history.replaceState({}, "", window.location.pathname + window.location.search);
+    const loadingTimer = window.setTimeout(() => {
+      if (active) setIsSubmitting(true);
+    }, 0);
+    api.admissions.getDraft(token).then((response: {
+      success?: boolean;
+      message?: string;
+      data?: { application_data?: Record<string, unknown>; current_step?: number };
+    }) => {
+      if (!response.success || !response.data?.application_data) {
+        throw new Error(response.message || "Unable to load this application draft.");
+      }
+      if (!active) return;
+      const restoredFormData = { ...initialState };
+      for (const field of Object.keys(initialState) as (keyof FormDataState)[]) {
+        if (documentFields.includes(field)) continue;
+        const value = response.data.application_data[field];
+        if (typeof value === "string") Object.assign(restoredFormData, { [field]: value });
+        if (typeof value === "boolean") Object.assign(restoredFormData, { [field]: value });
+      }
+      setFormData(restoredFormData);
+      setCurrentStep(typeof response.data.current_step === "number"
+        ? Math.min(Math.max(response.data.current_step, 0), steps.length - 1)
+        : 0);
+      setDraftToken(token);
+      setSavedDraftAvailable(true);
+      setIsDraftDirty(false);
+      setIsFormOpen(true);
+      try {
+        window.sessionStorage.setItem(applicationDraftStorageKey, JSON.stringify({
+          formData: { ...restoredFormData, passportPhoto: "", birthCertificate: "", nrcOrPassport: "", resultsCertificate: "" },
+          currentStep: typeof response.data.current_step === "number"
+            ? Math.min(Math.max(response.data.current_step, 0), steps.length - 1)
+            : 0,
+          draftToken: token,
+        }));
+      } catch (cause) {
+        console.error("Could not cache the restored application draft in this browser session.", cause);
+      }
+      setStatus({
+        type: "success",
+        title: "Application draft restored",
+        message: "Your application is ready to continue. Re-select supporting documents before submitting.",
+      });
+    }).catch((cause: unknown) => {
+      if (active) {
+        setStatus({
+          type: "error",
+          title: "Draft could not be opened",
+          message: cause instanceof Error ? cause.message : "The saved application draft could not be loaded.",
+        });
+      }
+    }).finally(() => {
+      window.clearTimeout(loadingTimer);
+      if (active) setIsSubmitting(false);
+    });
+    return () => {
+      active = false;
+      window.clearTimeout(loadingTimer);
+    };
   }, [restoreDraft]);
 
   useEffect(() => {
@@ -292,7 +363,19 @@ export default function ApplicationPage() {
     }
   };
 
-  const saveDraft = () => {
+  const saveDraft = async () => {
+    const email = formData.email.trim();
+    const applicantName = `${formData.firstName.trim()} ${formData.lastName.trim()}`.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !applicantName) {
+      setStatus({
+        type: "error",
+        title: "Name and email required",
+        message: "Enter your name and a valid email address so we can send you a secure link to continue this application.",
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
     try {
       const draftFormData = {
         ...formData,
@@ -301,21 +384,42 @@ export default function ApplicationPage() {
         nrcOrPassport: "",
         resultsCertificate: "",
       };
-      window.sessionStorage.setItem(applicationDraftStorageKey, JSON.stringify({ formData: draftFormData, currentStep }));
+      const response = await api.admissions.saveDraft({
+        applicant_email: email,
+        application_data: draftFormData,
+        current_step: currentStep,
+        ...(draftToken ? { draft_token: draftToken } : {}),
+      }) as { success?: boolean; message?: string; data?: { draft_token?: string; email_sent?: boolean } };
+      if (!response.success || !response.data?.draft_token) {
+        throw new Error(response.message || "The admissions service could not save your draft.");
+      }
+      const savedToken = response.data.draft_token;
+      setDraftToken(savedToken);
+      try {
+        window.sessionStorage.setItem(applicationDraftStorageKey, JSON.stringify({
+          formData: draftFormData,
+          currentStep,
+          draftToken: savedToken,
+        }));
+      } catch (cause) {
+        console.error("Could not cache the saved application draft in this browser session.", cause);
+      }
       setSavedDraftAvailable(true);
       setIsDraftDirty(false);
       setStatus({
-        type: "success",
-        title: "Draft saved",
-        message: "Your draft is saved for this browser session. Re-select supporting documents when you continue.",
+        type: response.data.email_sent ? "success" : "error",
+        title: response.data.email_sent ? "Draft saved and emailed" : "Draft saved; email not sent",
+        message: response.message || "Your draft was saved.",
       });
-      setIsFormOpen(false);
+      if (response.data.email_sent) setIsFormOpen(false);
     } catch (cause) {
       setStatus({
         type: "error",
         title: "Draft could not be saved",
-        message: cause instanceof Error ? cause.message : "Your browser could not save this draft. Check available storage and try again.",
+        message: cause instanceof Error ? cause.message : "The admissions service could not save this draft. Please try again.",
       });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -391,6 +495,7 @@ export default function ApplicationPage() {
       const applicationData = { ...formData, passportPhoto: null, birthCertificate: null, nrcOrPassport: null, resultsCertificate: null };
       const requestData = new FormData();
       requestData.append("application_data", JSON.stringify(applicationData));
+      if (draftToken) requestData.append("draft_token", draftToken);
       for (const field of documentFields) {
         const file = formData[field];
         if (isBrowserFile(file)) requestData.append(field, file);
@@ -445,6 +550,7 @@ export default function ApplicationPage() {
     try {
       window.sessionStorage.removeItem(applicationDraftStorageKey);
       setSavedDraftAvailable(false);
+      setDraftToken(null);
     } catch (cause) {
       console.error("Could not clear the submitted application draft from session storage.", cause);
       setStatus({
@@ -768,7 +874,7 @@ export default function ApplicationPage() {
             </ul>
             {savedDraftAvailable ? (
               <p className="mt-4 rounded-xl bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-900" role="status">
-                You have a saved draft for this browser session. Re-select supporting documents when you continue.
+                You have a saved application draft. Continue from this browser or use the secure link sent to your email. Re-select supporting documents before submitting.
               </p>
             ) : null}
             {status.message ? (
@@ -968,9 +1074,9 @@ export default function ApplicationPage() {
                       <button type="button" onClick={cancelForm} className="rounded-full border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
                         Cancel
                       </button>
-                      <button type="button" onClick={saveDraft} className="inline-flex items-center justify-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-900 transition hover:bg-blue-100">
-                        <Save size={15} />
-                        Save draft
+                      <button type="button" onClick={() => void saveDraft()} disabled={isSubmitting} className="inline-flex items-center justify-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-900 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50">
+                        {isSubmitting ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+                        {isSubmitting ? "Saving draft" : "Save draft"}
                       </button>
                     </div>
                     <div className="flex gap-2 sm:justify-end">

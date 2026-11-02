@@ -169,17 +169,15 @@ export async function uploadVerifiedStudentPaymentReceipt(reference: string, tra
     receipt_token: transaction.receipt_token,
   };
   const pdf = await createPaymentReceiptPdf(payment);
-  if (!transaction.receipt_path) {
-    await uploadPdfDocument(
-      pdf,
-      'receipts',
-      `Rhema-Receipt-${reference.replace(/[^a-z0-9_-]/gi, '-')}.pdf`,
-      reference,
-      'receipt',
-      transaction.gateway_transaction_id || transactionId,
-      'student',
-    );
-  }
+  await uploadPdfDocument(
+    pdf,
+    'receipts',
+    `Rhema-Receipt-${reference.replace(/[^a-z0-9_-]/gi, '-')}.pdf`,
+    reference,
+    'receipt',
+    transaction.gateway_transaction_id || transactionId,
+    'student',
+  );
   return pdf;
 }
 

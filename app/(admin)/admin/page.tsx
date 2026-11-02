@@ -177,7 +177,7 @@ export default function AdminDashboard() {
     <main className="pb-8">
       <div className="grid items-start gap-5">
         <div className="min-w-0 space-y-5">
-          {isMediaItAdmin ? (
+          {/* {isMediaItAdmin ? (
             <header className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#31584c]">Rhema · Admin workspace</p>
@@ -219,7 +219,7 @@ export default function AdminDashboard() {
                 <span className="rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-white">Auto-refreshes every minute</span>
               </div>
             </header>
-          )}
+          )} */}
 
           {profileError && (
             <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
