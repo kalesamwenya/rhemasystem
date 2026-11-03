@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from 'react';
-import { ArrowDown, ArrowLeft, Ban, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardCheck, Copy, CreditCard, Eye, Filter, Mail, RefreshCw, Search, ShieldCheck, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, Ban, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, ClipboardCheck, CreditCard, Eye, Filter, Mail, RefreshCw, Search, ShieldCheck, X } from 'lucide-react';
 import { api, assetUrl } from '@/lib/api';
 
 type Recommendation = {
@@ -54,8 +54,7 @@ type ApplicationRecord = {
   documents: ApplicationDocument[];
 };
 
-type ApiResponse<T> = { success?: boolean; message?: string; data?: T };
-type ApprovalCredentials = { applicationId: string; cohort: string; studentId: string; password: string };
+type ApiResponse<T> = { success?: boolean; message?: string; email_sent?: boolean; data?: T };
 const cohorts = ['FYM', 'FYE', 'SYM', 'SYE'] as const;
 const applicationStatuses = ['Submitted', 'Recommendations pending', 'Payment pending', 'Under review', 'Interview scheduled', 'Approved', 'Rejected'];
 const pageSize = 10;
@@ -190,10 +189,13 @@ export default function AdmissionsPage() {
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'name' | 'status'>('newest');
   const [page, setPage] = useState(1);
   const [cohort, setCohort] = useState<(typeof cohorts)[number] | ''>('');
-  const [credentials, setCredentials] = useState<ApprovalCredentials | null>(null);
-  const [credentialsCopied, setCredentialsCopied] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [showInterviewForm, setShowInterviewForm] = useState(false);
+  const [interviewAt, setInterviewAt] = useState('');
+  const [interviewChannel, setInterviewChannel] = useState<'In person' | 'Online'>('In person');
+  const [interviewLocation, setInterviewLocation] = useState('');
+  const [resendingAccountEmail, setResendingAccountEmail] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [documentPreview, setDocumentPreview] = useState<DocumentPreview | null>(null);
@@ -270,7 +272,7 @@ export default function AdmissionsPage() {
     setPage(1);
   };
 
-  const updateStatus = async (status: 'Under review' | 'Interview scheduled' | 'Rejected') => {
+  const updateStatus = async (status: 'Under review' | 'Rejected') => {
     if (!selected) return;
     if (status === 'Rejected' && !window.confirm(`Reject ${selected.applicant_name}'s application? This decision cannot be changed later.`)) return;
     setSaving(true);
@@ -279,8 +281,12 @@ export default function AdmissionsPage() {
     try {
       const response = await api.admissions.update({ application_id: selected.id, status }) as ApiResponse<unknown>;
       if (!response.success) throw new Error(response.message ?? 'Unable to update the application.');
-      setNotice(`Application marked ${status.toLowerCase()}.`);
       await loadApplications();
+      if (response.email_sent === false) {
+        setError(response.message || `Application marked ${status.toLowerCase()}, but the applicant email could not be sent.`);
+      } else {
+        setNotice(`Application marked ${status.toLowerCase()}${response.email_sent === true ? ' and applicant emailed' : ''}.`);
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to update the application.');
     } finally {
@@ -313,23 +319,19 @@ export default function AdmissionsPage() {
     setSaving(true);
     setError('');
     setNotice('');
-    setCredentials(null);
-    setCredentialsCopied(false);
     try {
       const response = await api.admissions.update({
         application_id: selected.id,
         status: 'Approved',
         cohort,
-      }) as ApiResponse<{ status: string; student: { student_id: string; temporary_password: string } }>;
+      }) as ApiResponse<{ status: string; student: { student_id: string } }>;
       if (!response.success || !response.data?.student) throw new Error(response.message ?? 'Unable to approve this application.');
-      setCredentials({
-        applicationId: selected.id,
-        cohort,
-        studentId: response.data.student.student_id,
-        password: response.data.student.temporary_password,
-      });
-      setNotice('Application approved and student account created.');
       await loadApplications();
+      if (response.email_sent === false) {
+        setError(response.message || 'Application approved, but the account setup email could not be sent. Resend it below.');
+      } else {
+        setNotice('Application approved, student account created, and account setup email sent.');
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to approve this application.');
     } finally {
@@ -341,7 +343,9 @@ export default function AdmissionsPage() {
     setSelectedId(id);
     setActiveReviewTab('applicant');
     setCohort('');
-    setCredentials(null);
+    setShowInterviewForm(false);
+    setInterviewAt('');
+    setInterviewLocation('');
     setNotice('');
     setError('');
   };
@@ -349,19 +353,56 @@ export default function AdmissionsPage() {
   const returnToApplications = () => {
     setSelectedId('');
     setCohort('');
-    setCredentials(null);
+    setShowInterviewForm(false);
   };
 
-  const copyCredentials = async () => {
-    if (!credentials) return;
+  const scheduleInterview = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selected) return;
+    setSaving(true);
+    setError('');
+    setNotice('');
     try {
-      await navigator.clipboard.writeText(
-        `Student ID: ${credentials.studentId}\nTemporary password: ${credentials.password}\nCohort: ${credentials.cohort}`
-      );
-      setCredentialsCopied(true);
-      setError('');
+      const response = await api.admissions.scheduleInterview({
+        application_id: selected.id,
+        scheduled_at: interviewAt,
+        channel: interviewChannel,
+        location: interviewLocation.trim(),
+      }) as ApiResponse<unknown>;
+      if (!response.success) throw new Error(response.message ?? 'Unable to schedule the interview.');
+      setShowInterviewForm(false);
+      setInterviewAt('');
+      setInterviewLocation('');
+      await loadApplications();
+      if (response.email_sent === false) {
+        setError(response.message || 'Interview saved, but the applicant email could not be sent.');
+      } else {
+        setNotice(response.message || 'Interview scheduled and applicant emailed.');
+      }
     } catch (cause) {
-      setError(cause instanceof Error ? `Could not copy credentials: ${cause.message}` : 'Could not copy credentials. Select and copy them manually.');
+      setError(cause instanceof Error ? cause.message : 'Unable to schedule the interview.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const resendStudentAccountEmail = async () => {
+    if (!selected) return;
+    setResendingAccountEmail(true);
+    setError('');
+    setNotice('');
+    try {
+      const response = await api.admissions.resendStudentAccountEmail(selected.id) as ApiResponse<unknown>;
+      if (!response.success) throw new Error(response.message ?? 'Unable to resend the student account email.');
+      if (response.email_sent === false) {
+        setError(response.message || 'Account credentials were reset, but the email could not be sent.');
+      } else {
+        setNotice(response.message || 'Student account setup email sent.');
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to resend the student account email.');
+    } finally {
+      setResendingAccountEmail(false);
     }
   };
 
@@ -412,15 +453,6 @@ export default function AdmissionsPage() {
 
     {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">{error}</div>}
     {notice && <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">{notice}</div>}
-    {credentials && <div role="status" className="rounded-2xl border border-emerald-300 bg-emerald-50 p-5">
-      <h2 className="font-black text-emerald-900">Student account created — share these credentials securely</h2>
-      <p className="mt-2 text-sm text-emerald-800">Application {credentials.applicationId} · Cohort {credentials.cohort}</p>
-      <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2"><p><strong>Student ID:</strong> <code className="select-all">{credentials.studentId}</code></p><p><strong>Temporary password:</strong> <code className="select-all">{credentials.password}</code></p></div>
-      <button type="button" onClick={() => void copyCredentials()} className="mt-4 inline-flex items-center gap-2 rounded-lg bg-emerald-800 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-900">
-        {credentialsCopied ? <Check size={14} /> : <Copy size={14} />}{credentialsCopied ? 'Copied' : 'Copy credentials'}
-      </button>
-    </div>}
-
     {!selected ? <>
       <section className="grid gap-3 sm:grid-cols-3">
         <SummaryCard label="Applications" value={applications.length} />
@@ -608,6 +640,7 @@ export default function AdmissionsPage() {
           <>
             <div><p className="admin-kicker">Final decision</p><h3 className="mt-2 text-xl font-black">Application {selected.status.toLowerCase()}</h3></div>
             {selected.student_id && <p className="rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-900">Student account created: {selected.student_id}</p>}
+            {selected.status === 'Approved' && selected.student_id && <button type="button" disabled={resendingAccountEmail} onClick={() => void resendStudentAccountEmail()} className="inline-flex items-center gap-2 rounded-xl border border-[#dce3de] bg-white px-4 py-3 text-xs font-black uppercase tracking-[0.12em] text-[#17201d] disabled:opacity-50"><Mail className="h-4 w-4" /> {resendingAccountEmail ? 'Sending...' : 'Resend account setup email'}</button>}
           </>
         ) : (
           <>
@@ -620,11 +653,29 @@ export default function AdmissionsPage() {
         </label>
         {!recommendationsComplete && <p className="rounded-xl bg-amber-50 p-3 text-sm font-semibold text-amber-800">Approval is disabled until both the pastoral and personal recommendations have been submitted.</p>}
         <div className="flex flex-wrap gap-3">
-          <button type="button" disabled={saving || ['Approved', 'Rejected'].includes(selected.status)} onClick={() => void updateStatus('Interview scheduled')} className="inline-flex items-center gap-2 rounded-xl bg-[#17201d] px-4 py-3 text-xs font-black uppercase tracking-[0.12em] text-white disabled:opacity-50"><CalendarDays className="h-4 w-4" /> Schedule interview</button>
+          <button type="button" disabled={saving || ['Approved', 'Rejected'].includes(selected.status)} onClick={() => { setShowInterviewForm((shown) => !shown); setError(''); }} className="inline-flex items-center gap-2 rounded-xl bg-[#17201d] px-4 py-3 text-xs font-black uppercase tracking-[0.12em] text-white disabled:opacity-50"><CalendarDays className="h-4 w-4" /> Schedule interview</button>
           <button type="button" disabled={saving || ['Approved', 'Rejected'].includes(selected.status)} onClick={() => void updateStatus('Under review')} className="inline-flex items-center gap-2 rounded-xl border border-[#dce3de] bg-white px-4 py-3 text-xs font-black uppercase tracking-[0.12em] text-[#17201d] disabled:opacity-50"><ClipboardCheck className="h-4 w-4" /> Mark under review</button>
           <button type="button" onClick={() => void approveApplication()} disabled={saving || ['Approved', 'Rejected'].includes(selected.status) || !recommendationsComplete || !cohort} className="inline-flex items-center gap-2 rounded-xl bg-[#0f766e] px-4 py-3 text-xs font-black uppercase tracking-[0.12em] text-white disabled:cursor-not-allowed disabled:opacity-50"><CheckCircle2 className="h-4 w-4" /> {saving ? 'Saving...' : 'Approve and create student'}</button>
           <button type="button" disabled={saving || ['Approved', 'Rejected'].includes(selected.status)} onClick={() => void updateStatus('Rejected')} className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-black uppercase tracking-[0.12em] text-red-800 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"><Ban className="h-4 w-4" /> Reject application</button>
         </div>
+        {showInterviewForm && <form onSubmit={scheduleInterview} className="grid gap-4 rounded-xl border border-[#dce3de] bg-[#f8faf8] p-4 sm:grid-cols-2">
+          <label className="text-sm font-semibold">Date and time
+            <input type="datetime-local" required value={interviewAt} onChange={(event) => setInterviewAt(event.target.value)} className="mt-2 w-full rounded-xl border border-[#dce3de] bg-white px-3 py-3 text-sm" />
+          </label>
+          <label className="text-sm font-semibold">Interview method
+            <select value={interviewChannel} onChange={(event) => setInterviewChannel(event.target.value as 'In person' | 'Online')} className="mt-2 w-full rounded-xl border border-[#dce3de] bg-white px-3 py-3 text-sm">
+              <option value="In person">In person</option>
+              <option value="Online">Online</option>
+            </select>
+          </label>
+          <label className="text-sm font-semibold sm:col-span-2">{interviewChannel === 'Online' ? 'Meeting link' : 'Interview location'}
+            <input type="text" required value={interviewLocation} onChange={(event) => setInterviewLocation(event.target.value)} className="mt-2 w-full rounded-xl border border-[#dce3de] bg-white px-3 py-3 text-sm" placeholder={interviewChannel === 'Online' ? 'https://...' : 'Building, room, or address'} />
+          </label>
+          <div className="flex gap-2 sm:col-span-2">
+            <button type="submit" disabled={saving} className="rounded-xl bg-[#0f766e] px-4 py-3 text-xs font-black uppercase tracking-[0.12em] text-white disabled:opacity-50">{saving ? 'Saving...' : 'Save and email applicant'}</button>
+            <button type="button" disabled={saving} onClick={() => setShowInterviewForm(false)} className="rounded-xl border border-[#dce3de] bg-white px-4 py-3 text-xs font-black uppercase tracking-[0.12em] text-[#17201d]">Cancel</button>
+          </div>
+        </form>}
           </>
         )}
       </div>

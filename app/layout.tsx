@@ -4,6 +4,7 @@ import "./globals.css";
 import { EventsProvider } from "@/components/events/EventsContext";
 import AlertProvider from "@/components/ui/AlertProvider";
 import ActivityTracker from "@/components/ActivityTracker";
+import MetaPixel from "@/components/MetaPixel";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_ORIGIN } from "@/lib/site-seo";
 
 const geistSans = Geist({
@@ -56,6 +57,7 @@ export default function RootLayout({
         <EventsProvider>
           {children}
           <ActivityTracker />
+          <MetaPixel />
           <AlertProvider />
         </EventsProvider>
       </body>

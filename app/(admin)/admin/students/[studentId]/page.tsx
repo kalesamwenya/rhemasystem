@@ -69,6 +69,8 @@ type ServiceHour = {
 type ServiceProgress = {
   term_id: number;
   completed_hours: number;
+  base_required_hours: number;
+  penalty_hours: number;
   required_hours: number;
   remaining_hours: number;
   status: string;
@@ -298,9 +300,9 @@ export default function AdminStudentDetailPage() {
         </article>
 
         <article className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
-          <div className="flex items-center justify-between gap-3"><div><h2 className="text-lg font-black text-slate-900">Church work hours</h2><p className="mt-1 text-xs text-slate-500">Recorded service and term progress</p></div><Clock3 className="h-5 w-5 text-blue-900" /></div>
+          <div className="flex items-center justify-between gap-3"><div><h2 className="text-lg font-black text-slate-900">Church work hours</h2><p className="mt-1 text-xs text-slate-500">20 hours per term across four terms; missing a target adds a 20-hour penalty to the next term</p></div><Clock3 className="h-5 w-5 text-blue-900" /></div>
           <SectionError message={sectionErrors.service} />
-          {serviceProgress.length > 0 && <div className="mt-4 grid gap-2 sm:grid-cols-2">{serviceProgress.map((term) => <div key={term.term_id} className="rounded-xl bg-slate-50 p-3"><p className="text-xs font-black text-slate-700">Term {term.term_id} · {term.status.replace('_', ' ')}</p><p className="mt-1 text-sm font-bold text-slate-900">{term.completed_hours} / {term.required_hours} hours</p><p className="text-xs text-slate-500">{term.remaining_hours} hours remaining</p></div>)}</div>}
+          {serviceProgress.length > 0 && <div className="mt-4 grid gap-2 sm:grid-cols-2">{serviceProgress.map((term) => <div key={term.term_id} className="rounded-xl bg-slate-50 p-3"><p className="text-xs font-black text-slate-700">Term {term.term_id} · {term.status.replace('_', ' ')}</p><p className="mt-1 text-sm font-bold text-slate-900">{term.completed_hours} / {term.required_hours} hours</p>{term.penalty_hours > 0 && <p className="mt-1 text-xs font-bold text-amber-800">{term.penalty_hours} penalty hours owed from previous term</p>}<p className="text-xs text-slate-500">{term.remaining_hours} hours owing</p></div>)}</div>}
           {serviceHours.length === 0 ? <EmptyState>{sectionErrors.service ? 'Service hours could not be loaded.' : 'No service hours recorded yet.'}</EmptyState> : (
             <div className="mt-4 space-y-2">{serviceHours.slice(0, 8).map((entry) => <div key={entry.id} className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-slate-100 p-3"><div><p className="text-sm font-bold text-slate-800">{entry.ministry || 'Service activity'}</p><p className="mt-1 text-xs text-slate-500">Term {entry.term_id} · {formatDate(entry.service_date)}{entry.supervisor ? ` · Supervisor: ${entry.supervisor}` : ''}</p>{entry.comments && <p className="mt-1 text-xs text-slate-600">{entry.comments}</p>}</div><span className="whitespace-nowrap rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-black text-blue-900">{Number(entry.hours).toFixed(1)} hrs</span></div>)}</div>
           )}

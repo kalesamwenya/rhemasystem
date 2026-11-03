@@ -26,11 +26,15 @@ type Post = {
   scheduled_at: string | null;
   status: WorkflowStatus;
   reviewer_note: string | null;
+  facebook_post_id: string | null;
+  instagram_media_id: string | null;
+  publish_error: string | null;
+  publish_attempts: number;
   created_at: string;
   updated_at: string;
 };
 type Assignee = { id: string; name: string; department: string };
-type ApiList<T> = { data?: T[] };
+type ApiList<T> = { data?: T[]; meta_configured?: { facebook: boolean; instagram: boolean } };
 type Draft = {
   id?: number;
   title: string;
@@ -130,8 +134,10 @@ function postDay(post: Post): string {
 export default function SocialMediaPage() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [assignees, setAssignees] = useState<Assignee[]>([]);
+  const [metaConfigured, setMetaConfigured] = useState<{ facebook: boolean; instagram: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [retryingPostId, setRetryingPostId] = useState<number | null>(null);
   const [notice, setNotice] = useState('');
   const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -148,6 +154,7 @@ export default function SocialMediaPage() {
     ]);
     if (postsResult.status === 'fulfilled') {
       setPosts(postsResult.value.data ?? []);
+      setMetaConfigured(postsResult.value.meta_configured ?? null);
     } else {
       setNotice(postsResult.reason instanceof Error ? postsResult.reason.message : 'Unable to load content calendar.');
     }
@@ -230,7 +237,9 @@ export default function SocialMediaPage() {
         reviewer_note: draft.reviewer_note.trim(),
       });
       closeDraft();
-      setNotice('Content item saved to the calendar.');
+      setNotice(draft.status === 'approved' && draft.scheduled_at
+        ? 'Post approved and queued. It will publish automatically when its scheduled time arrives.'
+        : 'Content item saved to the calendar.');
       await loadData();
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Unable to save this content item.');
@@ -247,6 +256,19 @@ export default function SocialMediaPage() {
       setNotice('Content item deleted.');
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Unable to delete this content item.');
+    }
+  };
+
+  const retryPublishing = async (post: Post) => {
+    setRetryingPostId(post.id);
+    try {
+      await api.socialMedia.retry(post.id);
+      setNotice(`"${post.title}" has been added back to the publishing queue.`);
+      await loadData();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Unable to retry this post.');
+    } finally {
+      setRetryingPostId(null);
     }
   };
 
@@ -330,9 +352,15 @@ export default function SocialMediaPage() {
         <button type="button" onClick={() => openNew()} className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white"><Plus className="h-4 w-4" /> Create content task</button>
       </header>
 
-      <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900">
+      <div className={`flex items-start gap-3 rounded-xl border px-4 py-3 text-xs leading-5 ${metaConfigured?.facebook || metaConfigured?.instagram ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>
         <Share2 className="mt-0.5 h-4 w-4 shrink-0" />
-        <p><strong>Meta auto-publishing is not connected.</strong> Approved and scheduled items are saved in this calendar. Facebook and Instagram publishing requires Meta app credentials and connected business accounts.</p>
+        <p>
+          <strong>Meta publishing:</strong>{' '}
+          {metaConfigured?.facebook || metaConfigured?.instagram
+            ? `Connected platforms: ${[metaConfigured.facebook ? 'Facebook' : '', metaConfigured.instagram ? 'Instagram' : ''].filter(Boolean).join(' and ')}.`
+            : 'Not configured yet. Add the Meta server credentials and scheduled publishing cron settings described in the deployment notes.'}
+          {' '}Approval with a scheduled time queues the post for automatic publishing. The post and media remain archived in this system.
+        </p>
       </div>
       {notice && <div role="status" className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs font-semibold text-blue-800">{notice}</div>}
 
@@ -361,7 +389,7 @@ export default function SocialMediaPage() {
             const currentMonth = date.getMonth() === month.getMonth();
             return <div key={key} className={`min-h-28 border-b border-r border-slate-100 p-1.5 ${currentMonth ? 'bg-white' : 'bg-slate-50/70'}`}>
               <div className="mb-1 flex items-center justify-between"><span className={`text-xs font-bold ${currentMonth ? 'text-slate-700' : 'text-slate-300'}`}>{date.getDate()}</span><button type="button" onClick={() => openNew(date)} className="rounded p-0.5 text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label={`Add content on ${key}`}><Plus className="h-3.5 w-3.5" /></button></div>
-              <div className="space-y-1">{dayPosts.slice(0, 3).map((post) => <button key={post.id} type="button" onClick={() => setDraft(toDraft(post))} className="block w-full truncate rounded px-1.5 py-1 text-left text-[9px] font-bold text-slate-700 hover:opacity-80" style={{ backgroundColor: post.status === 'in_review' ? '#fef3c7' : post.status === 'approved' || post.status === 'scheduled' ? '#dbeafe' : '#f1f5f9' }} title={`${post.title} · ${statusLabels[post.status]}`}>{post.scheduled_at ? post.scheduled_at.slice(11, 16) + ' ' : ''}{post.title}</button>)}{dayPosts.length > 3 && <button type="button" onClick={() => setFilter('all')} className="px-1 text-[9px] font-bold text-red-600">+{dayPosts.length - 3} more</button>}</div>
+              <div className="space-y-1">{dayPosts.slice(0, 3).map((post) => <button key={post.id} type="button" disabled={post.status === 'published'} onClick={() => setDraft(toDraft(post))} className="block w-full truncate rounded px-1.5 py-1 text-left text-[9px] font-bold text-slate-700 hover:opacity-80 disabled:cursor-default" style={{ backgroundColor: post.status === 'in_review' ? '#fef3c7' : post.status === 'approved' || post.status === 'scheduled' ? '#dbeafe' : '#f1f5f9' }} title={`${post.title} · ${statusLabels[post.status]}`}>{post.scheduled_at ? post.scheduled_at.slice(11, 16) + ' ' : ''}{post.title}</button>)}{dayPosts.length > 3 && <button type="button" onClick={() => setFilter('all')} className="px-1 text-[9px] font-bold text-red-600">+{dayPosts.length - 3} more</button>}</div>
             </div>;
           })}
         </div>}
@@ -379,7 +407,10 @@ export default function SocialMediaPage() {
               <div className="flex flex-wrap items-center gap-2"><h3 className="truncate text-sm font-black text-slate-900">{post.title}</h3><span className={`rounded-full px-2 py-0.5 text-[9px] font-black ${statusStyles[post.status]}`}>{statusLabels[post.status]}</span></div>
               <p className="mt-1 line-clamp-2 text-xs text-slate-500">{post.task_brief || post.caption || 'No task details added.'}</p>
               <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-slate-500"><span>{post.platform === 'both' ? 'Facebook + Instagram' : post.platform}</span><span>{post.scheduled_at ? new Date(post.scheduled_at.replace(' ', 'T')).toLocaleString() : 'Date not set'}</span><span>{assigned?.name ?? (post.assigned_to ? 'Assignee unavailable' : 'Unassigned')}</span></div>
-              <div className="mt-3 flex gap-2"><button type="button" onClick={() => setDraft(toDraft(post))} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[10px] font-bold text-slate-700"><Pencil className="h-3 w-3" /> Review / edit</button><button type="button" onClick={() => void deletePost(post)} className="rounded-lg border border-rose-100 p-1.5 text-rose-600" aria-label={`Delete ${post.title}`}><Trash2 className="h-3.5 w-3.5" /></button></div>
+              {post.facebook_post_id && <p className="mt-2 text-[10px] text-slate-600">Facebook post: <code>{post.facebook_post_id}</code></p>}
+              {post.instagram_media_id && <p className="mt-1 text-[10px] text-slate-600">Instagram post: <code>{post.instagram_media_id}</code></p>}
+              {post.publish_error && <div role="alert" className="mt-2 rounded-lg border border-rose-200 bg-rose-50 p-2 text-[10px] leading-4 text-rose-800"><strong>Publishing failed:</strong> {post.publish_error}<p>Attempt {post.publish_attempts} of 5.</p><button type="button" disabled={retryingPostId === post.id} onClick={() => void retryPublishing(post)} className="mt-1 rounded border border-rose-300 bg-white px-2 py-1 font-bold disabled:opacity-50">{retryingPostId === post.id ? 'Queuing retry...' : 'Retry publishing'}</button></div>}
+              <div className="mt-3 flex gap-2">{post.status !== 'published' && <button type="button" onClick={() => setDraft(toDraft(post))} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[10px] font-bold text-slate-700"><Pencil className="h-3 w-3" /> Review / edit</button>}{post.status !== 'published' && <button type="button" onClick={() => void deletePost(post)} className="rounded-lg border border-rose-100 p-1.5 text-rose-600" aria-label={`Delete ${post.title}`}><Trash2 className="h-3.5 w-3.5" /></button>}</div>
             </div>
           </article>;
         })}</div>}
@@ -394,12 +425,13 @@ export default function SocialMediaPage() {
             <label className="text-xs font-bold text-slate-600">Platform<select value={draft.platform} onChange={(event) => setDraftField('platform', event.target.value as Platform)} className={inputClass}><option value="both">Facebook and Instagram</option><option value="facebook">Facebook</option><option value="instagram">Instagram</option></select></label>
             <label className="text-xs font-bold text-slate-600">Schedule / due date<input type="datetime-local" value={draft.scheduled_at} onChange={(event) => setDraftField('scheduled_at', event.target.value)} className={inputClass} /></label>
             <label className="text-xs font-bold text-slate-600">Assign task to<select value={draft.assigned_to} onChange={(event) => setDraftField('assigned_to', event.target.value)} className={inputClass}><option value="">Unassigned</option>{assignees.map((person) => <option key={person.id} value={person.id}>{person.name}{person.department ? ` · ${person.department}` : ''}</option>)}</select></label>
-            <label className="text-xs font-bold text-slate-600">Workflow status<select value={draft.status} onChange={(event) => setDraftField('status', event.target.value as Draft['status'])} className={inputClass}><option value="draft">Draft</option><option value="in_review">Submit for review</option><option value="approved">Approved</option><option value="rejected">Changes requested</option><option value="scheduled">Scheduled</option></select>{draft.status === 'scheduled' && <span className="mt-1 block font-normal text-amber-700">Scheduling here plans the item; it does not publish to Meta automatically.</span>}</label>
+            <label className="text-xs font-bold text-slate-600">Workflow status<select value={draft.status} onChange={(event) => setDraftField('status', event.target.value as Draft['status'])} className={inputClass}><option value="draft">Draft</option><option value="in_review">Submit for review</option><option value="approved">Approved</option><option value="rejected">Changes requested</option><option value="scheduled">Scheduled</option></select>{draft.status === 'approved' && draft.scheduled_at && <span className="mt-1 block font-normal text-emerald-700">Approval will queue this post to publish automatically at the scheduled time.</span>}{draft.status === 'scheduled' && <span className="mt-1 block font-normal text-amber-700">Scheduled publishing requires prior approval, Meta credentials, and the publishing cron.</span>}</label>
             <label className="text-xs font-bold text-slate-600 sm:col-span-2">Post caption / copy<textarea rows={4} maxLength={5000} value={draft.caption} onChange={(event) => setDraftField('caption', event.target.value)} className={inputClass} placeholder="Write the proposed message or creative direction." /></label>
             <label className="text-xs font-bold text-slate-600 sm:col-span-2">Production brief / reviewer notes<textarea rows={3} maxLength={5000} value={draft.task_brief} onChange={(event) => setDraftField('task_brief', event.target.value)} className={inputClass} placeholder="Describe the graphic/video task, requirements, or reviewer edits." /></label>
             {draft.id && <label className="text-xs font-bold text-slate-600 sm:col-span-2">Note to content owner<textarea rows={2} maxLength={5000} value={draft.reviewer_note} onChange={(event) => setDraftField('reviewer_note', event.target.value)} className={inputClass} placeholder="Optional review feedback or requested changes." /></label>}
             <div className="text-xs font-bold text-slate-600 sm:col-span-2">
               <span>Attach images or video</span>
+              {draft.platform !== 'facebook' && <p className="mt-1 font-normal text-slate-500">Instagram accepts JPG photos or a single MP4 video; carousels support up to 10 JPG photos.</p>}
               <div
                 onDragOver={(event) => { event.preventDefault(); setMediaDragActive(true); }}
                 onDragLeave={(event) => {

@@ -47,6 +47,12 @@ export default function PrivacyPage() {
             We use a random first-party browser ID to count visits to public website pages and record broad navigation or button activity. The request IP is used for a local lookup of an approximate city, region, and country; the raw IP address is discarded and is not stored in analytics. We do not collect form contents, button text, names, or email addresses. Private portal and application pages are excluded. Analytics records, including approximate location, are kept for up to one year. Clearing this site&apos;s browser storage resets the ID used by this browser.
           </p>
         </div>
+        <div className="mt-6 rounded-3xl border border-slate-200 bg-slate-50 p-6">
+          <h2 className="text-lg font-bold text-slate-900">Optional Meta Pixel</h2>
+          <p className="mt-3 text-sm leading-7 text-slate-700">
+            If configured, Meta Pixel runs only on public website pages after you accept analytics cookies. It sends page-view events to Meta to measure Facebook and Instagram advertising. It is not loaded on sign-in, application, or private student and staff portal pages. Use the Cookie settings control at the bottom of the page to change your choice. When you accept, Meta may receive your browser and page-view data under its own privacy terms.
+          </p>
+        </div>
       </section>
     </div>
   );

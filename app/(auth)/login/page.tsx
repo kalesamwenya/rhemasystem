@@ -140,19 +140,19 @@ export default function LoginPage() {
 
           <form className="mt-7 space-y-5" onSubmit={handleSubmit}>
             <div>
-              <label htmlFor="login-email" className="block text-xs font-bold uppercase tracking-wider text-slate-700">Email address</label>
+              <label htmlFor="login-email" className="block text-xs font-bold uppercase tracking-wider text-slate-700">Email address (student ID for students)</label>
               <div className="relative mt-1.5">
                 <Mail className="pointer-events-none absolute inset-y-0 my-auto ml-3 h-5 w-5 text-slate-400" />
                 <input
                   id="login-email"
                   name="email"
-                  type="email"
+                  type="text"
                   autoComplete="username"
                   required
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   className="block w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm text-slate-950 outline-none transition focus:border-rhema-blue focus:bg-white focus:ring-2 focus:ring-rhema-blue/10"
-                  placeholder="name@school.org"
+                  placeholder="name@school.org or student ID (students)"
                 />
               </div>
             </div>
@@ -195,7 +195,7 @@ export default function LoginPage() {
           </form>
 
           <div className="mt-6 border-t border-slate-100 pt-5 text-center">
-            <p className="text-[11px] leading-5 text-slate-400">Use the email address registered with the school. Need help? Contact the school office.</p>
+            <p className="text-[11px] leading-5 text-slate-400">Students may use their student ID or registered email address. Need help? Contact the school office.</p>
           </div>
         </div>
       </section>

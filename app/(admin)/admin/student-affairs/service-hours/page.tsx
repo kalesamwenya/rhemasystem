@@ -17,6 +17,7 @@ type ServiceHour = {
 type ServiceHourProgress = {
   student_id: string; name: string; cohort: string; term_id: number;
   start_date: string | null; end_date: string | null; completed_hours: number;
+  base_required_hours: number; penalty_hours: number;
   required_hours: number; remaining_hours: number;
   status: 'completed' | 'overdue' | 'upcoming' | 'in_progress';
 };
@@ -172,7 +173,7 @@ export default function ServiceHoursPage() {
     const cohort = normalized.match(/\b(FYM|FYE|SYM|SYE)\b/i)?.[1].toUpperCase() || '';
     const dateMatches = [...normalized.matchAll(/\b\d{1,2}[./-]\d{1,2}[./-]\d{2,4}\b/g)].map((match) => parseOcrDate(match[0])).filter(Boolean);
     const hours = normalized.match(/\b(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|h)\b/i)?.[1] || '';
-    const term = terms.find((item) => dateMatches[0] && dateMatches[0] >= item.start_date && dateMatches[0] <= item.end_date);
+    const term = terms.find((item) => item.term_id >= 1 && item.term_id <= 4 && dateMatches[0] && dateMatches[0] >= item.start_date && dateMatches[0] <= item.end_date);
     const ministryMatch = normalized.match(/(?:ministry|service performed|description of ministry)[:\s-]+(.{3,80}?)(?=\s+(?:date|hours?|supervisor|team leader|$))/i);
     const supervisorMatch = normalized.match(/(?:supervisor|team leader)[:\s-]+(.{3,60}?)(?=\s+(?:tel|phone|email|date|$))/i);
     return { ...emptyEntry, student_id: studentId, cohort, term_id: term ? String(term.term_id) : '', stamp_date: dateMatches[0] || '', service_date: dateMatches[1] || '', hours, ministry: ministryMatch?.[1]?.trim() || '', supervisor: supervisorMatch?.[1]?.trim() || '' };
@@ -249,10 +250,11 @@ export default function ServiceHoursPage() {
   const exportProgressReport = () => {
     const rows = filteredProgress.map((record) => [
       record.student_id, record.name, record.cohort, record.term_id,
-      record.completed_hours, record.required_hours, record.remaining_hours, record.status,
+      record.completed_hours, record.base_required_hours, record.penalty_hours,
+      record.required_hours, record.remaining_hours, record.status,
     ].map((value) => `"${String(value).replace(/"/g, '""')}"`).join(','));
     const blob = new Blob([
-      `student_id,name,cohort,term_id,completed_hours,required_hours,remaining_hours,status\n${rows.join('\n')}`,
+      `student_id,name,cohort,term_id,completed_hours,base_required_hours,penalty_hours,required_hours,remaining_hours,status\n${rows.join('\n')}`,
     ], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -266,7 +268,7 @@ export default function ServiceHoursPage() {
   return <div className="space-y-6 pb-12">
     {scannedStudentConfirmation}
     <header className="flex flex-col gap-4 border-b border-slate-200 pb-5 md:flex-row md:items-end md:justify-between">
-      <div><p className="text-[11px] font-black uppercase tracking-[0.22em] text-red-600">Student affairs</p><h1 className="mt-2 text-3xl font-black tracking-tight text-slate-900">Church service hours</h1><p className="mt-1 text-sm text-slate-500">Capture, verify, and report ministry service linked to student records. Term targets are 20 hours multiplied by the term number.</p></div>
+      <div><p className="text-[11px] font-black uppercase tracking-[0.22em] text-red-600">Student affairs</p><h1 className="mt-2 text-3xl font-black tracking-tight text-slate-900">Church service hours</h1><p className="mt-1 text-sm text-slate-500">Capture, verify, and report ministry service for four terms at 20 hours each. Missing a term target adds 20 penalty hours to the next term, making its target 40 hours.</p></div>
       <div className="flex items-center gap-3"><label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-red-700 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white hover:bg-red-800"><FileImage className="h-4 w-4" />Upload front + back<input type="file" accept="image/*" multiple className="sr-only" disabled={ocrBusy} onChange={(event) => { const files = Array.from(event.target.files || []); if (files.length > 2) setError('Select a maximum of two images: the front and back of the form.'); else scanDocuments(files); event.currentTarget.value = ''; }} /></label><Link href="/admin/student-affairs" className="text-xs font-black uppercase tracking-[0.18em] text-slate-500 hover:text-slate-900">Back</Link></div>
     </header>
 
@@ -284,7 +286,7 @@ export default function ServiceHoursPage() {
       <label className="text-xs font-bold text-slate-600">Student ID (optional correction)<input value={entry.student_id} onChange={(event) => { setEntry({ ...entry, student_id: event.target.value }); setScannedFormReady(false); }} list="student-ids" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="Only enter if OCR misses the ID" /><datalist id="student-ids">{students.map((student) => <option key={student.student_id} value={student.student_id}>{student.name} ({student.class})</option>)}</datalist></label>
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm"><span className="text-xs font-bold text-slate-400">Registered student</span><p className="mt-1 font-black text-slate-900">{selectedStudent ? `${selectedStudent.name} · ${selectedStudent.class}` : 'Enter a valid student ID'}</p></div>
       <div className="md:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-4"><p className="text-xs font-black uppercase tracking-wider text-slate-700">Captured student identity</p><p className="mt-1 text-sm font-black text-slate-900">{selectedStudent ? `${selectedStudent.name} · ${selectedStudent.class}` : 'Waiting for the scanned form'}</p><p className="mt-1 text-xs text-slate-500">Year of study is taken from the captured form and checked against the student register.</p></div>
-      <label className="text-xs font-bold text-slate-600">School term<select value={entry.term_id} onChange={(event) => setEntry({ ...entry, term_id: event.target.value })} required className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"><option value="">Select term</option>{terms.map((term) => <option key={term.term_id} value={term.term_id}>Term {term.term_id} · {formatDate(term.start_date)} to {formatDate(term.end_date)}</option>)}</select></label>
+      <label className="text-xs font-bold text-slate-600">School term<select value={entry.term_id} onChange={(event) => setEntry({ ...entry, term_id: event.target.value })} required className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"><option value="">Select term</option>{terms.filter((term) => term.term_id >= 1 && term.term_id <= 4).map((term) => <option key={term.term_id} value={term.term_id}>Term {term.term_id} · {formatDate(term.start_date)} to {formatDate(term.end_date)}</option>)}</select></label>
       <label className="text-xs font-bold text-slate-600">Date on church stamp<input type="date" value={entry.stamp_date} onChange={(event) => setEntry({ ...entry, stamp_date: event.target.value })} required className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" /></label>
       <label className="text-xs font-bold text-slate-600">Service date<input type="date" value={entry.service_date} onChange={(event) => setEntry({ ...entry, service_date: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" /></label>
       <div className="md:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-4"><div className="flex items-center justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-wider text-slate-700">Activities and hours</p><p className="mt-1 text-xs text-slate-500">Add every activity listed on the front and back of the form.</p></div><button type="button" onClick={() => setActivities([...activities, { ministry: '', hours: '' }])} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-black text-slate-700">+ Add activity</button></div><div className="mt-3 space-y-3">{activities.map((activity, index) => <div key={index} className="flex flex-col gap-2 sm:flex-row"><input value={activity.ministry} onChange={(event) => setActivities(activities.map((item, itemIndex) => itemIndex === index ? { ...item, ministry: event.target.value } : item))} required className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" placeholder={`Activity ${index + 1}, e.g. Children ministry`} /><input type="number" min="0.25" max="24" step="0.25" value={activity.hours} onChange={(event) => setActivities(activities.map((item, itemIndex) => itemIndex === index ? { ...item, hours: event.target.value } : item))} required className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm sm:w-32" placeholder="Hours" />{activities.length > 1 && <button type="button" onClick={() => setActivities(activities.filter((_, itemIndex) => itemIndex !== index))} className="rounded-xl border border-red-200 px-3 text-red-600" aria-label={`Remove activity ${index + 1}`}><X className="h-4 w-4" /></button>}</div>)}</div></div>
@@ -304,20 +306,20 @@ export default function ServiceHoursPage() {
       </div>
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative"><Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" /><input value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} className="rounded-xl border border-slate-200 py-2.5 pl-9 pr-3 text-sm" placeholder="Search ID or name" /></div>
-        <select value={filters.term_id} onChange={(event) => setFilters({ ...filters, term_id: event.target.value })} className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm"><option value="">All terms</option>{terms.map((term) => <option key={term.term_id} value={term.term_id}>Term {term.term_id}</option>)}</select>
+        <select value={filters.term_id} onChange={(event) => setFilters({ ...filters, term_id: event.target.value })} className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm"><option value="">All terms</option>{terms.filter((term) => term.term_id >= 1 && term.term_id <= 4).map((term) => <option key={term.term_id} value={term.term_id}>Term {term.term_id}</option>)}</select>
         <select value={filters.cohort} onChange={(event) => setFilters({ ...filters, cohort: event.target.value })} className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm"><option value="">All cohorts</option>{cohorts.map((cohort) => <option key={cohort}>{cohort}</option>)}</select>
         <button onClick={exportReport} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2.5 text-xs font-black uppercase tracking-wider text-white"><Download className="h-4 w-4" />Export records</button>
         <button onClick={exportProgressReport} className="inline-flex items-center gap-2 rounded-xl bg-amber-700 px-3 py-2.5 text-xs font-black uppercase tracking-wider text-white"><Download className="h-4 w-4" />Export progress</button>
         <button onClick={load} className="rounded-xl border border-slate-200 p-2.5" aria-label="Refresh report"><RefreshCw className="h-4 w-4" /></button>
       </div>
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3"><div><h2 className="font-black text-slate-900">Student term compliance</h2><p className="text-xs text-slate-500">Target: 20 hours multiplied by the term number. Ended terms below target are flagged for communications follow-up.</p></div><span className="text-xs font-bold text-slate-500">{filteredProgress.length} student-term records</span></div>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3"><div><h2 className="font-black text-slate-900">Student term compliance</h2><p className="text-xs text-slate-500">Each term target is 20 hours. Missing a target adds 20 penalty hours to the following term; ended terms below target are flagged for follow-up.</p></div><span className="text-xs font-bold text-slate-500">{filteredProgress.length} student-term records</span></div>
         <table className="min-w-full text-left text-sm">
-          <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500"><tr>{['Student', 'Cohort', 'Term', 'Completed', 'Target', 'Remaining', 'Status'].map((heading) => <th key={heading} className="whitespace-nowrap px-4 py-3">{heading}</th>)}</tr></thead>
+          <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500"><tr>{['Student', 'Cohort', 'Term', 'Completed', 'Base target', 'Penalty owed', 'Target', 'Hours owing', 'Status'].map((heading) => <th key={heading} className="whitespace-nowrap px-4 py-3">{heading}</th>)}</tr></thead>
           <tbody className="divide-y divide-slate-100">{visibleProgress.map((record) => <tr key={`${record.student_id}-${record.term_id}`}>
             <td className="whitespace-nowrap px-4 py-3"><p className="font-black text-slate-900">{record.name}</p><p className="text-xs text-slate-500">{record.student_id}</p></td>
             <td className="px-4 py-3 font-semibold">{record.cohort}</td><td className="px-4 py-3">Term {record.term_id}</td>
-            <td className="px-4 py-3">{Number(record.completed_hours).toFixed(2)} hrs</td><td className="px-4 py-3">{record.required_hours} hrs</td><td className="px-4 py-3">{Number(record.remaining_hours).toFixed(2)} hrs</td>
+            <td className="px-4 py-3">{Number(record.completed_hours).toFixed(2)} hrs</td><td className="px-4 py-3">{record.base_required_hours} hrs</td><td className="px-4 py-3 font-semibold text-amber-800">{Number(record.penalty_hours).toFixed(2)} hrs</td><td className="px-4 py-3">{record.required_hours} hrs</td><td className="px-4 py-3 font-semibold">{Number(record.remaining_hours).toFixed(2)} hrs</td>
             <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${record.status === 'overdue' ? 'bg-red-100 text-red-700' : record.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>{record.status.replace('_', ' ')}</span></td>
           </tr>)}</tbody>
         </table>

@@ -25,6 +25,8 @@ type TermProgress = {
   start_date: string | null;
   end_date: string | null;
   completed_hours: number;
+  base_required_hours: number;
+  penalty_hours: number;
   required_hours: number;
   remaining_hours: number;
   status: 'completed' | 'overdue' | 'upcoming' | 'in_progress';
@@ -79,8 +81,8 @@ export default function StudentServiceHoursPage() {
         <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-800">Student affairs</p>
         <h1 className="mt-2 text-3xl font-black text-slate-900">My church service hours</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-          Review the ministry hours recorded against your student account and your required hours for each term.
-          The target is 20 hours multiplied by the term number.
+          Review your ministry hours and requirements for the four academic terms. Each term has a 20-hour target.
+          If you miss a term target, the next term&apos;s target doubles to 40 hours, shown as a 20-hour penalty.
         </p>
       </header>
 
@@ -100,15 +102,15 @@ export default function StudentServiceHoursPage() {
             </div>
             <div className="rounded-2xl border border-blue-100 bg-blue-50 p-5">
               <p className="text-xs font-black uppercase tracking-wider text-blue-800">Service-hour policy</p>
-              <p className="mt-2 text-lg font-black text-blue-950">20 × term number</p>
-              <p className="mt-1 text-sm text-blue-900">For example, Term 2 requires 40 hours.</p>
+              <p className="mt-2 text-lg font-black text-blue-950">20 hours per term · 4 terms</p>
+              <p className="mt-1 text-sm text-blue-900">Missing a term target adds 20 penalty hours to the next term&apos;s 20-hour target.</p>
             </div>
           </section>
 
           <section className="space-y-3">
             <div>
               <h2 className="text-xl font-black text-slate-900">Term requirements</h2>
-              <p className="mt-1 text-sm text-slate-500">Hours are totaled separately for each academic term.</p>
+              <p className="mt-1 text-sm text-slate-500">If a term target is missed, the next term includes 20 penalty hours.</p>
             </div>
             {report.term_progress.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">
@@ -138,8 +140,9 @@ export default function StudentServiceHoursPage() {
                   </div>
                   <div className="mt-4 flex items-baseline justify-between gap-3 text-sm">
                     <span className="font-bold text-slate-700">{term.completed_hours.toFixed(2)} / {term.required_hours} hours</span>
-                    {term.remaining_hours > 0 && <span className="text-slate-500">{term.remaining_hours.toFixed(2)} hours remaining</span>}
+                    {term.remaining_hours > 0 && <span className="text-slate-500">{term.remaining_hours.toFixed(2)} hours owing</span>}
                   </div>
+                  {term.penalty_hours > 0 && <p className="mt-2 text-xs font-bold text-amber-800">{term.penalty_hours.toFixed(2)} penalty hours carried into this term</p>}
                   <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
                     <div className={`h-full rounded-full ${complete ? 'bg-emerald-500' : overdue ? 'bg-red-500' : 'bg-blue-600'}`} style={{ width: `${progressPercent}%` }} />
                   </div>
