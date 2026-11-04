@@ -144,6 +144,7 @@ export default function SocialMediaPage() {
   const [filter, setFilter] = useState<'all' | 'review' | 'assigned'>('all');
   const [mediaDragActive, setMediaDragActive] = useState(false);
   const mediaInputRef = useRef<HTMLInputElement>(null);
+  const publishNowButtonRef = useRef<HTMLButtonElement>(null);
   const mediaPreviewUrlsRef = useRef(new Set<string>());
 
   const loadData = useCallback(async () => {
@@ -202,7 +203,7 @@ export default function SocialMediaPage() {
     setDraft(newDraft(date));
   };
 
-  const saveDraft = async (event: React.FormEvent<HTMLFormElement>) => {
+  const saveDraft = async (event: React.FormEvent<HTMLFormElement>, publishImmediately = false) => {
     event.preventDefault();
     if (!draft) return;
     if (!draft.title.trim()) {
@@ -211,6 +212,7 @@ export default function SocialMediaPage() {
     }
     setSaving(true);
     setNotice('');
+    let wasSaved = false;
     try {
       const mediaPaths = [...draft.media_paths];
       for (const media of draft.newMedia) {
@@ -221,7 +223,7 @@ export default function SocialMediaPage() {
       const mediaPath = mediaPaths[0] ?? '';
       const mediaType = mediaPath ? (isVideoPath(mediaPath) ? 'video' : 'image') : null;
       const scheduledAt = draft.scheduled_at ? `${draft.scheduled_at.replace('T', ' ')}:00` : '';
-      await api.socialMedia.save({
+      const saved = await api.socialMedia.save({
         id: draft.id,
         title: draft.title.trim(),
         content_kind: draft.content_kind,
@@ -231,21 +233,38 @@ export default function SocialMediaPage() {
         media_path: mediaPath,
         media_type: mediaType,
         media_paths: mediaPaths,
-        scheduled_at: scheduledAt,
+        scheduled_at: publishImmediately ? '' : scheduledAt,
         assigned_to: draft.assigned_to || null,
-        status: draft.status,
+        status: publishImmediately ? 'approved' : draft.status,
         reviewer_note: draft.reviewer_note.trim(),
-      });
+      }) as { data?: { id?: number } };
+      wasSaved = true;
+      if (publishImmediately) {
+        const postId = saved.data?.id ?? draft.id;
+        if (!postId) throw new Error('The saved post did not return an ID for immediate publishing.');
+        await api.socialMedia.publishNow(postId);
+      }
       closeDraft();
-      setNotice(draft.status === 'approved' && draft.scheduled_at
+      setNotice(publishImmediately
+        ? `"${draft.title}" was published successfully.`
+        : draft.status === 'approved' && draft.scheduled_at
         ? 'Post approved and queued. It will publish automatically when its scheduled time arrives.'
         : 'Content item saved to the calendar.');
       await loadData();
     } catch (error) {
+      if (publishImmediately && wasSaved) {
+        closeDraft();
+        await loadData();
+      }
       setNotice(error instanceof Error ? error.message : 'Unable to save this content item.');
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleDraftSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    const submitter = (event.nativeEvent as SubmitEvent).submitter;
+    void saveDraft(event, submitter === publishNowButtonRef.current);
   };
 
   const deletePost = async (post: Post) => {
@@ -347,7 +366,7 @@ export default function SocialMediaPage() {
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.22em] text-red-600">Marketing workspace</p>
           <h1 className="mt-2 flex items-center gap-2 text-3xl font-black tracking-tight text-slate-900"><Share2 className="h-7 w-7 text-red-600" /> Social Media & Content</h1>
-          <p className="mt-1 text-sm text-slate-500">Plan posts and creative work, assign owners, attach media, and review content before approval.</p>
+          <p className="mt-1 text-sm text-slate-500">Plan posts and creative work, assign owners, attach media, and publish approved posts immediately or on a schedule.</p>
         </div>
         <button type="button" onClick={() => openNew()} className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white"><Plus className="h-4 w-4" /> Create content task</button>
       </header>
@@ -358,8 +377,8 @@ export default function SocialMediaPage() {
           <strong>Meta publishing:</strong>{' '}
           {metaConfigured?.facebook || metaConfigured?.instagram
             ? `Connected platforms: ${[metaConfigured.facebook ? 'Facebook' : '', metaConfigured.instagram ? 'Instagram' : ''].filter(Boolean).join(' and ')}.`
-            : 'Not configured yet. Add the Meta server credentials and scheduled publishing cron settings described in the deployment notes.'}
-          {' '}Approval with a scheduled time queues the post for automatic publishing. The post and media remain archived in this system.
+            : 'Not configured yet. Add the Meta server credentials described in the deployment notes; cron is only needed for scheduled publishing.'}
+          {' '}Use “Publish now” for immediate posting, or approve with a scheduled time for automatic publishing. The post and media remain archived in this system.
         </p>
       </div>
       {notice && <div role="status" className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs font-semibold text-blue-800">{notice}</div>}
@@ -417,13 +436,13 @@ export default function SocialMediaPage() {
       </section>
 
       {draft && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
-        <form onSubmit={saveDraft} className="max-h-[94vh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
+        <form onSubmit={handleDraftSubmit} className="max-h-[94vh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
           <div className="flex items-start justify-between"><div><p className="text-[10px] font-black uppercase tracking-[0.2em] text-red-600">{draft.id ? 'Review and edit' : 'Content planning'}</p><h2 className="mt-1 text-2xl font-black text-slate-900">{draft.id ? 'Edit content item' : 'Create content task'}</h2></div><button type="button" onClick={closeDraft} className="rounded-full bg-slate-100 p-2 text-slate-500" aria-label="Close editor"><X className="h-4 w-4" /></button></div>
           <div className="mt-5 grid gap-4 sm:grid-cols-2">
             <label className="text-xs font-bold text-slate-600 sm:col-span-2">Task / post title<input required maxLength={255} value={draft.title} onChange={(event) => setDraftField('title', event.target.value)} className={inputClass} placeholder="e.g. Sunday service highlights" /></label>
             <label className="text-xs font-bold text-slate-600">Content type<select value={draft.content_kind} onChange={(event) => setDraftField('content_kind', event.target.value as ContentKind)} className={inputClass}><option value="social_post">Social media post</option><option value="graphic">Graphic design task</option><option value="video">Video production task</option></select></label>
             <label className="text-xs font-bold text-slate-600">Platform<select value={draft.platform} onChange={(event) => setDraftField('platform', event.target.value as Platform)} className={inputClass}><option value="both">Facebook and Instagram</option><option value="facebook">Facebook</option><option value="instagram">Instagram</option></select></label>
-            <label className="text-xs font-bold text-slate-600">Schedule / due date<input type="datetime-local" value={draft.scheduled_at} onChange={(event) => setDraftField('scheduled_at', event.target.value)} className={inputClass} /></label>
+            <label className="text-xs font-bold text-slate-600">Schedule / due date<input type="datetime-local" value={draft.scheduled_at} onChange={(event) => setDraftField('scheduled_at', event.target.value)} className={inputClass} /><span className="mt-1 block font-normal text-slate-500">Set a time to schedule; use “Publish now” to send immediately.</span></label>
             <label className="text-xs font-bold text-slate-600">Assign task to<select value={draft.assigned_to} onChange={(event) => setDraftField('assigned_to', event.target.value)} className={inputClass}><option value="">Unassigned</option>{assignees.map((person) => <option key={person.id} value={person.id}>{person.name}{person.department ? ` · ${person.department}` : ''}</option>)}</select></label>
             <label className="text-xs font-bold text-slate-600">Workflow status<select value={draft.status} onChange={(event) => setDraftField('status', event.target.value as Draft['status'])} className={inputClass}><option value="draft">Draft</option><option value="in_review">Submit for review</option><option value="approved">Approved</option><option value="rejected">Changes requested</option><option value="scheduled">Scheduled</option></select>{draft.status === 'approved' && draft.scheduled_at && <span className="mt-1 block font-normal text-emerald-700">Approval will queue this post to publish automatically at the scheduled time.</span>}{draft.status === 'scheduled' && <span className="mt-1 block font-normal text-amber-700">Scheduled publishing requires prior approval, Meta credentials, and the publishing cron.</span>}</label>
             <label className="text-xs font-bold text-slate-600 sm:col-span-2">Post caption / copy<textarea rows={4} maxLength={5000} value={draft.caption} onChange={(event) => setDraftField('caption', event.target.value)} className={inputClass} placeholder="Write the proposed message or creative direction." /></label>
@@ -493,7 +512,11 @@ export default function SocialMediaPage() {
             </div>
             {draft.reviewer_note && <p className="rounded-xl border border-amber-100 bg-amber-50 p-3 text-xs text-amber-900 sm:col-span-2">Reviewer note: {draft.reviewer_note}</p>}
           </div>
-          <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4"><button type="button" onClick={closeDraft} className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600">Cancel</button><button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 text-xs font-black text-white disabled:opacity-50">{saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : draft.status === 'in_review' ? <Send className="h-4 w-4" /> : <Clock3 className="h-4 w-4" />}{saving ? 'Saving...' : draft.id ? 'Save review and edits' : 'Save to calendar'}</button></div>
+          <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
+            <button type="button" onClick={closeDraft} className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600">Cancel</button>
+            <button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 text-xs font-black text-white disabled:opacity-50">{saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : draft.status === 'in_review' ? <Send className="h-4 w-4" /> : <Clock3 className="h-4 w-4" />}{saving ? 'Saving...' : draft.id ? 'Save review and edits' : 'Save to calendar'}</button>
+            {draft.content_kind === 'social_post' && <button ref={publishNowButtonRef} type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-5 py-2.5 text-xs font-black text-white disabled:opacity-50"><Send className="h-4 w-4" />{saving ? 'Publishing...' : 'Publish now'}</button>}
+          </div>
         </form>
       </div>}
     </main>

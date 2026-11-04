@@ -114,6 +114,7 @@ const navigationGroups: NavGroup[] = [
       { title: 'Website contact messages', href: '/admin/contact-messages', module: 'contact-messages', icon: MessageSquareText },
       { title: 'Website Content', href: '/admin/site-content', module: 'social-media', icon: BookOpen },
       { title: 'Social Media & Content', href: '/admin/social-media', module: 'social-media', icon: Share2 },
+      { title: 'Facebook Page Dashboard', href: '/admin/facebook-page', module: 'social-media', icon: Share2 },
       { title: 'Help Desk', href: '/admin/help-desk', module: 'help-desk', icon: LifeBuoy },
     ],
   },

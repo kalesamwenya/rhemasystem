@@ -112,6 +112,7 @@ export function getAdminModuleForPath(pathname: string): AdminModule {
   if (pathname.startsWith('/admin/contact-messages')) return 'contact-messages';
   if (pathname.startsWith('/admin/site-content')) return 'social-media';
   if (pathname.startsWith('/admin/social-media')) return 'social-media';
+  if (pathname.startsWith('/admin/facebook-page')) return 'social-media';
   if (pathname.startsWith('/admin/events')) return 'events';
   if (pathname.startsWith('/admin/store')) return 'store';
   if (pathname.startsWith('/admin/help-desk')) return 'help-desk';

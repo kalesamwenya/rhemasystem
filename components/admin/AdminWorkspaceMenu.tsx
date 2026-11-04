@@ -56,6 +56,7 @@ const linksByDepartment: Record<string, WorkspaceLink[]> = {
     { label: 'Contact messages', href: '/admin/contact-messages', module: 'contact-messages' },
     { label: 'Website content', href: '/admin/site-content', module: 'social-media' },
     { label: 'Social media', href: '/admin/social-media', module: 'social-media' },
+    { label: 'Facebook Page dashboard', href: '/admin/facebook-page', module: 'social-media' },
     { label: 'Website chatbot', href: '/admin/chatbot', module: 'chatbot' },
   ],
   operations: [
@@ -69,6 +70,7 @@ const directorLinks: WorkspaceLink[] = Object.values(linksByDepartment).flat();
 const mediaItLinks: WorkspaceLink[] = [
   { label: 'Website content', href: '/admin/site-content', module: 'social-media' },
   { label: 'Social media', href: '/admin/social-media', module: 'social-media' },
+  { label: 'Facebook Page dashboard', href: '/admin/facebook-page', module: 'social-media' },
   { label: 'Website chatbot', href: '/admin/chatbot', module: 'chatbot' },
   { label: 'Website contact messages', href: '/admin/contact-messages', module: 'contact-messages' },
   { label: 'Communications', href: '/admin/communications', module: 'communications' },
