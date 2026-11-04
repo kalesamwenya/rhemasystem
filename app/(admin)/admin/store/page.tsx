@@ -1,6 +1,6 @@
 'use client';
 
-import { confirmWithApp } from '@/components/ui/app-dialogs';
+import { confirmWithApp, showAppAlert } from '@/components/ui/app-dialogs';
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
@@ -175,8 +175,11 @@ export default function StoreManagementPage() {
       await api.store.save(product);
       setInventory((current) => (current.some((item) => item.id === product.id) ? current.map((item) => (item.id === product.id ? product : item)) : [...current, product]));
       setEditing(null);
-    } catch (error) {
-      window.alert(error instanceof Error ? error.message : 'Unable to save this product.');
+    } catch {
+      await showAppAlert("We couldn't save this product. Please try again.", {
+        title: 'Save failed',
+        icon: 'error',
+      });
     }
   };
 
@@ -185,8 +188,11 @@ export default function StoreManagementPage() {
     try {
       await api.store.remove(id);
       setInventory((current) => current.filter((product) => product.id !== id));
-    } catch (error) {
-      window.alert(error instanceof Error ? error.message : 'Unable to delete this product.');
+    } catch {
+      await showAppAlert("We couldn't delete this product. Please try again.", {
+        title: 'Delete failed',
+        icon: 'error',
+      });
     }
   };
 

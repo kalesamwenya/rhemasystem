@@ -412,9 +412,10 @@ export default function StudentBillingPage() {
             const outstanding = liability.outstanding_amount || 0;
             const pending = liability.pending_amount || 0;
             const settled = outstanding <= 0;
+            const noPaymentDue = liability.amount === 0;
             return <article key={liability.id} className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
-              <div><p className="font-bold text-slate-900">{liability.description}</p><p className="mt-1 text-xs text-slate-500">{liabilityLabel(liability)} · {liability.term} · Invoice {liability.reference}</p><p className="mt-1 text-xs text-slate-600">Invoiced {money(liability.amount, liability.currency)} · Paid {money(liability.amount - outstanding, liability.currency)}</p></div>
-              <span className={`w-fit rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${settled ? 'bg-emerald-50 text-emerald-700' : pending > 0 ? 'bg-amber-50 text-amber-800' : 'bg-rose-50 text-rose-700'}`}>{settled ? 'Paid & verified' : pending > 0 ? 'Payment pending' : 'Outstanding'}</span>
+              <div><p className="font-bold text-slate-900">{liability.description}</p><p className="mt-1 text-xs text-slate-500">{liabilityLabel(liability)} · {liability.term} · Invoice {liability.reference}</p><p className="mt-1 text-xs text-slate-600">Invoiced {money(liability.amount, liability.currency)} · {noPaymentDue ? 'No payment due' : `Paid ${money(liability.amount - outstanding, liability.currency)}`}</p></div>
+              <span className={`w-fit rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${settled ? 'bg-emerald-50 text-emerald-700' : pending > 0 ? 'bg-amber-50 text-amber-800' : 'bg-rose-50 text-rose-700'}`}>{noPaymentDue ? 'No payment due' : settled ? 'Paid & verified' : pending > 0 ? 'Payment pending' : 'Outstanding'}</span>
             </article>;
           })}</div> : <p className="p-6 text-sm text-slate-500">No other outstanding liabilities.</p>}
         </section>

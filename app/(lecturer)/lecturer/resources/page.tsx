@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { confirmWithApp } from '@/components/ui/app-dialogs';
+import { confirmWithApp, showAppAlert } from '@/components/ui/app-dialogs';
 import {
   FileCode, FileText, Video, Globe,
   Trash2, Eye, EyeOff, Search, HardDrive,
@@ -117,15 +117,15 @@ export default function LecturerAdvancedResourcesPage() {
   const handleExecuteUpload = (e: React.FormEvent) => {
     e.preventDefault();
     if (formResourceType !== 'link' && !selectedFile) {
-      alert('Please select a local system file or drop a resource payload to proceed.');
+      void showAppAlert('Choose a file to upload.', { title: 'File required', icon: 'warning' });
       return;
     }
     if (formResourceType === 'link' && !formExternalUrl.trim()) {
-      alert('Please enter a target URL for this external link resource.');
+      void showAppAlert('Enter a web address for this link.', { title: 'Web address required', icon: 'warning' });
       return;
     }
     if (!formAssetTitle.trim()) {
-      alert('Please specify a recognizable display title for the asset registry.');
+      void showAppAlert('Enter a name for this resource.', { title: 'Resource name required', icon: 'warning' });
       return;
     }
 

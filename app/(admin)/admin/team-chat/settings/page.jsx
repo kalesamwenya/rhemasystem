@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { confirmWithApp, showAppAlert } from "@/components/ui/app-dialogs";
 import {
   ArrowLeft,
   Bell,
@@ -24,8 +25,6 @@ export default function TeamChatSettingsPage() {
     autoScroll: true,
   });
 
-  const [notification, setNotification] = useState("");
-  const [saveSuccessful, setSaveSuccessful] = useState(false);
 
   useEffect(() => {
     // Load settings from localStorage
@@ -56,32 +55,25 @@ export default function TeamChatSettingsPage() {
     try {
       localStorage.setItem("chatSettings", JSON.stringify(settings));
       window.dispatchEvent(new Event("chat-settings-updated"));
-      setSaveSuccessful(true);
-      setNotification("Settings saved successfully");
-      setTimeout(() => {
-        setSaveSuccessful(false);
-        setNotification("");
-      }, 3000);
-    } catch (error) {
-      setNotification("Failed to save settings");
+      await showAppAlert("Your settings have been saved.", { title: 'Settings saved', icon: 'success' });
+    } catch {
+      await showAppAlert("We couldn't save your settings. Please try again.", { title: 'Save failed', icon: 'error' });
     }
   };
 
   const handleClearCache = async () => {
-    if (confirm("This will clear all cached chat messages. Continue?")) {
+    if (await confirmWithApp("This will remove saved chat messages from this browser.", {
+      title: 'Clear chat messages?',
+      confirmText: 'Clear messages',
+      tone: 'danger',
+    })) {
       try {
         localStorage.removeItem("chatMessages");
-        setNotification("Cache cleared successfully");
-        setTimeout(() => setNotification(""), 3000);
-      } catch (error) {
-        setNotification("Failed to clear cache");
+        await showAppAlert("Saved chat messages have been cleared.", { title: 'Messages cleared', icon: 'success' });
+      } catch {
+        await showAppAlert("We couldn't clear the saved messages. Please try again.", { title: 'Action failed', icon: 'error' });
       }
     }
-  };
-
-  const showNotification = (msg) => {
-    setNotification(msg);
-    setTimeout(() => setNotification(""), 3000);
   };
 
   return (
@@ -366,18 +358,6 @@ export default function TeamChatSettingsPage() {
         </div>
       </div>
 
-      {/* Notification */}
-      {notification && (
-        <div
-          className={`fixed bottom-4 right-4 shadow-lg px-4 py-3 rounded-xl flex items-center gap-2 z-50 text-sm font-medium animate-fade-in ${
-            saveSuccessful
-              ? "bg-green-600 text-white"
-              : "bg-gray-900 text-white"
-          }`}
-        >
-          {notification}
-        </div>
-      )}
     </div>
   );
 }

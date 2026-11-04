@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { Save, ArrowLeft, BookOpen, Layers, Milestone, Globe, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
+import { showAppAlert } from '@/components/ui/app-dialogs';
 
 export default function CreateCoursePage() {
   const [formFields, setFormFields] = useState({
@@ -12,7 +13,7 @@ export default function CreateCoursePage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    alert(`Course Entry context [${formFields.code}] verified and published to curriculum catalogs.`);
+    void showAppAlert('The course has been added.', { title: 'Course added', icon: 'success' });
   };
 
   return (

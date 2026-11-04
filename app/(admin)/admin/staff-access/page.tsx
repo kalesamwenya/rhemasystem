@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { AlertCircle, CheckCircle2, Loader2, RefreshCw, ShieldCheck } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Loader2, Plus, RefreshCw, ShieldCheck } from 'lucide-react';
 import { api } from '@/lib/api';
 
 type AdminRole = 'owner' | 'administrator' | 'it' | 'finance' | 'academic' | 'registrar' | 'support' | 'operations';
@@ -10,12 +10,14 @@ type AdminAccount = {
   id: string;
   name: string;
   email: string;
+  employee_number: string | null;
   department: string;
   role: AdminRole;
   status: AccountStatus;
   last_login_at: string | null;
 };
 type AccessDraft = Pick<AdminAccount, 'department' | 'role' | 'status'>;
+type NewAccountDraft = { name: string; email: string; department: string; role: AdminRole };
 type AdminAccessResponse = {
   success: boolean;
   message?: string;
@@ -46,6 +48,13 @@ export default function StaffAccessPage() {
   const [canAssignPrivilegedRoles, setCanAssignPrivilegedRoles] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [savingId, setSavingId] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [newAccount, setNewAccount] = useState<NewAccountDraft>({
+    name: '',
+    email: '',
+    department: '',
+    role: 'support',
+  });
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
@@ -102,6 +111,28 @@ export default function StaffAccessPage() {
     }
   };
 
+  const createAccount = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setCreating(true);
+    setError('');
+    setMessage('');
+    try {
+      const response = await api.createAdminAccess(newAccount) as {
+        success: boolean;
+        message?: string;
+        employee_number?: string;
+      };
+      if (!response.success) throw new Error(response.message || 'The account could not be created.');
+      setMessage(`${response.message || 'Account created.'}${response.employee_number ? ` Employee number: ${response.employee_number}.` : ''}`);
+      setNewAccount({ name: '', email: '', department: '', role: 'support' });
+      await loadAccounts();
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : 'The account could not be created.');
+    } finally {
+      setCreating(false);
+    }
+  };
+
   const canEditPrivilegedAccounts = currentAdminRole === 'owner' || currentAdminRole === 'administrator';
 
   return (
@@ -145,11 +176,27 @@ export default function StaffAccessPage() {
         </div>
       )}
 
+      <form onSubmit={(event) => void createAccount(event)} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="text-sm font-black text-slate-900">Create admin or staff login</h2>
+        <p className="mt-1 text-xs leading-5 text-slate-500">An employee number and temporary password will be generated and emailed to the new user.</p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <label className="text-xs font-bold text-slate-600">Full name<input required maxLength={160} value={newAccount.name} onChange={(event) => setNewAccount((current) => ({ ...current, name: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5" /></label>
+          <label className="text-xs font-bold text-slate-600">Email<input required type="email" value={newAccount.email} onChange={(event) => setNewAccount((current) => ({ ...current, email: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5" /></label>
+          <label className="text-xs font-bold text-slate-600">Department<input required maxLength={120} value={newAccount.department} onChange={(event) => setNewAccount((current) => ({ ...current, department: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5" /></label>
+          <label className="text-xs font-bold text-slate-600">Permission profile<select value={newAccount.role} onChange={(event) => setNewAccount((current) => ({ ...current, role: event.target.value as AdminRole }))} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5">{(canAssignPrivilegedRoles ? allRoles : staffRoles).map((role) => <option key={role} value={role}>{roleLabels[role]}</option>)}</select></label>
+        </div>
+        <button type="submit" disabled={creating} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-blue-950 px-4 py-2.5 text-xs font-black text-white disabled:opacity-60">
+          {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+          Create account and email credentials
+        </button>
+      </form>
+
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
         <table className="min-w-[900px] w-full text-left text-sm">
           <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500">
             <tr>
               <th className="px-5 py-4">Administrator</th>
+              <th className="px-5 py-4">Employee number</th>
               <th className="px-5 py-4">Department</th>
               <th className="px-5 py-4">Permission profile</th>
               <th className="px-5 py-4">Account status</th>
@@ -171,6 +218,7 @@ export default function StaffAccessPage() {
                     <p className="font-bold text-slate-900">{account.name}</p>
                     <p className="mt-1 text-xs text-slate-500">{account.email}</p>
                   </td>
+                  <td className="px-5 py-4 text-xs font-semibold text-slate-600">{account.employee_number || '—'}</td>
                   <td className="px-5 py-4">
                     <input
                       aria-label={`${account.name} department`}
@@ -226,7 +274,7 @@ export default function StaffAccessPage() {
               );
             })}
             {!isLoading && accounts.length === 0 && (
-              <tr><td colSpan={6} className="px-5 py-12 text-center text-sm text-slate-500">No administrator accounts found.</td></tr>
+              <tr><td colSpan={7} className="px-5 py-12 text-center text-sm text-slate-500">No administrator accounts found.</td></tr>
             )}
           </tbody>
         </table>

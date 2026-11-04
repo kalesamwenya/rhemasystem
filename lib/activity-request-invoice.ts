@@ -38,7 +38,9 @@ export async function createActivityRequestInvoicePdf(invoice: ActivityRequestIn
   const amount = escapeHtml(money(invoice.amount, invoice.currency));
   const portalUrl = escapeHtml(invoice.portal_url);
   const page = document.createElement('div');
-  page.style.cssText = 'position:fixed;left:-10000px;top:0;width:760px;background:#fff;color:#0f172a;font-family:Arial,sans-serif;';
+  const invoiceSourceId = `rhema-activity-invoice-${crypto.randomUUID()}`;
+  page.id = invoiceSourceId;
+  page.style.cssText = 'position:fixed;left:0;top:0;z-index:2147483647;width:760px;opacity:0;pointer-events:none;background:#fff;color:#0f172a;font-family:Arial,sans-serif;';
   page.innerHTML = `
     <article style="position:relative;min-height:940px;overflow:hidden;padding:52px 54px 44px;border:1px solid #dbe3ef">
       <div style="position:absolute;top:38%;left:10%;z-index:0;color:rgba(30,58,138,.045);font-size:112px;font-weight:900;letter-spacing:12px;transform:rotate(-28deg)">INVOICE</div>
@@ -68,7 +70,17 @@ export async function createActivityRequestInvoicePdf(invoice: ActivityRequestIn
       filename: `${invoice.invoice_number}.pdf`,
       margin: 8,
       image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+      html2canvas: {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        onclone: (clonedDocument: Document) => {
+          const clonedInvoice = clonedDocument.getElementById(invoiceSourceId);
+          if (!clonedInvoice) throw new Error('The invoice could not be prepared for PDF rendering.');
+          clonedInvoice.style.opacity = '1';
+          clonedInvoice.style.zIndex = '1';
+        },
+      },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
     }).from(page).outputPdf('blob');
     if (!(pdf instanceof Blob)) throw new Error('The invoice PDF generator returned an invalid document.');

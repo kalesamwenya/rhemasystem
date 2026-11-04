@@ -93,8 +93,13 @@ export default function ActivityRequestsPage() {
     setNotice('');
     try {
       const amount = invoiceAmounts[request.id];
-      if (action === 'invoice' && (!amount || !Number.isFinite(Number(amount)) || Number(amount) <= 0)) {
-        throw new Error('Enter a positive invoice amount.');
+      const numericAmount = Number(amount);
+      if (action === 'invoice'
+        && (!amount || !amount.trim() || !Number.isFinite(numericAmount) || numericAmount < 0
+          || (numericAmount === 0 && request.activity_type !== 'audio'))) {
+        throw new Error(request.activity_type === 'audio'
+          ? 'Enter a valid invoice amount of zero or more.'
+          : 'Enter a positive invoice amount.');
       }
       const note = notes[request.id] || '';
       if (action === 'reject' && !note.trim()) throw new Error('Provide a reason when rejecting access.');
@@ -124,7 +129,7 @@ export default function ActivityRequestsPage() {
   }
 
   async function retryInvoiceDelivery(request: AccessRequest) {
-    if (!request.invoice_number || !request.invoice_date || !request.invoice_reference || !request.amount || !request.currency) {
+    if (!request.invoice_number || !request.invoice_date || !request.invoice_reference || request.amount === null || !request.currency) {
       setError('The finance invoice details are incomplete. Contact Finance before retrying.');
       return;
     }
@@ -235,7 +240,7 @@ export default function ActivityRequestsPage() {
             </div>
           </div>
           {canFinance && request.status === 'pending_finance' && <div className="mt-4 flex flex-wrap items-end gap-3 border-t border-slate-100 pt-4">
-            <label className="block text-[10px] font-black uppercase tracking-wide text-slate-500">Invoice amount<input type="number" min="0.01" max="100000000" step="0.01" value={invoiceAmounts[request.id] || ''} onChange={(event) => setInvoiceAmounts((current) => ({ ...current, [request.id]: event.target.value }))} className="mt-1 block w-44 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-900" /></label>
+            <label className="block text-[10px] font-black uppercase tracking-wide text-slate-500">{request.activity_type === 'audio' ? 'Invoice amount (0 for free audio)' : 'Invoice amount'}<input type="number" min={request.activity_type === 'audio' ? '0' : '0.01'} max="100000000" step="0.01" value={invoiceAmounts[request.id] || ''} onChange={(event) => setInvoiceAmounts((current) => ({ ...current, [request.id]: event.target.value }))} className="mt-1 block w-44 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-900" /></label>
             <button type="button" onClick={() => void updateRequest(request, 'invoice')} disabled={savingId === request.id} className="inline-flex items-center gap-2 rounded-lg bg-blue-900 px-4 py-2.5 text-xs font-black text-white disabled:opacity-60">{savingId === request.id && <Loader2 size={14} className="animate-spin" />}Issue invoice and send to IT</button>
           </div>}
           {canApprove && request.status === 'pending_it' && <div className="mt-4 flex flex-wrap items-end gap-3 border-t border-slate-100 pt-4">

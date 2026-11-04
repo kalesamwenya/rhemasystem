@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import "sweetalert2/dist/sweetalert2.min.css";
 import { EventsProvider } from "@/components/events/EventsContext";
 import AlertProvider from "@/components/ui/AlertProvider";
 import ActivityTracker from "@/components/ActivityTracker";

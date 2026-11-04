@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { showAppAlert } from '@/components/ui/app-dialogs';
 import {
   ArrowLeft, Plus, Trash2, Save, Rocket,
   CheckSquare, Code, HelpCircle as QueryIcon
@@ -78,10 +79,13 @@ export default function LecturerAssessmentCreationStudio() {
 
   const handlePublishAssessment = (status: 'draft' | 'live') => {
     if (!assessmentTitle.trim()) {
-      alert('Please enter an assessment title before setting a deployment status.');
+      void showAppAlert('Enter a title for this assessment.', { title: 'Title required', icon: 'warning' });
       return;
     }
-    alert(`Assessment Matrix successfully compiled and saved as [${status.toUpperCase()}] for ${courseCode}. Total Questions: ${questions.length}`);
+    void showAppAlert(
+      status === 'live' ? 'Your assessment has been published.' : 'Your draft has been saved.',
+      { title: status === 'live' ? 'Assessment published' : 'Draft saved', icon: 'success' },
+    );
   };
 
   const totalPoints = questions.reduce((sum, q) => sum + q.points, 0);

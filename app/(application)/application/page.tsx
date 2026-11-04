@@ -20,6 +20,7 @@ import {
   X,
 } from "lucide-react";
 import CustomAlert from "@/components/main/CustomAlert";
+import { confirmWithApp } from "@/components/ui/app-dialogs";
 import { api } from "@/lib/api";
 import { openFlutterwaveInlineCheckout, type FlutterwaveInlineCheckout } from "@/lib/flutterwave-inline";
 
@@ -293,12 +294,16 @@ export default function ApplicationPage() {
     return () => { active = false; };
   }, []);
 
-  const cancelForm = useCallback(() => {
+  const cancelForm = useCallback(async () => {
     if (application) {
       setIsFormOpen(false);
       return;
     }
-    if (isDraftDirty && !window.confirm("Cancel this application and discard changes since your last saved draft?")) return;
+    if (isDraftDirty && !(await confirmWithApp("Discard your unsaved changes?", {
+      title: 'Cancel application?',
+      confirmText: 'Discard changes',
+      tone: 'danger',
+    }))) return;
     restoreDraft();
     setIsFormOpen(false);
   }, [application, isDraftDirty, restoreDraft]);

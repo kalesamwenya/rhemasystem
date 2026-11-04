@@ -1,6 +1,7 @@
 import React from 'react';
 import { ChevronDown, User, Settings, ShieldCheck, LogOut } from 'lucide-react';
 import Link from 'next/link';
+import { showAppAlert } from '@/components/ui/app-dialogs';
 import { api, clearAuthSession } from '@/lib/api';
 
 interface StudentData {
@@ -21,8 +22,11 @@ export default function UserDropdown({ isOpen, onToggle, student }: UserDropdown
   const logout = async () => {
     try {
       await api.logout();
-    } catch (error) {
-      window.alert(error instanceof Error ? error.message : 'Unable to revoke the server session. It will expire automatically.');
+    } catch {
+      await showAppAlert("We couldn't sign you out completely. Please try again.", {
+        title: 'Sign-out issue',
+        icon: 'warning',
+      });
     } finally {
       clearAuthSession();
       window.location.assign('/login');

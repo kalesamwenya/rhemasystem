@@ -53,6 +53,7 @@ export async function createPaymentReceiptPdf(payment: PaymentReceiptData): Prom
   ]);
   const verificationUrl = new URL('/verify-payment', window.location.origin);
   verificationUrl.searchParams.set('token', payment.receipt_token);
+  const verificationUrlText = escapeHtml(verificationUrl.toString());
   const qrSvg = new BrowserQRCodeSvgWriter().write(verificationUrl.toString(), 192, 192);
   const svgUrl = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(qrSvg)], { type: 'image/svg+xml;charset=utf-8' }));
   const qrImage = new Image();
@@ -73,6 +74,8 @@ export async function createPaymentReceiptPdf(payment: PaymentReceiptData): Prom
   context.drawImage(qrImage, 0, 0, qrCanvas.width, qrCanvas.height);
 
   const receipt = document.createElement('div');
+  const receiptSourceId = `rhema-payment-receipt-${crypto.randomUUID()}`;
+  receipt.id = receiptSourceId;
   const studentName = escapeHtml(payment.student_name);
   const studentId = escapeHtml(payment.student_id);
   const cohort = escapeHtml(payment.cohort);
@@ -84,7 +87,7 @@ export async function createPaymentReceiptPdf(payment: PaymentReceiptData): Prom
   const transactionDate = escapeHtml(new Date(payment.created_at).toLocaleString());
   const amountPaid = escapeHtml(money(payment.amount, payment.currency));
   const qrImageData = qrCanvas.toDataURL('image/png');
-  receipt.style.cssText = 'position:fixed;left:0;top:0;z-index:-1;width:760px;background:#fff;color:#0f172a;font-family:Arial,sans-serif;';
+  receipt.style.cssText = 'position:fixed;left:0;top:0;z-index:2147483647;width:760px;opacity:0;pointer-events:none;background:#fff;color:#0f172a;font-family:Arial,sans-serif;';
   receipt.innerHTML = `
     <div style="position:relative;overflow:hidden;padding:52px 54px 44px;border:1px solid #dbe3ef;">
       <div style="position:absolute;top:38%;left:8%;z-index:0;color:rgba(30,58,138,.055);font-size:116px;font-weight:900;letter-spacing:12px;transform:rotate(-28deg);">PAID</div>
@@ -103,7 +106,7 @@ export async function createPaymentReceiptPdf(payment: PaymentReceiptData): Prom
         </table>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:22px;padding:18px 20px;background:#f8fafc;border-radius:10px;"><div style="font-size:11px;font-weight:700;color:#475569;">TOTAL RECEIVED</div><div style="font-size:23px;font-weight:900;color:#1e3a8a;">${amountPaid}</div></div>
         <div style="display:flex;justify-content:space-between;align-items:center;gap:20px;margin-top:28px;padding-top:22px;border-top:1px solid #e2e8f0;">
-          <div style="flex:1;"><div style="font-size:11px;font-weight:800;">Payment method: ${gateway}</div><div style="margin-top:7px;font-size:10px;color:#64748b;">Provider transaction: ${gatewayTransaction}</div><div style="margin-top:18px;font-size:10px;line-height:1.6;color:#64748b;">Scan the QR code to independently verify this receipt online. This receipt confirms funds received for the item listed above.</div></div>
+          <div style="flex:1;"><div style="font-size:11px;font-weight:800;">Payment method: ${gateway}</div><div style="margin-top:7px;font-size:10px;color:#64748b;">Provider transaction: ${gatewayTransaction}</div><div style="margin-top:18px;font-size:10px;line-height:1.6;color:#64748b;">Scan the QR code or open the link below to independently verify this receipt online. This receipt confirms funds received for the item listed above.</div><a href="${verificationUrlText}" style="display:block;margin-top:8px;color:#1e3a8a;font-size:9px;line-height:1.5;word-break:break-all;text-decoration:underline;">${verificationUrlText}</a></div>
           <div style="width:142px;text-align:center;"><img src="${qrImageData}" alt="Payment verification QR code" style="width:126px;height:126px;"><div style="margin-top:5px;font-size:9px;font-weight:700;color:#475569;">SCAN TO VERIFY</div></div>
         </div>
         <div style="margin-top:28px;padding-top:13px;border-top:1px solid #e2e8f0;text-align:center;color:#94a3b8;font-size:9px;">Rhema Bible School · This is a computer-generated receipt.</div>
@@ -117,7 +120,17 @@ export async function createPaymentReceiptPdf(payment: PaymentReceiptData): Prom
       filename: `Rhema-Receipt-${safeReference}.pdf`,
       margin: 8,
       image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+      html2canvas: {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        onclone: (clonedDocument: Document) => {
+          const clonedReceipt = clonedDocument.getElementById(receiptSourceId);
+          if (!clonedReceipt) throw new Error('The receipt could not be prepared for PDF rendering.');
+          clonedReceipt.style.opacity = '1';
+          clonedReceipt.style.zIndex = '1';
+        },
+      },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
     }).from(receipt).outputPdf('blob');
     if (!(pdf instanceof Blob)) throw new Error('The receipt PDF generator returned an invalid document.');

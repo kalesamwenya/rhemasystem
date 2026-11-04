@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { showAppAlert } from '@/components/ui/app-dialogs';
 import { Plus, Trash2, Database, HelpCircle, Check, Eye } from 'lucide-react';
 
 interface ConfiguredQuestion {
@@ -43,7 +44,7 @@ export default function LecturerEvaluationConfigurationPage() {
 
   const handleAppendQuestionToRegistry = () => {
     if (!newQuestionText.trim() || optionsArray.some(opt => !opt.trim())) {
-      alert("Validation Error: Complete all structural properties and text tracks.");
+      void showAppAlert('Add a question and complete all answer choices first.', { title: 'Complete the question', icon: 'warning' });
       return;
     }
 
@@ -77,7 +78,7 @@ export default function LecturerEvaluationConfigurationPage() {
     };
 
     console.log("Pushing JSON blueprint payload directly into MySQL API endpoint: ", deploymentPayload);
-    alert(`Success: System registered structure containing ${questions.length} auto-marked evaluation items.`);
+    void showAppAlert('Your lesson has been saved.', { title: 'Lesson saved', icon: 'success' });
   };
 
   return (

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from 'react';
 import { ArrowDown, ArrowLeft, Ban, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, ClipboardCheck, CreditCard, Eye, Filter, Mail, RefreshCw, Search, ShieldCheck, X } from 'lucide-react';
 import { api, assetUrl } from '@/lib/api';
+import { confirmWithApp } from '@/components/ui/app-dialogs';
 
 type Recommendation = {
   recommender_name: string;
@@ -274,7 +275,11 @@ export default function AdmissionsPage() {
 
   const updateStatus = async (status: 'Under review' | 'Rejected') => {
     if (!selected) return;
-    if (status === 'Rejected' && !window.confirm(`Reject ${selected.applicant_name}'s application? This decision cannot be changed later.`)) return;
+    if (status === 'Rejected' && !(await confirmWithApp('Reject this application? You cannot undo this decision.', {
+      title: 'Reject application?',
+      confirmText: 'Reject application',
+      tone: 'danger',
+    }))) return;
     setSaving(true);
     setError('');
     setNotice('');

@@ -71,6 +71,68 @@ body {
   font-family: var(--font-geist-sans), sans-serif;
 }
 
+.swal2-popup.rhema-swal-popup {
+  width: min(28rem, calc(100vw - 2rem));
+  padding: 2rem 1.75rem 1.5rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 1.5rem;
+  background: #fff;
+  box-shadow: 0 24px 70px rgb(15 23 42 / 20%);
+  font-family: var(--font-geist-sans), sans-serif;
+}
+
+.rhema-swal-title {
+  color: #0f172a;
+  font-size: 1.35rem;
+  font-weight: 800;
+}
+
+.rhema-swal-message {
+  color: #475569;
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+.rhema-swal-confirm,
+.rhema-swal-cancel {
+  min-width: 6rem;
+  margin: 0.35rem;
+  padding: 0.7rem 1.15rem;
+  border: 0;
+  border-radius: 0.8rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  transition: background-color 150ms ease, transform 150ms ease;
+}
+
+.rhema-swal-confirm {
+  background: var(--rhema-blue);
+  color: #fff;
+}
+
+.rhema-swal-confirm:hover {
+  background: var(--rhema-blue-700);
+  transform: translateY(-1px);
+}
+
+.rhema-swal-confirm-danger {
+  background: #be123c;
+}
+
+.rhema-swal-confirm-danger:hover {
+  background: #9f1239;
+}
+
+.rhema-swal-cancel {
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #334155;
+}
+
+.rhema-swal-cancel:hover {
+  background: #f1f5f9;
+}
+
 * {
   scrollbar-width: none;
   -ms-overflow-style: none;

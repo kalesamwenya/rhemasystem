@@ -3,6 +3,7 @@
 import React, { useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { showAppAlert } from '@/components/ui/app-dialogs';
 import {
   ArrowLeft, CloudUpload, FileCode, FileText,
   Globe, X, CheckCircle2, AlertCircle
@@ -90,15 +91,15 @@ export default function LecturerResourceUploadSystem() {
     e.preventDefault();
     
     if (resourceType !== 'link' && !selectedFile) {
-      alert('Please select a local system file or drop a resource payload to proceed.');
+      void showAppAlert('Choose a file to upload.', { title: 'File required', icon: 'warning' });
       return;
     }
     if (resourceType === 'link' && !externalUrl.trim()) {
-      alert('Please enter a target URL for this external link resource.');
+      void showAppAlert('Enter a web address for this link.', { title: 'Web address required', icon: 'warning' });
       return;
     }
     if (!assetTitle.trim()) {
-      alert('Please specify a recognizable display title for the asset registry.');
+      void showAppAlert('Enter a name for this resource.', { title: 'Resource name required', icon: 'warning' });
       return;
     }
 
@@ -110,8 +111,8 @@ export default function LecturerResourceUploadSystem() {
       setUploadProgress(progress);
       if (progress >= 100) {
         clearInterval(interval);
-        setTimeout(() => {
-          alert(`Asset payload [${assetTitle}] compiled and written successfully to ${courseCode} network arrays.`);
+        setTimeout(async () => {
+          await showAppAlert('Your resource is ready.', { title: 'Resource added', icon: 'success' });
           router.push('/lecture/resources');
         }, 400);
       }

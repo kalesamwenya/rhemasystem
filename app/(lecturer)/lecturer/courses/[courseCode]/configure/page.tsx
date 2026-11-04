@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { showAppAlert } from '@/components/ui/app-dialogs';
 import { 
   Settings2, ArrowLeft, Layers, Sliders, Save, 
   HelpCircle, ShieldAlert, Cpu, ToggleLeft, ToggleRight, Plus 
@@ -21,7 +22,7 @@ export default function LecturerEvaluationConfigurePage() {
   const handleSaveMatrix = (e: React.FormEvent) => {
     e.preventDefault();
     // Logic pipeline to update database streams via API
-    alert(`Configuration stream synced for course parameters: ${courseCode}`);
+    void showAppAlert('Your course settings have been saved.', { title: 'Settings saved', icon: 'success' });
   };
 
   return (
