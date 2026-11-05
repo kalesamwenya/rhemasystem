@@ -4,8 +4,9 @@ import { confirmWithApp } from '@/components/ui/app-dialogs';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  CalendarDays, ChevronLeft, ChevronRight, Clock3, ImagePlus, LoaderCircle,
-  Pencil, Plus, Send, Share2, Trash2, Video, X,
+  ArrowUpDown, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ChevronUp,
+  Clock3, Eye, ImagePlus, LoaderCircle, Pencil, Plus, Search, Send, Share2,
+  Trash2, X,
 } from 'lucide-react';
 import { api, assetUrl } from '@/lib/api';
 
@@ -35,6 +36,9 @@ type Post = {
 };
 type Assignee = { id: string; name: string; department: string };
 type ApiList<T> = { data?: T[]; meta_configured?: { facebook: boolean; instagram: boolean } };
+type DraftMedia =
+  | { kind: 'saved'; path: string }
+  | { kind: 'new'; file: File; previewUrl: string };
 type Draft = {
   id?: number;
   title: string;
@@ -46,9 +50,9 @@ type Draft = {
   scheduled_at: string;
   status: Exclude<WorkflowStatus, 'published'>;
   reviewer_note: string;
-  media_paths: string[];
-  newMedia: { file: File; previewUrl: string }[];
+  media: DraftMedia[];
 };
+type QueueSortKey = 'title' | 'status' | 'platform' | 'scheduled_at' | 'assigned_to';
 
 const inputClass = 'mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-red-400';
 const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -104,8 +108,7 @@ function newDraft(date = new Date()): Draft {
     scheduled_at: `${dateKey(date)}T09:00`,
     status: 'draft',
     reviewer_note: '',
-    media_paths: [],
-    newMedia: [],
+    media: [],
   };
 }
 
@@ -122,8 +125,7 @@ function toDraft(post: Post): Draft {
     scheduled_at: localInputDate(post.scheduled_at),
     status: post.status === 'published' ? 'approved' : post.status,
     reviewer_note: post.reviewer_note ?? '',
-    media_paths: mediaPaths,
-    newMedia: [],
+    media: mediaPaths.map((path) => ({ kind: 'saved', path })),
   };
 }
 
@@ -142,13 +144,26 @@ export default function SocialMediaPage() {
   const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [draft, setDraft] = useState<Draft | null>(null);
   const [filter, setFilter] = useState<'all' | 'review' | 'assigned'>('all');
+  const [activeTab, setActiveTab] = useState<'calendar' | 'queue'>('calendar');
+  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
+  const [queueSearch, setQueueSearch] = useState('');
+  const [queueStatus, setQueueStatus] = useState<'all' | WorkflowStatus>('all');
+  const [queuePlatform, setQueuePlatform] = useState<'all' | Platform>('all');
+  const [queueAssignee, setQueueAssignee] = useState('all');
+  const [queueSort, setQueueSort] = useState<{ key: QueueSortKey; direction: 'asc' | 'desc' }>({ key: 'scheduled_at', direction: 'desc' });
+  const [queuePage, setQueuePage] = useState(1);
+  const [queuePageSize, setQueuePageSize] = useState(10);
   const [mediaDragActive, setMediaDragActive] = useState(false);
+  const [draggedMediaIndex, setDraggedMediaIndex] = useState<number | null>(null);
+  const [mediaDropIndex, setMediaDropIndex] = useState<number | null>(null);
   const mediaInputRef = useRef<HTMLInputElement>(null);
   const publishNowButtonRef = useRef<HTMLButtonElement>(null);
   const mediaPreviewUrlsRef = useRef(new Set<string>());
 
   const loadData = useCallback(async () => {
     setLoading(true);
+    setQueuePage(1);
     const [postsResult, assigneesResult] = await Promise.allSettled([
       api.socialMedia.posts() as Promise<ApiList<Post>>,
       api.socialMedia.assignees() as Promise<ApiList<Assignee>>,
@@ -182,6 +197,55 @@ export default function SocialMediaPage() {
     return true;
   }), [filter, posts]);
 
+  const queuePosts = useMemo(() => {
+    const query = queueSearch.trim().toLowerCase();
+    const visiblePosts = posts.filter((post) => {
+      if (queueStatus !== 'all' && post.status !== queueStatus) return false;
+      if (queuePlatform !== 'all' && post.platform !== queuePlatform) return false;
+      if (queueAssignee !== 'all' && (post.assigned_to ?? '') !== queueAssignee) return false;
+      if (!query) return true;
+      return [post.title, post.caption, post.task_brief, post.reviewer_note]
+        .some((value) => value?.toLowerCase().includes(query));
+    });
+    const direction = queueSort.direction === 'asc' ? 1 : -1;
+    return visiblePosts.sort((a, b) => {
+      let left = '';
+      let right = '';
+      if (queueSort.key === 'assigned_to') {
+        left = assignees.find((person) => person.id === a.assigned_to)?.name ?? (a.assigned_to ? 'Unavailable' : 'Unassigned');
+        right = assignees.find((person) => person.id === b.assigned_to)?.name ?? (b.assigned_to ? 'Unavailable' : 'Unassigned');
+      } else if (queueSort.key === 'scheduled_at') {
+        left = a.scheduled_at ?? a.created_at;
+        right = b.scheduled_at ?? b.created_at;
+      } else if (queueSort.key === 'status') {
+        left = statusLabels[a.status];
+        right = statusLabels[b.status];
+      } else {
+        left = a[queueSort.key];
+        right = b[queueSort.key];
+      }
+      return left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' }) * direction;
+    });
+  }, [assignees, posts, queueAssignee, queuePlatform, queueSearch, queueSort, queueStatus]);
+
+  const queuePageCount = Math.max(1, Math.ceil(queuePosts.length / queuePageSize));
+  const visibleQueuePosts = queuePosts.slice((queuePage - 1) * queuePageSize, queuePage * queuePageSize);
+  const selectedPostMedia = selectedPost ? postMediaPaths(selectedPost) : [];
+  const selectedMediaPath = selectedPostMedia[selectedMediaIndex];
+
+  const openPostDetails = (post: Post) => {
+    setSelectedMediaIndex(0);
+    setSelectedPost(post);
+  };
+
+  const toggleQueueSort = (key: QueueSortKey) => {
+    setQueueSort((current) => ({
+      key,
+      direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc',
+    }));
+    setQueuePage(1);
+  };
+
   const calendarDays = useMemo(() => {
     const first = new Date(month.getFullYear(), month.getMonth(), 1);
     const offset = (first.getDay() + 6) % 7;
@@ -214,8 +278,12 @@ export default function SocialMediaPage() {
     setNotice('');
     let wasSaved = false;
     try {
-      const mediaPaths = [...draft.media_paths];
-      for (const media of draft.newMedia) {
+      const mediaPaths: string[] = [];
+      for (const media of draft.media) {
+        if (media.kind === 'saved') {
+          mediaPaths.push(media.path);
+          continue;
+        }
         const upload = await api.socialMedia.upload(media.file) as { data?: { path?: string; media_type?: 'image' | 'video' } };
         if (!upload.data?.path || !upload.data.media_type) throw new Error('Media upload did not return a usable file path.');
         mediaPaths.push(upload.data.path);
@@ -272,6 +340,7 @@ export default function SocialMediaPage() {
     try {
       await api.socialMedia.remove(post.id);
       setPosts((current) => current.filter((item) => item.id !== post.id));
+      setQueuePage(1);
       setNotice('Content item deleted.');
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Unable to delete this content item.');
@@ -296,7 +365,8 @@ export default function SocialMediaPage() {
   };
 
   const clearMediaPreview = () => {
-    draft?.newMedia.forEach((media) => {
+    draft?.media.forEach((media) => {
+      if (media.kind !== 'new') return;
       URL.revokeObjectURL(media.previewUrl);
       mediaPreviewUrlsRef.current.delete(media.previewUrl);
     });
@@ -315,14 +385,19 @@ export default function SocialMediaPage() {
       setNotice(`${unsupported.name} is not a supported media format. Use JPG, PNG, WEBP, GIF, MP4, MOV, or WEBM.`);
       return;
     }
-    const tooLarge = selected.find((file) => file.size > 100 * 1024 * 1024);
+    const tooLarge = selected.find((file) => mediaFileType(file) === 'video'
+      ? file.size > 100 * 1024 * 1024
+      : file.size >= 10 * 1024 * 1024);
     if (tooLarge) {
-      setNotice(`${tooLarge.name} is larger than the 100 MB per-file limit.`);
+      setNotice(mediaFileType(tooLarge) === 'video'
+        ? `${tooLarge.name} is larger than the 100 MB video limit.`
+        : `${tooLarge.name} must be smaller than 10 MB for Meta publishing.`);
       return;
     }
     const currentMediaTypes = [
-      ...(draft?.media_paths ?? []).map((path) => isVideoPath(path) ? 'video' : 'image'),
-      ...(draft?.newMedia ?? []).map((media) => mediaFileType(media.file)),
+      ...(draft?.media ?? []).map((media) => media.kind === 'saved'
+        ? (isVideoPath(media.path) ? 'video' : 'image')
+        : mediaFileType(media.file)),
     ];
     const addedTypes = selected.map(mediaFileType);
     const combinedTypes = [...currentMediaTypes, ...addedTypes];
@@ -331,25 +406,37 @@ export default function SocialMediaPage() {
       return;
     }
     setNotice('');
-    const newMedia = selected.map((file) => ({ file, previewUrl: URL.createObjectURL(file) }));
-    newMedia.forEach((media) => mediaPreviewUrlsRef.current.add(media.previewUrl));
-    setDraft((current) => current ? { ...current, newMedia: [...current.newMedia, ...newMedia] } : null);
+    const newMedia: DraftMedia[] = selected.map((file) => ({
+      kind: 'new',
+      file,
+      previewUrl: URL.createObjectURL(file),
+    }));
+    newMedia.forEach((media) => {
+      if (media.kind === 'new') mediaPreviewUrlsRef.current.add(media.previewUrl);
+    });
+    setDraft((current) => current ? { ...current, media: [...current.media, ...newMedia] } : null);
   };
 
-  const removeNewMedia = (previewUrl: string) => {
-    URL.revokeObjectURL(previewUrl);
-    mediaPreviewUrlsRef.current.delete(previewUrl);
+  const removeMedia = (media: DraftMedia) => {
+    if (media.kind === 'new') {
+      URL.revokeObjectURL(media.previewUrl);
+      mediaPreviewUrlsRef.current.delete(media.previewUrl);
+    }
     setDraft((current) => current ? {
       ...current,
-      newMedia: current.newMedia.filter((media) => media.previewUrl !== previewUrl),
+      media: current.media.filter((item) => item !== media),
     } : null);
   };
 
-  const removeSavedMedia = (path: string) => {
-    setDraft((current) => current ? {
-      ...current,
-      media_paths: current.media_paths.filter((mediaPath) => mediaPath !== path),
-    } : null);
+  const moveMedia = (fromIndex: number, toIndex: number) => {
+    setDraft((current) => {
+      if (!current || fromIndex === toIndex || fromIndex < 0 || toIndex < 0
+        || fromIndex >= current.media.length || toIndex >= current.media.length) return current;
+      const media = [...current.media];
+      const [moved] = media.splice(fromIndex, 1);
+      media.splice(toIndex, 0, moved);
+      return { ...current, media };
+    });
   };
 
   const closeDraft = () => {
@@ -389,7 +476,26 @@ export default function SocialMediaPage() {
         <SummaryCard label="Assigned tasks" value={posts.filter((post) => post.assigned_to).length} />
       </section>
 
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex gap-2 border-b border-slate-200" role="tablist" aria-label="Social media workspace">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'calendar'}
+          aria-controls="social-calendar-panel"
+          onClick={() => setActiveTab('calendar')}
+          className={`border-b-2 px-4 py-3 text-sm font-bold ${activeTab === 'calendar' ? 'border-red-600 text-red-700' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
+        ><CalendarDays className="mr-2 inline h-4 w-4" />Calendar</button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'queue'}
+          aria-controls="social-queue-panel"
+          onClick={() => setActiveTab('queue')}
+          className={`border-b-2 px-4 py-3 text-sm font-bold ${activeTab === 'queue' ? 'border-red-600 text-red-700' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
+        ><Share2 className="mr-2 inline h-4 w-4" />Content &amp; review queue <span className="ml-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px]">{posts.length}</span></button>
+      </div>
+
+      {activeTab === 'calendar' && <section id="social-calendar-panel" role="tabpanel" className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3"><CalendarDays className="h-5 w-5 text-red-600" /><div><h2 className="text-lg font-black text-slate-900">Content calendar</h2><p className="text-xs text-slate-500">Select a date to add a post or production task.</p></div></div>
           <div className="flex flex-wrap items-center gap-2">
@@ -412,31 +518,187 @@ export default function SocialMediaPage() {
             </div>;
           })}
         </div>}
-      </section>
+      </section>}
 
-      <section className="space-y-3">
-        <div className="flex items-center justify-between"><h2 className="text-lg font-black text-slate-900">Content and review queue</h2><span className="text-xs text-slate-500">{filteredPosts.length} item{filteredPosts.length === 1 ? '' : 's'}</span></div>
-        {!loading && filteredPosts.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500">No content items yet. Add a post or production task from the calendar.</div> : <div className="grid gap-3 lg:grid-cols-2">{filteredPosts.map((post) => {
-          const assigned = assignees.find((person) => person.id === post.assigned_to);
-          const mediaPaths = postMediaPaths(post);
-          const firstMediaPath = mediaPaths[0];
-          return <article key={post.id} className="flex gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            {firstMediaPath ? <div className="relative h-24 w-28 shrink-0 overflow-hidden rounded-xl bg-slate-100">{isVideoPath(firstMediaPath) ? <video src={assetUrl(firstMediaPath)} className="h-full w-full object-cover" /> : <div className="h-full w-full bg-cover bg-center" style={{ backgroundImage: `url("${assetUrl(firstMediaPath)}")` }} />}{mediaPaths.length > 1 && <span className="absolute bottom-1 right-1 rounded bg-slate-950/75 px-1.5 py-0.5 text-[9px] font-bold text-white">+{mediaPaths.length - 1}</span>}</div> : <div className="flex h-24 w-28 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-400">{post.content_kind === 'video' ? <Video /> : <ImagePlus />}</div>}
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2"><h3 className="truncate text-sm font-black text-slate-900">{post.title}</h3><span className={`rounded-full px-2 py-0.5 text-[9px] font-black ${statusStyles[post.status]}`}>{statusLabels[post.status]}</span></div>
-              <p className="mt-1 line-clamp-2 text-xs text-slate-500">{post.task_brief || post.caption || 'No task details added.'}</p>
-              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-slate-500"><span>{post.platform === 'both' ? 'Facebook + Instagram' : post.platform}</span><span>{post.scheduled_at ? new Date(post.scheduled_at.replace(' ', 'T')).toLocaleString() : 'Date not set'}</span><span>{assigned?.name ?? (post.assigned_to ? 'Assignee unavailable' : 'Unassigned')}</span></div>
-              {post.facebook_post_id && <p className="mt-2 text-[10px] text-slate-600">Facebook post: <code>{post.facebook_post_id}</code></p>}
-              {post.instagram_media_id && <p className="mt-1 text-[10px] text-slate-600">Instagram post: <code>{post.instagram_media_id}</code></p>}
-              {post.publish_error && <div role="alert" className="mt-2 rounded-lg border border-rose-200 bg-rose-50 p-2 text-[10px] leading-4 text-rose-800"><strong>Publishing failed:</strong> {post.publish_error}<p>Attempt {post.publish_attempts} of 5.</p><button type="button" disabled={retryingPostId === post.id} onClick={() => void retryPublishing(post)} className="mt-1 rounded border border-rose-300 bg-white px-2 py-1 font-bold disabled:opacity-50">{retryingPostId === post.id ? 'Queuing retry...' : 'Retry publishing'}</button></div>}
-              <div className="mt-3 flex gap-2">{post.status !== 'published' && <button type="button" onClick={() => setDraft(toDraft(post))} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[10px] font-bold text-slate-700"><Pencil className="h-3 w-3" /> Review / edit</button>}{post.status !== 'published' && <button type="button" onClick={() => void deletePost(post)} className="rounded-lg border border-rose-100 p-1.5 text-rose-600" aria-label={`Delete ${post.title}`}><Trash2 className="h-3.5 w-3.5" /></button>}</div>
+      {activeTab === 'queue' && <section id="social-queue-panel" role="tabpanel" className="space-y-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div><h2 className="text-lg font-black text-slate-900">Content and review queue</h2><p className="text-xs text-slate-500">Search, filter, sort, and open a post to read all its details.</p></div>
+          <span className="text-xs text-slate-500">{queuePosts.length} item{queuePosts.length === 1 ? '' : 's'}</span>
+        </div>
+        <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:grid-cols-2 xl:grid-cols-4">
+          <label className="relative text-[11px] font-bold text-slate-600 sm:col-span-2 xl:col-span-1">Search posts
+            <Search className="absolute left-3 top-8 h-4 w-4 text-slate-400" />
+            <input value={queueSearch} onChange={(event) => { setQueueSearch(event.target.value); setQueuePage(1); }} className={`${inputClass} pl-9`} placeholder="Title, caption, notes..." />
+          </label>
+          <label className="text-[11px] font-bold text-slate-600">Status
+            <select value={queueStatus} onChange={(event) => { setQueueStatus(event.target.value as typeof queueStatus); setQueuePage(1); }} className={inputClass}>
+              <option value="all">All statuses</option>
+              {(Object.keys(statusLabels) as WorkflowStatus[]).map((status) => <option key={status} value={status}>{statusLabels[status]}</option>)}
+            </select>
+          </label>
+          <label className="text-[11px] font-bold text-slate-600">Platform
+            <select value={queuePlatform} onChange={(event) => { setQueuePlatform(event.target.value as typeof queuePlatform); setQueuePage(1); }} className={inputClass}>
+              <option value="all">All platforms</option><option value="facebook">Facebook</option><option value="instagram">Instagram</option><option value="both">Facebook + Instagram</option>
+            </select>
+          </label>
+          <label className="text-[11px] font-bold text-slate-600">Assignee
+            <select value={queueAssignee} onChange={(event) => { setQueueAssignee(event.target.value); setQueuePage(1); }} className={inputClass}>
+              <option value="all">All assignees</option><option value="">Unassigned</option>
+              {assignees.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
+            </select>
+          </label>
+        </div>
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          {loading ? <div className="flex min-h-48 items-center justify-center gap-2 text-sm text-slate-500"><LoaderCircle className="h-4 w-4 animate-spin" /> Loading content queue...</div> : queuePosts.length === 0 ? (
+            <div className="p-10 text-center text-sm text-slate-500">No posts match these filters.</div>
+          ) : <>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[900px] text-left text-sm">
+                <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500">
+                  <tr>
+                    <th scope="col" className="px-4 py-3 font-black">Cover</th>
+                    {([
+                      ['title', 'Post'],
+                      ['platform', 'Platform'],
+                      ['scheduled_at', 'Scheduled / created'],
+                      ['assigned_to', 'Assignee'],
+                      ['status', 'Status'],
+                    ] as [QueueSortKey, string][]).map(([key, label]) => (
+                      <th key={key} scope="col" className="px-4 py-3 font-black">
+                        <button type="button" onClick={() => toggleQueueSort(key)} className="inline-flex items-center gap-1 hover:text-slate-900">
+                          {label}<ArrowUpDown className="h-3 w-3" />
+                          {queueSort.key === key && <span className="sr-only">{queueSort.direction === 'asc' ? 'ascending' : 'descending'}</span>}
+                        </button>
+                      </th>
+                    ))}
+                    <th scope="col" className="px-4 py-3 text-right font-black">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {visibleQueuePosts.map((post) => {
+                    const assigned = assignees.find((person) => person.id === post.assigned_to);
+                    const mediaPaths = postMediaPaths(post);
+                    const coverPath = mediaPaths[0];
+                    return <tr key={post.id} className="align-middle hover:bg-slate-50/70">
+                      <td className="px-4 py-3">
+                        <button
+                          type="button"
+                          onClick={() => openPostDetails(post)}
+                          aria-label={`Read ${post.title}`}
+                          className="relative block h-14 w-16 overflow-hidden rounded-lg border border-slate-200 bg-slate-100"
+                        >
+                          {coverPath
+                            ? isVideoPath(coverPath)
+                              ? <video src={assetUrl(coverPath)} className="h-full w-full object-cover" />
+                              : <div role="img" aria-label={`${post.title} cover image`} className="h-full w-full bg-cover bg-center" style={{ backgroundImage: `url("${assetUrl(coverPath)}")` }} />
+                            : <span className="flex h-full w-full items-center justify-center text-slate-400"><ImagePlus className="h-5 w-5" /></span>}
+                          {mediaPaths.length > 1 && <span className="absolute bottom-0.5 right-0.5 rounded bg-slate-950/75 px-1 text-[9px] font-bold text-white">{mediaPaths.length}</span>}
+                        </button>
+                      </td>
+                      <td className="max-w-sm px-4 py-3">
+                        <button type="button" onClick={() => openPostDetails(post)} className="block max-w-full truncate text-left font-bold text-slate-900 hover:text-red-700">{post.title}</button>
+                        <p className="mt-1 max-w-sm truncate text-xs text-slate-500">{post.caption || post.task_brief || 'No caption or brief'}</p>
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-600">{post.platform === 'both' ? 'Facebook + Instagram' : post.platform}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-600">{post.scheduled_at ? new Date(post.scheduled_at.replace(' ', 'T')).toLocaleString() : `Created ${new Date(post.created_at.replace(' ', 'T')).toLocaleDateString()}`}</td>
+                      <td className="px-4 py-3 text-xs text-slate-600">{assigned?.name ?? (post.assigned_to ? 'Assignee unavailable' : 'Unassigned')}</td>
+                      <td className="px-4 py-3"><span className={`whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-black ${statusStyles[post.status]}`}>{statusLabels[post.status]}</span></td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right">
+                        <button type="button" onClick={() => openPostDetails(post)} className="mr-1 inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[10px] font-bold text-slate-700"><Eye className="h-3.5 w-3.5" /> Read</button>
+                        {post.status !== 'published' && <button type="button" onClick={() => setDraft(toDraft(post))} className="mr-1 inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[10px] font-bold text-slate-700"><Pencil className="h-3.5 w-3.5" /> Edit</button>}
+                        {post.status !== 'published' && <button type="button" onClick={() => void deletePost(post)} className="rounded-lg border border-rose-100 p-1.5 text-rose-600" aria-label={`Delete ${post.title}`}><Trash2 className="h-3.5 w-3.5" /></button>}
+                      </td>
+                    </tr>;
+                  })}
+                </tbody>
+              </table>
             </div>
-          </article>;
-        })}</div>}
-      </section>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-4 py-3 text-xs text-slate-600">
+              <div className="flex items-center gap-2">
+                <span>Rows per page</span>
+                <select value={queuePageSize} onChange={(event) => { setQueuePageSize(Number(event.target.value)); setQueuePage(1); }} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5">
+                  <option value={10}>10</option><option value={25}>25</option><option value={50}>50</option>
+                </select>
+                <span>{queuePosts.length ? `${(queuePage - 1) * queuePageSize + 1}–${Math.min(queuePage * queuePageSize, queuePosts.length)} of ${queuePosts.length}` : '0 posts'}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button type="button" disabled={queuePage <= 1} onClick={() => setQueuePage((page) => Math.max(1, page - 1))} className="rounded-lg border border-slate-200 px-3 py-1.5 font-bold disabled:opacity-40">Previous</button>
+                <span>Page {queuePage} of {queuePageCount}</span>
+                <button type="button" disabled={queuePage >= queuePageCount} onClick={() => setQueuePage((page) => Math.min(queuePageCount, page + 1))} className="rounded-lg border border-slate-200 px-3 py-1.5 font-bold disabled:opacity-40">Next</button>
+              </div>
+            </div>
+          </>}
+        </div>
+      </section>}
+
+      {selectedPost && <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedPost(null); }}>
+        <section role="dialog" aria-modal="true" aria-labelledby="post-details-title" className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
+          {selectedMediaPath && <div className="mb-5">
+            <div className="relative overflow-hidden rounded-2xl bg-slate-950">
+              {isVideoPath(selectedMediaPath)
+                ? <video src={assetUrl(selectedMediaPath)} controls className="mx-auto max-h-[48vh] w-full object-contain" />
+                : <div role="img" aria-label={`${selectedPost.title}, photo ${selectedMediaIndex + 1}`} className="h-[min(48vh,480px)] w-full bg-contain bg-center bg-no-repeat" style={{ backgroundImage: `url("${assetUrl(selectedMediaPath)}")` }} />}
+              {selectedPostMedia.length > 1 && <>
+                <button
+                  type="button"
+                  onClick={() => setSelectedMediaIndex((index) => (index - 1 + selectedPostMedia.length) % selectedPostMedia.length)}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-slate-950/70 p-2 text-white hover:bg-slate-950"
+                  aria-label="Previous photo"
+                ><ChevronLeft className="h-5 w-5" /></button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedMediaIndex((index) => (index + 1) % selectedPostMedia.length)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-slate-950/70 p-2 text-white hover:bg-slate-950"
+                  aria-label="Next photo"
+                ><ChevronRight className="h-5 w-5" /></button>
+                <span className="absolute bottom-3 right-3 rounded-full bg-slate-950/75 px-3 py-1 text-xs font-bold text-white">{selectedMediaIndex + 1} / {selectedPostMedia.length}</span>
+              </>}
+            </div>
+            {selectedPostMedia.length > 1 && <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+              {selectedPostMedia.map((path, index) => <button
+                key={`${path}-${index}`}
+                type="button"
+                onClick={() => setSelectedMediaIndex(index)}
+                aria-label={`Show photo ${index + 1}`}
+                aria-current={index === selectedMediaIndex}
+                className={`relative h-14 w-16 shrink-0 overflow-hidden rounded-lg border-2 ${index === selectedMediaIndex ? 'border-red-600' : 'border-slate-200'}`}
+              >
+                {isVideoPath(path)
+                  ? <video src={assetUrl(path)} className="h-full w-full object-cover" />
+                  : <div className="h-full w-full bg-cover bg-center" style={{ backgroundImage: `url("${assetUrl(path)}")` }} />}
+              </button>)}
+            </div>}
+          </div>}
+          <div className="flex items-start justify-between gap-4">
+            <div><p className="text-[10px] font-black uppercase tracking-[0.2em] text-red-600">Post details</p><h2 id="post-details-title" className="mt-1 text-2xl font-black text-slate-900">{selectedPost.title}</h2></div>
+            <button type="button" onClick={() => setSelectedPost(null)} className="rounded-full bg-slate-100 p-2 text-slate-500" aria-label="Close post details"><X className="h-4 w-4" /></button>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <span className={`rounded-full px-2.5 py-1 text-xs font-black ${statusStyles[selectedPost.status]}`}>{statusLabels[selectedPost.status]}</span>
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">{selectedPost.platform === 'both' ? 'Facebook + Instagram' : selectedPost.platform}</span>
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">{selectedPost.content_kind.replace('_', ' ')}</span>
+          </div>
+          <dl className="mt-5 grid gap-4 sm:grid-cols-2">
+            <div><dt className="text-[10px] font-black uppercase tracking-wider text-slate-500">Scheduled</dt><dd className="mt-1 text-sm text-slate-800">{selectedPost.scheduled_at ? new Date(selectedPost.scheduled_at.replace(' ', 'T')).toLocaleString() : 'Not scheduled'}</dd></div>
+            <div><dt className="text-[10px] font-black uppercase tracking-wider text-slate-500">Assigned to</dt><dd className="mt-1 text-sm text-slate-800">{assignees.find((person) => person.id === selectedPost.assigned_to)?.name ?? (selectedPost.assigned_to ? 'Assignee unavailable' : 'Unassigned')}</dd></div>
+            <div className="sm:col-span-2"><dt className="text-[10px] font-black uppercase tracking-wider text-slate-500">Caption / post text</dt><dd className="mt-1 whitespace-pre-wrap break-words rounded-xl bg-slate-50 p-4 text-sm leading-6 text-slate-800">{selectedPost.caption || 'No caption provided.'}</dd></div>
+            <div className="sm:col-span-2"><dt className="text-[10px] font-black uppercase tracking-wider text-slate-500">Production brief</dt><dd className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">{selectedPost.task_brief || 'No production brief.'}</dd></div>
+            {selectedPost.reviewer_note && <div className="sm:col-span-2"><dt className="text-[10px] font-black uppercase tracking-wider text-slate-500">Reviewer note</dt><dd className="mt-1 whitespace-pre-wrap break-words rounded-xl bg-amber-50 p-3 text-sm leading-6 text-amber-900">{selectedPost.reviewer_note}</dd></div>}
+            {(selectedPost.facebook_post_id || selectedPost.instagram_media_id) && <div className="space-y-1 sm:col-span-2">
+              {selectedPost.facebook_post_id && <p className="break-all text-xs text-slate-600">Facebook post ID: <code>{selectedPost.facebook_post_id}</code></p>}
+              {selectedPost.instagram_media_id && <p className="break-all text-xs text-slate-600">Instagram post ID: <code>{selectedPost.instagram_media_id}</code></p>}
+            </div>}
+          </dl>
+          {selectedPost.publish_error && <div role="alert" className="mt-5 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm leading-5 text-rose-800"><strong>Publishing failed · Attempt {selectedPost.publish_attempts} of 5</strong><p className="mt-1 whitespace-pre-wrap">{selectedPost.publish_error}</p><button type="button" disabled={retryingPostId === selectedPost.id} onClick={() => { setSelectedPost(null); void retryPublishing(selectedPost); }} className="mt-2 rounded-lg border border-rose-300 bg-white px-3 py-2 text-xs font-bold disabled:opacity-50">{retryingPostId === selectedPost.id ? 'Queuing retry...' : 'Retry publishing'}</button></div>}
+          <div className="mt-6 flex justify-end gap-2 border-t border-slate-100 pt-4">
+            {selectedPost.status !== 'published' && <button type="button" onClick={() => { setDraft(toDraft(selectedPost)); setSelectedPost(null); }} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-bold text-white"><Pencil className="h-4 w-4" /> Review / edit</button>}
+            <button type="button" onClick={() => setSelectedPost(null)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600">Close</button>
+          </div>
+        </section>
+      </div>}
 
       {draft && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
-        <form onSubmit={handleDraftSubmit} className="max-h-[94vh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
+        <form onSubmit={handleDraftSubmit} className="max-h-[94vh] w-full max-w-6xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
           <div className="flex items-start justify-between"><div><p className="text-[10px] font-black uppercase tracking-[0.2em] text-red-600">{draft.id ? 'Review and edit' : 'Content planning'}</p><h2 className="mt-1 text-2xl font-black text-slate-900">{draft.id ? 'Edit content item' : 'Create content task'}</h2></div><button type="button" onClick={closeDraft} className="rounded-full bg-slate-100 p-2 text-slate-500" aria-label="Close editor"><X className="h-4 w-4" /></button></div>
           <div className="mt-5 grid gap-4 sm:grid-cols-2">
             <label className="text-xs font-bold text-slate-600 sm:col-span-2">Task / post title<input required maxLength={255} value={draft.title} onChange={(event) => setDraftField('title', event.target.value)} className={inputClass} placeholder="e.g. Sunday service highlights" /></label>
@@ -452,7 +714,10 @@ export default function SocialMediaPage() {
               <span>Attach images or video</span>
               {draft.platform !== 'facebook' && <p className="mt-1 font-normal text-slate-500">Instagram accepts JPG photos or a single MP4 video; carousels support up to 10 JPG photos.</p>}
               <div
-                onDragOver={(event) => { event.preventDefault(); setMediaDragActive(true); }}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  setMediaDragActive(event.dataTransfer.types.includes('Files'));
+                }}
                 onDragLeave={(event) => {
                   const target = event.relatedTarget;
                   if (!(target instanceof Node) || !event.currentTarget.contains(target)) setMediaDragActive(false);
@@ -460,9 +725,11 @@ export default function SocialMediaPage() {
                 onDrop={(event) => {
                   event.preventDefault();
                   setMediaDragActive(false);
+                  setDraggedMediaIndex(null);
+                  setMediaDropIndex(null);
                   chooseMediaFiles(event.dataTransfer.files);
                 }}
-                className={`mt-1 rounded-2xl border border-dashed p-4 transition-colors ${mediaDragActive ? 'border-red-400 bg-red-50' : 'border-slate-300 bg-slate-50'}`}
+                className={`mt-1 rounded-2xl border border-dashed p-5 transition-colors ${mediaDragActive ? 'border-red-400 bg-red-50' : 'border-slate-300 bg-slate-50'}`}
               >
                 <input
                   ref={mediaInputRef}
@@ -482,33 +749,99 @@ export default function SocialMediaPage() {
                   <p className="mt-1 text-[11px] font-normal text-slate-500">Choose multiple images, or one video</p>
                   <button type="button" onClick={() => mediaInputRef.current?.click()} className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold text-slate-700">Choose media</button>
                 </div>
-                {(draft.media_paths.length > 0 || draft.newMedia.length > 0) && (
-                  <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
-                    {draft.media_paths.map((path) => (
-                      <div key={`saved-${path}`} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-                        <div className="h-28 bg-slate-200">
-                          {isVideoPath(path)
-                            ? <video src={assetUrl(path)} controls className="h-full w-full object-contain" />
-                            : <div role="img" aria-label="Attached image preview" className="h-full w-full bg-contain bg-center bg-no-repeat" style={{ backgroundImage: `url("${assetUrl(path)}")` }} />}
-                        </div>
-                        <button type="button" onClick={() => removeSavedMedia(path)} className="flex w-full items-center justify-center gap-1 px-2 py-2 text-[10px] font-bold text-rose-700"><X className="h-3.5 w-3.5" /> Remove</button>
+                {draft.media.length > 0 && (
+                  <>
+                    <div className="mt-4 flex flex-wrap items-end justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-bold text-slate-800">Story order</p>
+                        <p className="mt-1 text-[11px] font-normal text-slate-500">Drag any photo onto another photo to set its place. The numbered order is used when publishing.</p>
                       </div>
-                    ))}
-                    {draft.newMedia.map((media) => (
-                      <div key={media.previewUrl} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-                        <div className="h-28 bg-slate-200">
-                          {mediaFileType(media.file) === 'video'
-                            ? <video src={media.previewUrl} controls className="h-full w-full object-contain" />
-                            : <div role="img" aria-label={media.file.name} className="h-full w-full bg-contain bg-center bg-no-repeat" style={{ backgroundImage: `url("${media.previewUrl}")` }} />}
-                        </div>
-                        <p className="truncate px-2 pt-2 text-center text-[10px] font-medium text-slate-600">{media.file.name}</p>
-                        <button type="button" onClick={() => removeNewMedia(media.previewUrl)} className="flex w-full items-center justify-center gap-1 px-2 py-2 text-[10px] font-bold text-rose-700"><X className="h-3.5 w-3.5" /> Remove</button>
-                      </div>
-                    ))}
-                  </div>
+                      <span className="rounded-full bg-white px-3 py-1 text-[10px] font-bold text-slate-600">{draft.media.length} item{draft.media.length === 1 ? '' : 's'}</span>
+                    </div>
+                    <div className="mt-3 grid max-h-[55vh] grid-cols-2 gap-4 overflow-y-auto rounded-xl border border-slate-200 bg-white/70 p-3 sm:grid-cols-3 xl:grid-cols-4">
+                      {draft.media.map((media, index) => {
+                        const previewUrl = media.kind === 'saved' ? assetUrl(media.path) : media.previewUrl;
+                        const isVideo = media.kind === 'saved'
+                          ? isVideoPath(media.path)
+                          : mediaFileType(media.file) === 'video';
+                        const key = media.kind === 'saved' ? `saved-${media.path}` : media.previewUrl;
+                        return (
+                          <div
+                            key={key}
+                            draggable={draft.media.length > 1}
+                            onDragStart={(event) => {
+                              setDraggedMediaIndex(index);
+                              setMediaDropIndex(null);
+                              event.dataTransfer.effectAllowed = 'move';
+                              event.dataTransfer.setData('application/x-social-media-index', String(index));
+                            }}
+                            onDragEnd={() => {
+                              setDraggedMediaIndex(null);
+                              setMediaDropIndex(null);
+                            }}
+                            onDragOver={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              const isReordering = event.dataTransfer.types.includes('application/x-social-media-index');
+                              event.dataTransfer.dropEffect = isReordering ? 'move' : 'copy';
+                              setMediaDropIndex(isReordering ? index : null);
+                            }}
+                            onDragLeave={(event) => {
+                              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                                setMediaDropIndex((current) => current === index ? null : current);
+                              }
+                            }}
+                            onDrop={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              setMediaDragActive(false);
+                              setDraggedMediaIndex(null);
+                              setMediaDropIndex(null);
+                              const rawSourceIndex = event.dataTransfer.getData('application/x-social-media-index');
+                              const sourceIndex = Number(rawSourceIndex);
+                              if (rawSourceIndex !== '' && Number.isInteger(sourceIndex)) {
+                                moveMedia(sourceIndex, index);
+                              } else if (event.dataTransfer.files.length > 0) {
+                                chooseMediaFiles(event.dataTransfer.files);
+                              }
+                            }}
+                            className={`overflow-hidden rounded-xl border bg-white shadow-sm transition duration-150 ${draggedMediaIndex === index ? 'scale-[0.98] opacity-40' : ''} ${mediaDropIndex === index && draggedMediaIndex !== index ? 'border-red-500 ring-4 ring-red-100' : 'border-slate-200'} ${draft.media.length > 1 ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                          >
+                            <div className="relative aspect-square bg-slate-200">
+                              {isVideo
+                                ? <video src={previewUrl} controls draggable={false} className="h-full w-full object-contain" />
+                                : <div role="img" aria-label={`Photo ${index + 1} preview`} className="h-full w-full bg-contain bg-center bg-no-repeat" style={{ backgroundImage: `url("${previewUrl}")` }} />}
+                              <span className="absolute left-2 top-2 rounded-full bg-slate-950/75 px-2 py-0.5 text-[10px] font-bold text-white">{index + 1}</span>
+                              {draft.media.length > 1 && <span className="absolute right-2 top-2 rounded-full bg-slate-950/75 px-2 py-1 text-[10px] font-bold text-white">Drag to reorder</span>}
+                            </div>
+                            {media.kind === 'new' && <p className="truncate px-2 pt-2 text-center text-[10px] font-medium text-slate-600">{media.file.name}</p>}
+                            <div className="flex items-center justify-between px-2 py-2">
+                              <div className="flex gap-1">
+                                <button
+                                  type="button"
+                                  disabled={index === 0 || saving}
+                                  onClick={() => moveMedia(index, index - 1)}
+                                  className="rounded p-1 text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30"
+                                  aria-label={`Move media ${index + 1} earlier`}
+                                ><ChevronUp className="h-4 w-4" /></button>
+                                <button
+                                  type="button"
+                                  disabled={index === draft.media.length - 1 || saving}
+                                  onClick={() => moveMedia(index, index + 1)}
+                                  className="rounded p-1 text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30"
+                                  aria-label={`Move media ${index + 1} later`}
+                                ><ChevronDown className="h-4 w-4" /></button>
+                              </div>
+                              <button type="button" disabled={saving} onClick={() => removeMedia(media)} className="flex items-center gap-1 rounded px-2 py-1 text-[10px] font-bold text-rose-700 disabled:opacity-50"><X className="h-3.5 w-3.5" /> Remove</button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
                 )}
               </div>
-              <span className="mt-1 block font-normal text-slate-400">Images: JPG, PNG, WEBP, GIF. Video: MP4, MOV, WEBM (one video only). Maximum 100 MB per file.</span>
+              <span className="mt-1 block font-normal text-slate-400">Images: JPG, PNG, WEBP, GIF (each under 10 MB). Video: MP4, MOV, WEBM (one video only, up to 100 MB).</span>
             </div>
             {draft.reviewer_note && <p className="rounded-xl border border-amber-100 bg-amber-50 p-3 text-xs text-amber-900 sm:col-span-2">Reviewer note: {draft.reviewer_note}</p>}
           </div>

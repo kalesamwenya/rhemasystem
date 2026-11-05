@@ -188,9 +188,9 @@ export default function FacebookPageDashboard() {
       setError(`${unsupported.name} is not a supported photo. Choose JPG, PNG, WEBP, or GIF.`);
       return;
     }
-    const tooLarge = selected.find((file) => file.size > 100 * 1024 * 1024);
+    const tooLarge = selected.find((file) => file.size >= 10 * 1024 * 1024);
     if (tooLarge) {
-      setError(`${tooLarge.name} is larger than the 100 MB per-file limit.`);
+      setError(`${tooLarge.name} must be smaller than 10 MB for Meta publishing.`);
       return;
     }
     setError('');
