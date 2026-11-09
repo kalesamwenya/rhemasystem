@@ -47,6 +47,7 @@ export default function PartnershipApplicationWizard() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [receiptEmailSent, setReceiptEmailSent] = useState<boolean | null>(null);
   const stepContentRef = useRef<HTMLDivElement>(null);
 
   const update = (field: keyof FormState, value: string) => {
@@ -92,7 +93,8 @@ export default function PartnershipApplicationWizard() {
     setSubmitting(true);
     setError("");
     try {
-      await api.partnerships.submitApplication(form);
+      const result = await api.partnerships.submitApplication(form);
+      setReceiptEmailSent(result?.email_sent === true);
       setSubmitted(true);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to submit your partnership application.");
@@ -105,6 +107,7 @@ export default function PartnershipApplicationWizard() {
     setForm(initialForm);
     setStep(0);
     setSubmitted(false);
+    setReceiptEmailSent(null);
     setError("");
   };
 
@@ -115,7 +118,12 @@ export default function PartnershipApplicationWizard() {
           <CheckCircle2 className="mx-auto h-14 w-14 text-emerald-600" />
           <p className="mt-5 text-xs font-black uppercase tracking-[0.2em] text-emerald-700">Application received</p>
           <h3 className="mt-2 text-2xl font-black text-[#10283a] sm:text-3xl">Thank you for reaching out.</h3>
-          <p className="mt-3 text-sm leading-6 text-slate-600">The Rhema Zambia team will review your partnership proposal and follow up using the contact details you provided.</p>
+          <p className="mt-3 text-sm leading-6 text-slate-600">
+            Your application has been received and will be reviewed by the Rhema Zambia team.
+            {receiptEmailSent
+              ? " A confirmation email is on its way. If your application is approved, you will receive a separate email with a secure, one-time link to create your partner account password."
+              : " We could not send a confirmation email, but this will not affect the review. If your application is approved, we will contact you with a secure, one-time link to create your partner account password."}
+          </p>
           <button type="button" onClick={startAnother} className="mt-6 rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50">Submit another application</button>
         </div>
       ) : (
