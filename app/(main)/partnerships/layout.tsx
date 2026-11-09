@@ -2,8 +2,8 @@ import { publicPageMetadata } from "@/lib/site-seo";
 
 export const metadata = publicPageMetadata(
   "/partnerships",
-  "Partnerships",
-  "Explore partnership opportunities with Rhema Zambia and learn how organizations can work with the Bible Training Center.",
+  "Community and Partnerships",
+  "Stay connected through Rhema Zambia alumni, ministerial fellowship and partnership with the work of Rhema Zambia.",
 );
 
 export default function PartnershipsLayout({ children }: Readonly<{ children: React.ReactNode }>) {

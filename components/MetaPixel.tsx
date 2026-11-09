@@ -108,7 +108,7 @@ export default function MetaPixel() {
           </div>
         </aside>
       ) : (
-        <button type="button" onClick={reopenPreferences} className="fixed bottom-2 right-2 z-[140] rounded-full border border-slate-300 bg-white/95 px-2.5 py-1.5 text-[10px] font-semibold text-slate-600 shadow-sm hover:text-slate-950">
+        <button type="button" onClick={reopenPreferences} className="fixed bottom-2 left-2 z-[140] rounded-full border border-slate-300 bg-white/95 px-2.5 py-1.5 text-[10px] font-semibold text-slate-600 shadow-sm hover:text-slate-950">
           Cookie settings
         </button>
       )}

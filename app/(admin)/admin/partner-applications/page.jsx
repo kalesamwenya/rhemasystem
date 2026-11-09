@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { Check, Clock3, RefreshCw, X } from "lucide-react";
 import { api } from "@/lib/api";
 
@@ -13,6 +14,7 @@ export default function PartnerApplicationsPage() {
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState(null);
+  const [inviteSavingId, setInviteSavingId] = useState(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
@@ -52,6 +54,24 @@ export default function PartnerApplicationsPage() {
     }
   };
 
+  const sendSetupEmail = async (application) => {
+    setInviteSavingId(application.id);
+    setError("");
+    setMessage("");
+    try {
+      const response = await api.partnerships.issueInvite(application.id);
+      setMessage(response.email_sent === true
+        ? `A new one-time account setup link was emailed to ${application.email}.`
+        : response.email_sent === false
+          ? `A setup link was created, but the email could not be sent. Check SMTP and portal URL settings. Use Partner management to copy and securely deliver the link to ${application.email}.`
+          : `The API created a setup link but did not report email delivery. Deploy the updated PHP partnership API to enable branded email; use Partner management to securely copy the link for ${application.email}.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to send the partner setup email.");
+    } finally {
+      setInviteSavingId(null);
+    }
+  };
+
   return (
     <main className="mx-auto max-w-7xl space-y-6">
       <header className="rounded-3xl bg-slate-950 p-7 text-white sm:p-9">
@@ -65,6 +85,7 @@ export default function PartnerApplicationsPage() {
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Refresh
           </button>
         </div>
+        <Link href="/admin/partnerships" className="mt-4 inline-flex text-xs font-bold text-amber-300 hover:underline">Manage approved partners, opportunities, and pledges →</Link>
       </header>
 
       {message ? <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">{message}</div> : null}
@@ -87,18 +108,28 @@ export default function PartnerApplicationsPage() {
                 <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
                   <p><strong className="text-slate-800">Organization type:</strong> <span className="text-slate-600">{application.partner_type}</span></p>
                   <p><strong className="text-slate-800">Area:</strong> <span className="text-slate-600">{application.area}</span></p>
+                  <p><strong className="text-slate-800">Support type:</strong> <span className="capitalize text-slate-600">{application.support_type || "financial"}</span></p>
                 </div>
+                {application.service_departments?.length ? <p className="mt-3 text-sm"><strong className="text-slate-800">Departments offered:</strong> <span className="text-slate-600">{application.service_departments.map((department) => department === "Other" && application.other_department ? application.other_department : department).join(", ")}</span></p> : null}
                 <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-600">{application.details}</p>
                 <p className="mt-4 text-xs text-slate-400">Submitted {formatDate(application.created_at)}{application.reviewed_at ? ` · Reviewed ${formatDate(application.reviewed_at)}` : ""}</p>
+                {application.approval_status === "approved" ? <p className="mt-2 text-xs font-bold text-blue-800">Partner portal: {application.account_status || "Setup invitation not yet accepted"}</p> : null}
               </div>
-              {application.approval_status === "pending" ? (
-                <div className="flex h-fit shrink-0 gap-2">
+              {application.approval_status === "pending" || (application.approval_status === "approved" && application.account_status !== "active") ? (
+                <div className="flex h-fit shrink-0 flex-wrap gap-2">
+                  {application.approval_status === "approved" && application.account_status !== "active" ? (
+                    <button type="button" disabled={inviteSavingId === application.id} onClick={() => void sendSetupEmail(application)} className="inline-flex items-center gap-1.5 rounded-xl bg-blue-800 px-3 py-2 text-xs font-black text-white hover:bg-blue-900 disabled:opacity-50">
+                      {inviteSavingId === application.id ? "Sending setup email…" : "Send account setup email"}
+                    </button>
+                  ) : null}
+                  {application.approval_status === "pending" ? <>
                   <button type="button" disabled={savingId === application.id} onClick={() => void decide(application, "approved")} className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-700 px-3 py-2 text-xs font-black text-white hover:bg-emerald-800 disabled:opacity-50">
                     <Check className="h-4 w-4" /> Approve
                   </button>
                   <button type="button" disabled={savingId === application.id} onClick={() => void decide(application, "rejected")} className="inline-flex items-center gap-1.5 rounded-xl bg-rose-700 px-3 py-2 text-xs font-black text-white hover:bg-rose-800 disabled:opacity-50">
                     <X className="h-4 w-4" /> Reject
                   </button>
+                  </> : null}
                 </div>
               ) : null}
             </div>

@@ -9,6 +9,7 @@ const publicPages = [
   "offered-programs",
   "faculty",
   "community",
+  "community/partnership/application",
   "fee-structure",
   "apply",
   "events",
@@ -16,7 +17,6 @@ const publicPages = [
   "terms",
   "contact",
   "partnerships",
-  "partnerships/apply",
 ];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {

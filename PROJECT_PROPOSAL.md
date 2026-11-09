@@ -1,51 +1,54 @@
-# Rhema Digital School Platform
+# Rhema Learning Management System
 
 ## Project overview and presentation brief
 
-**Prepared for:** School leadership, staff and stakeholders  
-**Project:** Rhema Student, Academic and School Operations Portal  
-**Document purpose:** Introduce the platform, its benefits, current capabilities and recommended next steps
+- **Prepared for:** School leadership, staff and stakeholders
+- **Project:** Rhema Learning Management System (LMS)
+- **Document purpose:** Present the LMS vision, strengths, current capabilities and recommended next steps
+
+> **A connected learning journey—from course access and teaching to assessment, feedback and progress.**
 
 ---
 
 ## 1. Executive summary
 
-The Rhema Digital School Platform is a connected web-based environment for student services, academic activity, school administration, payments and community engagement. It brings important school workflows into one branded portal, supported by a shared application programming interface (API) and central database.
+The Rhema Learning Management System is the academic heart of a connected digital school platform. It brings students, lecturers and academic teams into one web-based learning environment where courses, schedules, learning resources, assessments, submissions, attendance and grades can work together around the student learning journey.
 
-Students can access relevant learning information, resources, attendance, billing, events and purchases through a student portal. Lecturers have a separate workspace for course activity, assignments, submissions and grading. Administrators use a protected workspace with access determined by their role and department.
+Students have a dedicated portal to find their courses, follow class schedules and learning activity, access course materials, complete supported assessments, submit assignments and review results. Lecturers have a separate teaching workspace to manage assigned courses, set and review learning activities, assess submissions, record marks and provide structured feedback. Academic administrators can oversee courses, schedules, resources and related school processes through protected, role-appropriate tools.
 
-The administrative dashboards are separated by department: Director, Accounts, Student Affairs, Academic Dean, Media & IT, and Operations. Each department sees its own dashboard and appropriate modules. A separate Shared Reports area allows an authorized administrator to send a view-only report to one or more selected departments. Recipients receive an in-app notification and can open only reports shared with them.
+What distinguishes the project is its joined-up approach. Teaching and learning are connected to the operational services that support them: attendance and follow-up, student records, notifications, billing and eligible payments, admissions, library resources and school administration. A shared application programming interface (API) and central database support these workflows, while separate student, lecturer and administrator workspaces keep each experience focused on its audience.
 
-The platform is designed to reduce fragmented record-keeping, improve service to students and staff, strengthen operational visibility and provide a foundation for the school’s continued digital development.
+The platform is designed to give the school a strong foundation for a high-quality LMS: practical for everyday teaching, clear for students, useful for lecturers and extensible as academic needs evolve. Moodle-related integrations provide an additional connection point where configured, while the Rhema portal provides a unified experience for the school’s own learning and administrative services.
 
-### The platform’s strongest capabilities
+### Why the Rhema LMS stands out
 
-- **One connected digital campus:** public school information, student and lecturer services, and administration work together through one portal and central records.
-- **Purpose-built workspaces:** students, lecturers and six administrator departments see tools relevant to their responsibilities.
-- **Live operational insight:** dashboards summarize available live records with statistics and charts, rather than relying on invented sample figures.
-- **End-to-end transactions:** supported payment workflows connect checkout, server-side verification, transaction records and branded PDF receipts.
-- **Controlled collaboration:** administrators can share a view-only report with several selected departments, with in-app notifications and server-side access checks.
-- **Room to grow:** the portal is built as a connected web application with an API and database, allowing the school to improve and extend workflows over time.
+- **Learning-centred design:** courses, resources, class sessions, attendance, assessment and results are connected around the student’s academic experience.
+- **A complete teaching and assessment cycle:** lecturers can create and manage supported assignments and assessments, review submissions, record marks and return meaningful feedback.
+- **Visible learning activity:** students can follow course progress, schedules, upcoming assessment activity, attendance and results from their own portal.
+- **Feedback that supports improvement:** assignment review includes lecturer comments and saved text annotations; automated writing checks and AI-assisted reviews are advisory, not substitutes for academic judgement.
+- **Connected academic operations:** course delivery is supported by student records, academic schedules, attendance workflows, notifications, library resources and administrative tools.
+- **Purpose-built access:** students, lecturers and administrators work in separate, role-appropriate spaces, with protected APIs enforcing access to sensitive operations.
+- **A platform that can grow:** a central API, database and modular service structure give the school a foundation for extending learning workflows and integrations.
 
 ## 2. The opportunity
 
-Schools rely on timely, accurate information and clear processes. When records and activities are spread across forms, spreadsheets, messages and manual follow-up, staff may need to enter the same information repeatedly, students may be unsure where to find services, and leadership may not have a current view of school operations.
+High-quality learning depends on more than delivering course content. Students need a reliable way to find what to learn, understand when learning activities take place, complete and submit work, receive feedback and see their progress. Lecturers need practical tools to organize courses, assess learning and communicate outcomes. Academic teams need a dependable view of the records and processes that support teaching.
 
-The platform provides a unified digital environment where selected activities can be recorded and managed consistently. It connects people and workflows without giving every administrator unrestricted access to every department’s workspace.
+When these activities are scattered across disconnected tools, the learning experience becomes harder to follow and academic administration can become repetitive. Rhema addresses this by connecting core teaching-and-learning workflows in one LMS, then linking them to the student, attendance, communication and administrative services that support the wider school.
 
-> **One school platform. Department-specific workspaces. Reports shared with purpose.**
+The ambition is not simply to put existing forms online. It is to give the school a coherent digital learning environment that can support consistent course delivery, timely feedback and clearer academic engagement—while remaining practical to administer and ready to develop further.
 
 ## 3. Project objectives
 
-The project aims to:
+The LMS and its supporting platform aim to:
 
-1. Give students, lecturers and administrators clear, role-appropriate online workspaces.
-2. Bring core student, academic, payment, attendance, event and store records into a connected system.
-3. Reduce avoidable manual administration and repeated data entry.
-4. Improve the visibility and traceability of school transactions and operational activity.
-5. Provide leadership and departments with useful dashboards and reports based on available system data.
-6. Enable secure collaboration by sharing reports with selected departments.
-7. Establish a maintainable foundation for future school services and integrations.
+1. Provide students with a clear digital home for courses, learning resources, schedules, assignments, assessments, attendance and results.
+2. Equip lecturers to organize assigned teaching, create learning activities, review submissions, assess student work and provide useful feedback.
+3. Connect the academic journey—from enrolment and course participation through assessment and progress review.
+4. Support consistent academic processes with shared records, notifications and role-appropriate administrative oversight.
+5. Reduce avoidable fragmentation between learning activities and the student services that support them.
+6. Protect student and academic information through separate workspaces and server-side role and access checks.
+7. Build an adaptable foundation for future learning features, integrations and improvements informed by students, lecturers and school leadership.
 
 ## 4. Platform users and workspaces
 
@@ -266,7 +269,7 @@ Targets should be agreed by the school after establishing a baseline during the 
 
 To proceed responsibly, the school is asked to:
 
-1. Approve a phased pilot of the Rhema Digital School Platform.
+1. Approve a phased pilot of the Rhema Learning Management System and its supporting school-platform services.
 2. Confirm the authorized school sponsor and department leads.
 3. Approve the proposed role and department mappings.
 4. Confirm policies for shared reports, data confidentiality, and account management.
@@ -276,7 +279,7 @@ To proceed responsibly, the school is asked to:
 
 ## 13. Conclusion
 
-The Rhema Digital School Platform offers the school a practical foundation for connecting student services, academic work and administration. Its department-specific dashboards support focused work; its Shared Reports feature provides a controlled way to communicate across departments; and its connected workflows can improve the handling of payments, receipts, learning resources, attendance, events and communication.
+The Rhema Learning Management System puts teaching and learning at the centre of a connected digital school experience. It brings course delivery, resources, assessments, submissions, feedback and academic progress into one environment, supported by services for student records, attendance, communication and school administration. This gives Rhema a practical foundation for a more coherent learning journey today and a platform it can continue to improve with input from students, lecturers and school leadership.
 
 The recommended next step is a school-led readiness review followed by a controlled pilot. This allows Rhema to validate the platform against real operating practices, confirm data and security requirements, and make an informed decision about wider adoption.
 

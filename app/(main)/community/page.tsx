@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Handshake } from "lucide-react";
 import { useManagedPageContent } from "@/lib/use-managed-page-content";
 import MainPageSkeleton from "@/components/main/MainPageSkeleton";
+import NewsletterSignup from "@/components/newsletters/NewsletterSignup";
 
 export default function CommunityPage() {
   const { content, error, isLoading } = useManagedPageContent("community");
@@ -52,15 +53,13 @@ export default function CommunityPage() {
           <p className="text-[11px] font-black uppercase tracking-[0.2em] text-blue-800">{content.partnerships_badge}</p>
           <h2 className="mt-3 max-w-2xl whitespace-pre-line text-3xl font-black leading-tight tracking-tight text-[#10283a] sm:text-4xl">{content.partnerships_title}</h2>
           <p className="mt-4 max-w-2xl whitespace-pre-line text-sm leading-7 text-slate-700">{content.partnerships_description}</p>
-          <Link href="/contact#contact-details" className="mt-5 inline-flex items-center gap-2 rounded-full bg-rhema-red px-5 py-3 text-xs font-black text-white shadow-md shadow-red-900/10 transition hover:bg-rhema-red-dark">Partnership details <ArrowRight size={14} /></Link>
+          <Link href="/community/partnership/application" className="mt-5 inline-flex items-center gap-2 rounded-full bg-rhema-red px-5 py-3 text-xs font-black text-white shadow-md shadow-red-900/10 transition hover:bg-rhema-red-dark"><Handshake size={15} /> Enquire about partnership <ArrowRight size={14} /></Link>
         </div>
         <aside className="h-fit rounded-2xl border border-slate-200 bg-white p-5">
           <h2 className="text-lg font-black text-[#10283a]">{content.links_title}</h2>
           <ul className="mt-3 space-y-1 text-sm font-semibold text-slate-600">
-            <li><a href="#alumni" className="block rounded-lg px-2 py-2 hover:bg-slate-50 hover:text-blue-800">Alumni association</a></li>
             <li><a href="#rmai" className="block rounded-lg px-2 py-2 hover:bg-slate-50 hover:text-blue-800">RMAI</a></li>
-            <li><a href="#partnerships" className="block rounded-lg px-2 py-2 hover:bg-slate-50 hover:text-blue-800">Partnership details</a></li>
-            <li><Link href="/events" className="block rounded-lg px-2 py-2 hover:bg-slate-50 hover:text-blue-800">Events and gatherings</Link></li>
+            <li><Link href="/community/partnership/application" className="block rounded-lg px-2 py-2 hover:bg-slate-50 hover:text-blue-800">Enquire about partnership</Link></li>
             <li><Link href="/contact" className="block rounded-lg px-2 py-2 hover:bg-slate-50 hover:text-blue-800">Contact the office</Link></li>
           </ul>
         </aside>
@@ -75,6 +74,8 @@ export default function CommunityPage() {
           <Link href="/events" className="inline-flex w-fit items-center gap-2 rounded-full bg-rhema-blue px-5 py-3 text-sm font-black text-white transition hover:bg-blue-900">View events <ArrowRight size={16} /></Link>
         </div>
       </section>
+
+      <NewsletterSignup />
     </div>
   );
 }

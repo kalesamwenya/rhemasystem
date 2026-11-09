@@ -28,6 +28,7 @@ import {
   LifeBuoy,
   LogOut,
   MessageSquareText,
+  Mail,
   Share2,
   ShieldCheck,
   ShoppingBag,
@@ -90,6 +91,7 @@ const navigationGroups: NavGroup[] = [
     items: [
       { title: 'Admissions', href: '/admin/admissions', module: 'admissions', icon: ClipboardCheck },
       { title: 'Partnership applications', href: '/admin/partner-applications', module: 'partnerships', icon: Handshake },
+      { title: 'Partner management', href: '/admin/partnerships', module: 'partnerships', icon: Handshake },
       { title: 'Student Directory', href: '/admin/students', module: 'students', icon: Users },
       { title: 'Staff & Lecturers', href: '/admin/people', module: 'people', icon: UserCog },
     ],
@@ -109,6 +111,7 @@ const navigationGroups: NavGroup[] = [
     title: 'Communications',
     items: [
       { title: 'Communications', href: '/admin/communications', module: 'communications', icon: MessageSquareText, badge: 'Live' },
+      { title: 'Newsletter', href: '/admin/newsletters', module: 'communications', icon: Mail },
       { title: 'Messages & alerts', href: '/admin/messages', module: 'communications', icon: MessageSquareText },
       { title: 'Website Chatbot', href: '/admin/chatbot', module: 'chatbot', icon: Bot },
       { title: 'Website contact messages', href: '/admin/contact-messages', module: 'contact-messages', icon: MessageSquareText },
