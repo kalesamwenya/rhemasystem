@@ -126,7 +126,7 @@ export default function StudentGradesPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {courseSummaries.map((course, index) => (
-                      <tr key={course.id} className={index % 2 === 0 ? 'bg-slate-50/70' : 'bg-white'}>
+                      <tr key={course.course_id} className={index % 2 === 0 ? 'bg-slate-50/70' : 'bg-white'}>
                         <td className="p-4">
                           <Link href={`/student/grades/${encodeURIComponent(course.course_id)}`} className="font-semibold text-blue-900 hover:text-blue-700 hover:underline">
                             {course.course_name}
