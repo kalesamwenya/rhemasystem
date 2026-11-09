@@ -1,49 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Download, Eye, Loader2 } from 'lucide-react';
+import Link from 'next/link';
+import { ArrowRight, Download, Eye, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { exportBrandedPdf } from '@/lib/branded-pdf';
-
-type StudentGrade = {
-  course_id: string;
-  course_name: string;
-  item_name: string;
-  item_type: string;
-  item_module: string | null;
-  maximum_grade: number;
-  grade: number | null;
-  feedback: string;
-};
+import { formatGrade, getCourseTotal, getGradePercentage, summarizeGrades, type StudentGrade } from '@/lib/student-grades';
 
 type GradesResponse = { data: StudentGrade[] };
-
-function isActivityGrade(grade: StudentGrade) {
-  return grade.item_type.toLowerCase() === 'mod' && Boolean(grade.item_module);
-}
-
-function summarizeGrades(grades: StudentGrade[]) {
-  const gradedActivities = grades.filter((grade) =>
-    isActivityGrade(grade)
-    && grade.grade !== null
-    && Number.isFinite(grade.grade)
-    && Number.isFinite(grade.maximum_grade)
-    && grade.maximum_grade > 0,
-  );
-  const earned = gradedActivities.reduce((total, grade) => total + (grade.grade ?? 0), 0);
-  const possible = gradedActivities.reduce((total, grade) => total + grade.maximum_grade, 0);
-  return {
-    earned,
-    possible,
-    percentage: possible > 0 ? (earned / possible) * 100 : null,
-    gradedActivityCount: gradedActivities.length,
-    activityCount: grades.filter(isActivityGrade).length,
-  };
-}
-
-function formatGrade(value: number) {
-  return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
-}
 
 export default function StudentGradesPage() {
   const [grades, setGrades] = useState<StudentGrade[]>([]);
@@ -143,7 +107,7 @@ export default function StudentGradesPage() {
         <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">No published grades are available for your enrolled courses yet.</div>
       ) : (
         <>
-          <section aria-label="Cumulative activity grades" className="grid gap-3 sm:grid-cols-2">
+          <section aria-label="Cumulative activity grades" className="grid gap-3">
             <article className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-950 to-blue-800 p-5 text-white shadow-sm">
               <p className="text-xs font-bold uppercase tracking-wider text-blue-100">Cumulative grade · all courses</p>
               <p className="mt-2 text-3xl font-black">
@@ -156,38 +120,52 @@ export default function StudentGradesPage() {
                 {' · '}{overallSummary.gradedActivityCount} of {overallSummary.activityCount} activities graded
               </p>
             </article>
-            {courseSummaries.map((course) => (
-              <article key={course.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <p className="truncate text-xs font-bold uppercase tracking-wider text-slate-500">{course.name}</p>
-                <p className="mt-2 text-2xl font-black text-slate-900">
-                  {course.summary.possible > 0
-                    ? `${formatGrade(course.summary.earned)} / ${formatGrade(course.summary.possible)}`
-                    : 'Pending'}
-                  {course.summary.percentage !== null && <span className="ml-2 text-base font-bold text-blue-800">({course.summary.percentage.toFixed(1)}%)</span>}
-                </p>
-                <p className="mt-1 text-xs text-slate-500">
-                  {course.summary.gradedActivityCount} of {course.summary.activityCount} activities graded
-                </p>
-              </article>
-            ))}
           </section>
-          <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                <tr><th className="p-4">Course</th><th className="p-4">Assessment</th><th className="p-4">Type</th><th className="p-4 text-right">Grade</th></tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {grades.map((grade, index) => (
-                  <tr key={`${grade.course_id}-${grade.item_name}-${index}`}>
-                    <td className="p-4 font-semibold text-slate-800">{grade.course_name}</td>
-                    <td className="p-4 text-slate-700">{grade.item_name || 'Course total'}</td>
-                    <td className="p-4 capitalize text-slate-500">{grade.item_module || grade.item_type}</td>
-                    <td className="p-4 text-right font-mono font-semibold text-slate-800">{grade.grade === null ? 'Pending' : `${grade.grade} / ${grade.maximum_grade}`}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <section aria-label="Course grades" className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="border-b border-slate-100 px-5 py-4">
+              <h2 className="font-bold text-slate-900">Grades by course</h2>
+              <p className="mt-1 text-xs text-slate-500">Select a course to see its published assessment results.</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[560px] text-left text-sm">
+                <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                  <tr><th className="p-4">Course</th><th className="p-4">Assessments graded</th><th className="p-4 text-right">Course grade</th><th className="p-4"></th></tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {courseSummaries.map((course, index) => {
+                    const publishedTotal = getCourseTotal(course.grades);
+                    const totalPercentage = publishedTotal ? getGradePercentage(publishedTotal) : course.summary.percentage;
+                    const shownGrade = publishedTotal?.grade !== null && publishedTotal?.grade !== undefined
+                      ? `${formatGrade(publishedTotal.grade)} / ${formatGrade(publishedTotal.maximum_grade)}`
+                      : course.summary.possible > 0
+                        ? `${formatGrade(course.summary.earned)} / ${formatGrade(course.summary.possible)}`
+                        : 'Pending';
+                    return (
+                      <tr key={course.id} className={index % 2 === 0 ? 'bg-slate-50/70' : 'bg-white'}>
+                        <td className="p-4">
+                          <Link href={`/student/grades/${encodeURIComponent(course.id)}`} className="font-semibold text-blue-900 hover:text-blue-700 hover:underline">
+                            {course.name}
+                          </Link>
+                        </td>
+                        <td className="p-4 text-slate-600">{course.summary.gradedActivityCount} of {course.summary.activityCount}</td>
+                        <td className="p-4 text-right font-mono font-semibold text-slate-800">
+                          {shownGrade}
+                          <span className="ml-2 text-xs font-sans text-slate-500">
+                            {totalPercentage === null ? '' : `${totalPercentage.toFixed(2)}%`}
+                          </span>
+                        </td>
+                        <td className="p-4 text-right">
+                          <Link aria-label={`View ${course.name} grade details`} href={`/student/grades/${encodeURIComponent(course.id)}`} className="inline-flex items-center gap-1 text-xs font-bold text-blue-900 hover:underline">
+                            Details <ArrowRight className="h-3.5 w-3.5" />
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
         </>
       )}
     </main>

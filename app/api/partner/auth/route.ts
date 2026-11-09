@@ -43,24 +43,37 @@ export async function POST(request: Request) {
     return Response.json({ success: false, message: "Partner authentication service unavailable." }, { status: 502 });
   }
 
-  let data;
+  const responseBody = await response.text();
+  let data: unknown;
   try {
-    data = await response.json();
-  } catch (error) {
-    console.error("Partner authentication service returned a non-JSON response.", error);
-    return Response.json({ success: false, message: "Partner authentication service returned an invalid response." }, { status: 502 });
+    data = JSON.parse(responseBody);
+  } catch {
+    const contentType = response.headers.get("content-type") || "unknown";
+    console.error("Partner authentication service returned a non-JSON response.", {
+      status: response.status,
+      contentType,
+    });
+    return Response.json({
+      success: false,
+      message: `Partner authentication API returned an invalid response (HTTP ${response.status}). Please contact support.`,
+    }, { status: 502 });
   }
 
-  if (!response.ok || !data.success) {
+  if (typeof data !== "object" || data === null || !("success" in data)) {
+    console.error("Partner authentication service returned an unexpected JSON response.", { status: response.status });
+    return Response.json({ success: false, message: "Partner authentication API returned an unexpected response." }, { status: 502 });
+  }
+
+  if (!response.ok || data.success !== true) {
     return Response.json(data, { status: response.status });
   }
 
   if (action === "logout") {
     cookieStore.delete(SESSION_COOKIE);
-    return Response.json({ success: true, message: data.message });
+    return Response.json({ success: true, message: "message" in data ? data.message : undefined });
   }
 
-  if (typeof data.token !== "string") {
+  if (!("token" in data) || typeof data.token !== "string") {
     return Response.json({ success: false, message: "Partner authentication returned an invalid session." }, { status: 502 });
   }
   cookieStore.set(SESSION_COOKIE, data.token, {
@@ -70,5 +83,5 @@ export async function POST(request: Request) {
     path: "/",
     maxAge: 60 * 60 * 8,
   });
-  return Response.json({ success: true, partner: data.partner }, { status: response.status });
+  return Response.json({ success: true, partner: "partner" in data ? data.partner : undefined }, { status: response.status });
 }
