@@ -1,14 +1,11 @@
 import { cookies } from "next/headers";
+import { getServerApiBaseUrl } from "@/lib/server-api-url";
 
 const SESSION_COOKIE = "rhema_partner_session";
 
 function isSameOrigin(request: Request): boolean {
   const origin = request.headers.get("origin");
   return Boolean(origin && origin === new URL(request.url).origin);
-}
-
-function apiBaseUrl(): string {
-  return (process.env.NEXT_PUBLIC_API_URL || "https://systemtest.citydrivehire.com").replace(/\/$/, "");
 }
 
 export async function POST(request: Request) {
@@ -33,35 +30,45 @@ export async function POST(request: Request) {
   const existingToken = cookieStore.get(SESSION_COOKIE)?.value;
   if (action === "logout" && existingToken) headers.Authorization = `Bearer ${existingToken}`;
 
+  let response: Response;
   try {
-    const response = await fetch(`${apiBaseUrl()}/partnerships/auth.php`, {
+    response = await fetch(`${getServerApiBaseUrl()}/partnerships/auth.php`, {
       method: "POST",
       headers,
       body: payload,
       cache: "no-store",
     });
-    const data = await response.json();
-    if (!response.ok || !data.success) {
-      return Response.json(data, { status: response.status });
-    }
-
-    if (action === "logout") {
-      cookieStore.delete(SESSION_COOKIE);
-      return Response.json({ success: true, message: data.message });
-    }
-
-    if (typeof data.token !== "string") {
-      return Response.json({ success: false, message: "Partner authentication returned an invalid session." }, { status: 502 });
-    }
-    cookieStore.set(SESSION_COOKIE, data.token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge: 60 * 60 * 8,
-    });
-    return Response.json({ success: true, partner: data.partner }, { status: response.status });
-  } catch {
+  } catch (error) {
+    console.error("Partner authentication request failed.", error);
     return Response.json({ success: false, message: "Partner authentication service unavailable." }, { status: 502 });
   }
+
+  let data;
+  try {
+    data = await response.json();
+  } catch (error) {
+    console.error("Partner authentication service returned a non-JSON response.", error);
+    return Response.json({ success: false, message: "Partner authentication service returned an invalid response." }, { status: 502 });
+  }
+
+  if (!response.ok || !data.success) {
+    return Response.json(data, { status: response.status });
+  }
+
+  if (action === "logout") {
+    cookieStore.delete(SESSION_COOKIE);
+    return Response.json({ success: true, message: data.message });
+  }
+
+  if (typeof data.token !== "string") {
+    return Response.json({ success: false, message: "Partner authentication returned an invalid session." }, { status: 502 });
+  }
+  cookieStore.set(SESSION_COOKIE, data.token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 8,
+  });
+  return Response.json({ success: true, partner: data.partner }, { status: response.status });
 }

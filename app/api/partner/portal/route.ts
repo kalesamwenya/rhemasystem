@@ -1,10 +1,7 @@
 import { cookies } from "next/headers";
+import { getServerApiBaseUrl } from "@/lib/server-api-url";
 
 const SESSION_COOKIE = "rhema_partner_session";
-
-function apiBaseUrl(): string {
-  return (process.env.NEXT_PUBLIC_API_URL || "https://systemtest.citydrivehire.com").replace(/\/$/, "");
-}
 
 async function forward(request: Request) {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
@@ -20,7 +17,7 @@ async function forward(request: Request) {
   if (body) headers["Content-Type"] = "application/json";
 
   try {
-    const response = await fetch(`${apiBaseUrl()}/partnerships/portal.php`, {
+    const response = await fetch(`${getServerApiBaseUrl()}/partnerships/portal.php`, {
       method: request.method,
       headers,
       body,
