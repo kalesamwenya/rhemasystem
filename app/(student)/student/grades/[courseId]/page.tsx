@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
-import { formatGrade, getCourseTotal, getGradePercentage, isActivityGrade, summarizeGrades, type StudentGrade } from '@/lib/student-grades';
+import { formatGrade, getCourseTotal, getGradePercentage, getLetterGrade, getGradePoints, isActivityGrade, summarizeGrades, summarizeCourseGrades, type StudentGrade } from '@/lib/student-grades';
 
 type GradesResponse = { data: StudentGrade[] };
 
@@ -43,6 +43,7 @@ export default function StudentCourseGradesPage() {
   );
   const activities = courseGrades.filter(isActivityGrade);
   const summary = summarizeGrades(courseGrades);
+  const courseSummary = summarizeCourseGrades(courseGrades)[0];
   const courseTotal = getCourseTotal(courseGrades);
   const hasPublishedTotal = courseTotal?.grade !== null && courseTotal?.grade !== undefined;
   const totalGrade = courseTotal && courseTotal.grade !== null
@@ -87,9 +88,14 @@ export default function StudentCourseGradesPage() {
                 <p className="mt-1 text-sm text-slate-500">
                   {hasPublishedTotal ? 'Published course grade' : 'Calculated from graded activities; the published course total is not available yet.'}
                 </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Level {courseSummary?.academic_level ?? '—'} · {courseSummary?.course_sessions ?? 0} sessions · {courseSummary?.course_hours.toFixed(2) ?? '0.00'} hours
+                </p>
               </div>
               <p className="text-xl font-black text-blue-900">
-                {totalPercentage === null ? 'Pending' : `${totalPercentage.toFixed(2)}%`}
+                {totalPercentage === null
+                  ? 'Pending'
+                  : `${totalPercentage.toFixed(2)}% · ${getLetterGrade(totalPercentage)} · ${getGradePoints(totalPercentage).toFixed(1)} GPA`}
               </p>
             </div>
           </section>

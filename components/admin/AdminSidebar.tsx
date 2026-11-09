@@ -101,6 +101,7 @@ const navigationGroups: NavGroup[] = [
     items: [
       { title: 'Academic Registry', href: '/admin/courses', module: 'academics', icon: BookOpen },
       { title: 'Assessment Manager', href: '/admin/assessments', module: 'academics', icon: FileSpreadsheet },
+      { title: 'Grade Assembly & Transcripts', href: '/admin/grade-assembly', module: 'academics', icon: GraduationCap },
       { title: 'Student Affairs', href: '/admin/student-affairs', module: 'student-affairs', icon: Users },
       { title: 'Church Service Hours', href: '/admin/student-affairs/service-hours', module: 'student-affairs', icon: Clock3 },
       { title: 'Class Timetabling', href: '/admin/schedule', module: 'schedule', icon: CalendarDays },

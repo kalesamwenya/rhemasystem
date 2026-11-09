@@ -46,6 +46,7 @@ const linksByDepartment: Record<string, WorkspaceLink[]> = {
   ],
   academic: [
     { label: 'Courses & assessments', href: '/admin/courses', module: 'academics' },
+    { label: 'Grade assembly & transcripts', href: '/admin/grade-assembly', module: 'academics' },
     { label: 'Academic schedule', href: '/admin/schedule', module: 'schedule' },
     { label: 'Library', href: '/admin/library', module: 'library' },
     { label: 'Student affairs', href: '/admin/student-affairs', module: 'student-affairs' },
