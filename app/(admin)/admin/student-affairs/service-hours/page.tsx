@@ -4,15 +4,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { Camera, CheckCircle2, ClipboardList, Download, FileImage, FileUp, Loader2, Plus, RefreshCw, Search, ScanText, Trash2, Upload, X } from 'lucide-react';
-import { createWorker } from 'tesseract.js';
-import { BrowserMultiFormatReader } from '@zxing/browser';
 import { confirmWithApp } from '@/components/ui/app-dialogs';
 
 type Student = { student_id: string; name: string; class: string; email?: string | null };
 type Term = { term_id: number; start_date: string; end_date: string };
 type ServiceHour = {
   id: number; student_id: string; name: string; cohort: string; term_id: number; stamp_date: string;
-  service_date?: string; hours: number; ministry: string; supervisor: string; comments?: string; source: string;
+  hours: number; source: string;
 };
 type ServiceHourProgress = {
   student_id: string; name: string; cohort: string; term_id: number;
@@ -22,13 +20,11 @@ type ServiceHourProgress = {
   status: 'completed' | 'overdue' | 'upcoming' | 'in_progress';
 };
 type Entry = {
-  student_id: string; cohort: string; term_id: string; stamp_date: string; service_date: string;
-  hours: string; ministry: string; supervisor: string; comments: string;
+  student_id: string; cohort: string; term_id: string; stamp_date: string; hours: string;
 };
-type Activity = { ministry: string; hours: string };
 
-const emptyEntry: Entry = { student_id: '', cohort: '', term_id: '', stamp_date: '', service_date: '', hours: '', ministry: '', supervisor: '', comments: '' };
-const csvHeaders = 'student_id,cohort,term_id,stamp_date,service_date,hours,ministry,supervisor,comments';
+const emptyEntry: Entry = { student_id: '', cohort: '', term_id: '', stamp_date: '', hours: '' };
+const csvHeaders = 'student_id,cohort,term_id,stamp_date,hours';
 
 function formatDate(value: string) {
   return value ? new Date(`${value}T00:00:00`).toLocaleDateString() : '-';
@@ -66,12 +62,9 @@ export default function ServiceHoursPage() {
   const [ocrBusy, setOcrBusy] = useState(false);
   const [ocrProgress, setOcrProgress] = useState(0);
   const [reviewOpen, setReviewOpen] = useState(false);
-  const [reviewImages, setReviewImages] = useState<string[]>([]);
   const [reviewImage, setReviewImage] = useState('');
   const [reviewText, setReviewText] = useState('');
   const [reviewEntry, setReviewEntry] = useState<Entry>(emptyEntry);
-  const [activities, setActivities] = useState<Activity[]>([{ ministry: '', hours: '' }]);
-  const [reviewActivities, setReviewActivities] = useState<Activity[]>([{ ministry: '', hours: '' }]);
   const [scannedFormReady, setScannedFormReady] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -153,11 +146,16 @@ export default function ServiceHoursPage() {
     event.preventDefault();
     if (!scannedFormReady) { setError('Upload and scan the completed form before saving.'); return; }
     if (!selectedStudent) { setError('Choose a valid student ID from the student register.'); return; }
-    if (!entry.cohort) { setError('Select the checked Year of study from the form.'); return; }
+    if (!entry.cohort) { setError('The student year of study could not be determined.'); return; }
     if (entry.cohort !== selectedStudent.class) { setError(`Year of study does not match the student register. This student is in ${selectedStudent.class}.`); return; }
-    const validActivities = activities.filter((activity) => activity.ministry.trim() && Number(activity.hours) > 0);
-    if (!validActivities.length) { setError('Add at least one activity with hours completed.'); return; }
-    await save(validActivities.map((activity) => ({ ...entry, ...activity, term_id: Number(entry.term_id), hours: Number(activity.hours), source: 'manual' })));
+    const term = terms.find((item) => String(item.term_id) === entry.term_id);
+    if (!term) { setError('Select a configured school term.'); return; }
+    if (!entry.stamp_date || entry.stamp_date < term.start_date || entry.stamp_date > term.end_date) {
+      setError(`Stamp date must fall within Term ${term.term_id} (${term.start_date} to ${term.end_date}).`);
+      return;
+    }
+    if (!Number.isFinite(Number(entry.hours)) || Number(entry.hours) <= 0) { setError('Enter the total hours for this student and term.'); return; }
+    await save({ ...entry, term_id: Number(entry.term_id), hours: Number(entry.hours), source: 'manual' });
   };
 
   const parseOcrDate = (value: string) => {
@@ -174,9 +172,7 @@ export default function ServiceHoursPage() {
     const dateMatches = [...normalized.matchAll(/\b\d{1,2}[./-]\d{1,2}[./-]\d{2,4}\b/g)].map((match) => parseOcrDate(match[0])).filter(Boolean);
     const hours = normalized.match(/\b(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|h)\b/i)?.[1] || '';
     const term = terms.find((item) => item.term_id >= 1 && item.term_id <= 4 && dateMatches[0] && dateMatches[0] >= item.start_date && dateMatches[0] <= item.end_date);
-    const ministryMatch = normalized.match(/(?:ministry|service performed|description of ministry)[:\s-]+(.{3,80}?)(?=\s+(?:date|hours?|supervisor|team leader|$))/i);
-    const supervisorMatch = normalized.match(/(?:supervisor|team leader)[:\s-]+(.{3,60}?)(?=\s+(?:tel|phone|email|date|$))/i);
-    return { ...emptyEntry, student_id: studentId, cohort, term_id: term ? String(term.term_id) : '', stamp_date: dateMatches[0] || '', service_date: dateMatches[1] || '', hours, ministry: ministryMatch?.[1]?.trim() || '', supervisor: supervisorMatch?.[1]?.trim() || '' };
+    return { ...emptyEntry, student_id: studentId, cohort, term_id: term ? String(term.term_id) : '', stamp_date: dateMatches[0] || '', hours };
   };
 
   const scanDocuments = async (files: File[]) => {
@@ -184,8 +180,12 @@ export default function ServiceHoursPage() {
     if (files.some((file) => !file.type.startsWith('image/'))) { setError('Upload clear image files for the front and back of the form. PDF OCR is not supported in this browser flow yet.'); return; }
     setError(''); setMessage(''); setOcrBusy(true); setOcrProgress(0);
     const imageUrls = files.map((file) => URL.createObjectURL(file));
-    setReviewImages(imageUrls); setReviewImage(imageUrls[0]); setReviewText('');
+    setReviewImage(imageUrls[0]); setReviewText('');
     try {
+      const [{ createWorker }, { BrowserMultiFormatReader }] = await Promise.all([
+        import('tesseract.js'),
+        import('@zxing/browser'),
+      ]);
       let barcodeStudentId = '';
       const barcodeReader = new BrowserMultiFormatReader();
       for (const imageUrl of imageUrls) {
@@ -210,12 +210,11 @@ export default function ServiceHoursPage() {
       const extracted = parseOcrEntry(combinedText);
       if (barcodeStudentId) extracted.student_id = barcodeStudentId;
       setReviewEntry(extracted);
-      setReviewActivities([{ ministry: extracted.ministry, hours: extracted.hours }]);
-      setMessage('Typed and handwritten text was scanned. Review every extracted value before confirming.');
+      setMessage('Form scanned. Verify the student, total hours, and stamp date against the selected term.');
       setReviewOpen(true);
     } catch (scanError) {
       setError(scanError instanceof Error ? scanError.message : 'Unable to read this image.');
-      setReviewImages([]); setReviewImage('');
+      setReviewImage('');
     } finally { setOcrBusy(false); }
   };
 
@@ -224,10 +223,9 @@ export default function ServiceHoursPage() {
     const student = students.find((item) => item.student_id === reviewEntry.student_id);
     if (!student) { setError('The scanned student ID is not in the student register. Correct it before confirming.'); return; }
     setEntry({ ...reviewEntry, cohort: student.class });
-    setActivities(reviewActivities);
     setScannedFormReady(true);
     setReviewOpen(false);
-    setMessage(`Student found: ${student.name}. The scanned data has been placed in the form for final verification.`);
+    setMessage(`Student found: ${student.name}. Verify the total hours and stamp date before saving.`);
   };
 
   const parseBulk = () => {
@@ -235,15 +233,15 @@ export default function ServiceHoursPage() {
     if (lines.length < 2) { setError('Paste a header row followed by at least one record.'); return; }
     const header = lines[0].split(',').map((value) => value.trim());
     const indexes = Object.fromEntries(header.map((value, index) => [value, index]));
-    const required = ['student_id', 'cohort', 'term_id', 'stamp_date', 'hours', 'ministry'];
+    const required = ['student_id', 'cohort', 'term_id', 'stamp_date', 'hours'];
     if (required.some((key) => indexes[key] === undefined)) { setError(`Bulk data must include: ${required.join(', ')}.`); return; }
     const rows = lines.slice(1).map((line) => line.split(',').map((value) => value.trim())).map((values) => Object.fromEntries(header.map((key, index) => [key, values[index] || ''])));
     save(rows.map((row) => ({ ...row, hours: Number(row.hours), term_id: Number(row.term_id), source: 'bulk' })));
   };
 
   const exportReport = () => {
-    const body = filteredRecords.map((record) => [record.student_id, record.name, record.cohort, record.term_id, record.stamp_date, record.service_date || '', record.hours, record.ministry, record.supervisor].join(',')).join('\n');
-    const blob = new Blob([`student_id,name,cohort,term_id,stamp_date,service_date,hours,ministry,supervisor\n${body}`], { type: 'text/csv' });
+    const body = filteredRecords.map((record) => [record.student_id, record.name, record.cohort, record.term_id, record.stamp_date, record.hours].join(',')).join('\n');
+    const blob = new Blob([`student_id,name,cohort,term_id,stamp_date,hours\n${body}`], { type: 'text/csv' });
     const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'church-service-hours.csv'; link.click(); URL.revokeObjectURL(link.href);
   };
 
@@ -268,7 +266,7 @@ export default function ServiceHoursPage() {
   return <div className="space-y-6 pb-12">
     {scannedStudentConfirmation}
     <header className="flex flex-col gap-4 border-b border-slate-200 pb-5 md:flex-row md:items-end md:justify-between">
-      <div><p className="text-[11px] font-black uppercase tracking-[0.22em] text-red-600">Student affairs</p><h1 className="mt-2 text-3xl font-black tracking-tight text-slate-900">Church service hours</h1><p className="mt-1 text-sm text-slate-500">Capture, verify, and report ministry service for four terms at 20 hours each. Missing a term target adds 20 penalty hours to the next term, making its target 40 hours.</p></div>
+      <div><p className="text-[11px] font-black uppercase tracking-[0.22em] text-red-600">Student affairs</p><h1 className="mt-2 text-3xl font-black tracking-tight text-slate-900">Church service hours</h1><p className="mt-1 text-sm text-slate-500">Record each student&apos;s total hours for a term. Verify that the church stamp date falls within the selected term.</p></div>
       <div className="flex items-center gap-3"><label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-red-700 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white hover:bg-red-800"><FileImage className="h-4 w-4" />Upload front + back<input type="file" accept="image/*" multiple className="sr-only" disabled={ocrBusy} onChange={(event) => { const files = Array.from(event.target.files || []); if (files.length > 2) setError('Select a maximum of two images: the front and back of the form.'); else scanDocuments(files); event.currentTarget.value = ''; }} /></label><Link href="/admin/student-affairs" className="text-xs font-black uppercase tracking-[0.18em] text-slate-500 hover:text-slate-900">Back</Link></div>
     </header>
 
@@ -276,23 +274,20 @@ export default function ServiceHoursPage() {
 
     {ocrBusy && <div className="flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm font-semibold text-blue-800"><Loader2 className="h-4 w-4 animate-spin" />Reading uploaded form{ocrProgress ? `: ${ocrProgress}%` : '...'}</div>}
 
-    {reviewOpen && <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-4"><form onSubmit={confirmScannedEntry} className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"><div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-600">Verification required</p><h2 className="mt-1 text-2xl font-black text-slate-900">Review scanned data</h2><p className="mt-1 text-sm text-slate-500">OCR is an assistant, not a final authority. Correct every field before confirming.</p></div><button type="button" onClick={() => setReviewOpen(false)} aria-label="Close scan review"><X className="h-5 w-5" /></button></div><div className="mt-5 grid gap-6 lg:grid-cols-[0.8fr_1.2fr]"><div><img src={reviewImage} alt="Uploaded church service form" className="max-h-[55vh] w-full rounded-xl border border-slate-200 object-contain" /><details className="mt-3 rounded-xl border border-slate-200 p-3"><summary className="cursor-pointer text-xs font-black uppercase tracking-wider text-slate-600"><ScanText className="mr-2 inline h-4 w-4" />View extracted text</summary><pre className="mt-3 max-h-40 overflow-auto whitespace-pre-wrap text-xs text-slate-500">{reviewText}</pre></details></div><div className="grid content-start gap-4 sm:grid-cols-2"><label className="text-xs font-bold text-slate-600">Student ID<input value={reviewEntry.student_id} onChange={(event) => setReviewEntry({ ...reviewEntry, student_id: event.target.value })} required className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" /></label><div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm"><span className="text-xs font-bold text-slate-400">Registered student</span><p className="mt-1 font-black text-slate-900">{reviewStudent ? `${reviewStudent.name} · ${reviewStudent.class}` : 'ID requires correction'}</p></div><label className="text-xs font-bold text-slate-600">School term<select value={reviewEntry.term_id} onChange={(event) => setReviewEntry({ ...reviewEntry, term_id: event.target.value })} required className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"><option value="">Select term</option>{terms.map((term) => <option key={term.term_id} value={term.term_id}>Term {term.term_id}</option>)}</select></label><label className="text-xs font-bold text-slate-600">Stamp date<input type="date" value={reviewEntry.stamp_date} onChange={(event) => setReviewEntry({ ...reviewEntry, stamp_date: event.target.value })} required className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" /></label><label className="text-xs font-bold text-slate-600">Service date<input type="date" value={reviewEntry.service_date} onChange={(event) => setReviewEntry({ ...reviewEntry, service_date: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" /></label><label className="text-xs font-bold text-slate-600">Hours<input type="number" min="0.25" max="24" step="0.25" value={reviewEntry.hours} onChange={(event) => setReviewEntry({ ...reviewEntry, hours: event.target.value })} required className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" /></label><label className="text-xs font-bold text-slate-600 sm:col-span-2">Ministry or service performed<input value={reviewEntry.ministry} onChange={(event) => setReviewEntry({ ...reviewEntry, ministry: event.target.value })} required className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" /></label><label className="text-xs font-bold text-slate-600 sm:col-span-2">Supervisor<input value={reviewEntry.supervisor} onChange={(event) => setReviewEntry({ ...reviewEntry, supervisor: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" /></label><label className="text-xs font-bold text-slate-600 sm:col-span-2">Comments<textarea value={reviewEntry.comments} onChange={(event) => setReviewEntry({ ...reviewEntry, comments: event.target.value })} rows={2} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" /></label></div></div><div className="mt-6 flex justify-end gap-3 border-t border-slate-200 pt-5"><button type="button" onClick={() => setReviewOpen(false)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-slate-600">Discard</button><button className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white"><CheckCircle2 className="h-4 w-4" />Confirm and save</button></div></form></div>}
+    {reviewOpen && <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-4"><form onSubmit={confirmScannedEntry} className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"><div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-600">Stamp verification required</p><h2 className="mt-1 text-2xl font-black text-slate-900">Review scanned form</h2><p className="mt-1 text-sm text-slate-500">Check the student, hours total, and church stamp date. The stamp date must fall within the selected term.</p></div><button type="button" onClick={() => setReviewOpen(false)} aria-label="Close scan review"><X className="h-5 w-5" /></button></div><div className="mt-5 grid gap-6 lg:grid-cols-[0.8fr_1.2fr]"><div><img src={reviewImage} alt="Uploaded church service form" className="max-h-[55vh] w-full rounded-xl border border-slate-200 object-contain" /><details className="mt-3 rounded-xl border border-slate-200 p-3"><summary className="cursor-pointer text-xs font-black uppercase tracking-wider text-slate-600"><ScanText className="mr-2 inline h-4 w-4" />View extracted text</summary><pre className="mt-3 max-h-40 overflow-auto whitespace-pre-wrap text-xs text-slate-500">{reviewText}</pre></details></div><div className="grid content-start gap-4 sm:grid-cols-2"><label className="text-xs font-bold text-slate-600">Student ID<input value={reviewEntry.student_id} onChange={(event) => setReviewEntry({ ...reviewEntry, student_id: event.target.value })} required className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" /></label><div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm"><span className="text-xs font-bold text-slate-400">Registered student</span><p className="mt-1 font-black text-slate-900">{reviewStudent ? `${reviewStudent.name} · ${reviewStudent.class}` : 'ID requires correction'}</p></div><label className="text-xs font-bold text-slate-600">School term<select value={reviewEntry.term_id} onChange={(event) => setReviewEntry({ ...reviewEntry, term_id: event.target.value })} required className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"><option value="">Select term</option>{terms.filter((term) => term.term_id >= 1 && term.term_id <= 4).map((term) => <option key={term.term_id} value={term.term_id}>Term {term.term_id}</option>)}</select></label><label className="text-xs font-bold text-slate-600">Date on church stamp<input type="date" value={reviewEntry.stamp_date} onChange={(event) => setReviewEntry({ ...reviewEntry, stamp_date: event.target.value })} required className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" /></label><label className="text-xs font-bold text-slate-600 sm:col-span-2">Total hours for this term<input type="number" min="0.01" step="0.01" value={reviewEntry.hours} onChange={(event) => setReviewEntry({ ...reviewEntry, hours: event.target.value })} required className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" /></label></div></div><div className="mt-6 flex justify-end gap-3 border-t border-slate-200 pt-5"><button type="button" onClick={() => setReviewOpen(false)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-slate-600">Discard</button><button className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white"><CheckCircle2 className="h-4 w-4" />Confirm and continue</button></div></form></div>}
 
     <div className="flex flex-wrap gap-2 border-b border-slate-200"><button onClick={() => setTab('capture')} className={`px-4 py-3 text-xs font-black uppercase tracking-wider ${tab === 'capture' ? 'border-b-2 border-red-600 text-red-700' : 'text-slate-500'}`}><Plus className="mr-2 inline h-4 w-4" />Single capture</button><button onClick={() => setTab('bulk')} className={`px-4 py-3 text-xs font-black uppercase tracking-wider ${tab === 'bulk' ? 'border-b-2 border-red-600 text-red-700' : 'text-slate-500'}`}><Upload className="mr-2 inline h-4 w-4" />Bulk import</button><button onClick={() => setTab('reports')} className={`px-4 py-3 text-xs font-black uppercase tracking-wider ${tab === 'reports' ? 'border-b-2 border-red-600 text-red-700' : 'text-slate-500'}`}><ClipboardList className="mr-2 inline h-4 w-4" />Reports</button></div>
 
     {tab === 'capture' && <form onSubmit={saveSingle} className="grid gap-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:grid-cols-2">
-      <div className="md:col-span-2 flex items-center justify-between"><div><h2 className="text-xl font-black text-slate-900">Review scanned form</h2><p className="text-xs text-slate-500">Upload the completed front and back. The form supplies the service data; student ID is optional for correcting the scan.</p></div><button type="button" onClick={() => setScanning((current) => !current)} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white"><Camera className="h-4 w-4" />{scanning ? 'Stop scanner' : 'Scan ID'}</button></div>
+      <div className="md:col-span-2 flex items-center justify-between"><div><h2 className="text-xl font-black text-slate-900">Record term total</h2><p className="text-xs text-slate-500">Scan the church form to identify the student, total hours, and stamp date; verify the values before saving.</p></div><button type="button" onClick={() => setScanning((current) => !current)} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white"><Camera className="h-4 w-4" />{scanning ? 'Stop scanner' : 'Scan ID'}</button></div>
       {scanning && <div className="md:col-span-2 overflow-hidden rounded-xl bg-slate-950"><video ref={videoRef} className="mx-auto max-h-64 w-full object-contain" muted playsInline /></div>}
       <label className="text-xs font-bold text-slate-600">Student ID (optional correction)<input value={entry.student_id} onChange={(event) => { setEntry({ ...entry, student_id: event.target.value }); setScannedFormReady(false); }} list="student-ids" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="Only enter if OCR misses the ID" /><datalist id="student-ids">{students.map((student) => <option key={student.student_id} value={student.student_id}>{student.name} ({student.class})</option>)}</datalist></label>
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm"><span className="text-xs font-bold text-slate-400">Registered student</span><p className="mt-1 font-black text-slate-900">{selectedStudent ? `${selectedStudent.name} · ${selectedStudent.class}` : 'Enter a valid student ID'}</p></div>
-      <div className="md:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-4"><p className="text-xs font-black uppercase tracking-wider text-slate-700">Captured student identity</p><p className="mt-1 text-sm font-black text-slate-900">{selectedStudent ? `${selectedStudent.name} · ${selectedStudent.class}` : 'Waiting for the scanned form'}</p><p className="mt-1 text-xs text-slate-500">Year of study is taken from the captured form and checked against the student register.</p></div>
+      <div className="md:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-4"><p className="text-xs font-black uppercase tracking-wider text-slate-700">Student identity</p><p className="mt-1 text-sm font-black text-slate-900">{selectedStudent ? `${selectedStudent.name} · ${selectedStudent.class}` : 'Waiting for a valid student ID'}</p><p className="mt-1 text-xs text-slate-500">The student&apos;s year of study is checked against the student register.</p></div>
       <label className="text-xs font-bold text-slate-600">School term<select value={entry.term_id} onChange={(event) => setEntry({ ...entry, term_id: event.target.value })} required className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"><option value="">Select term</option>{terms.filter((term) => term.term_id >= 1 && term.term_id <= 4).map((term) => <option key={term.term_id} value={term.term_id}>Term {term.term_id} · {formatDate(term.start_date)} to {formatDate(term.end_date)}</option>)}</select></label>
       <label className="text-xs font-bold text-slate-600">Date on church stamp<input type="date" value={entry.stamp_date} onChange={(event) => setEntry({ ...entry, stamp_date: event.target.value })} required className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" /></label>
-      <label className="text-xs font-bold text-slate-600">Service date<input type="date" value={entry.service_date} onChange={(event) => setEntry({ ...entry, service_date: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" /></label>
-      <div className="md:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-4"><div className="flex items-center justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-wider text-slate-700">Activities and hours</p><p className="mt-1 text-xs text-slate-500">Add every activity listed on the front and back of the form.</p></div><button type="button" onClick={() => setActivities([...activities, { ministry: '', hours: '' }])} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-black text-slate-700">+ Add activity</button></div><div className="mt-3 space-y-3">{activities.map((activity, index) => <div key={index} className="flex flex-col gap-2 sm:flex-row"><input value={activity.ministry} onChange={(event) => setActivities(activities.map((item, itemIndex) => itemIndex === index ? { ...item, ministry: event.target.value } : item))} required className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" placeholder={`Activity ${index + 1}, e.g. Children ministry`} /><input type="number" min="0.25" max="24" step="0.25" value={activity.hours} onChange={(event) => setActivities(activities.map((item, itemIndex) => itemIndex === index ? { ...item, hours: event.target.value } : item))} required className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm sm:w-32" placeholder="Hours" />{activities.length > 1 && <button type="button" onClick={() => setActivities(activities.filter((_, itemIndex) => itemIndex !== index))} className="rounded-xl border border-red-200 px-3 text-red-600" aria-label={`Remove activity ${index + 1}`}><X className="h-4 w-4" /></button>}</div>)}</div></div>
-      <label className="text-xs font-bold text-slate-600">Supervisor name<input value={entry.supervisor} onChange={(event) => setEntry({ ...entry, supervisor: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" /></label>
-      <label className="text-xs font-bold text-slate-600 md:col-span-2">Comments<textarea value={entry.comments} onChange={(event) => setEntry({ ...entry, comments: event.target.value })} rows={3} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" /></label>
-      <button className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-700 px-4 py-3 text-xs font-black uppercase tracking-wider text-white hover:bg-red-800 md:col-span-2"><CheckCircle2 className="h-4 w-4" />Save verified hours</button>
+      <label className="text-xs font-bold text-slate-600 md:col-span-2">Total hours for this term<input type="number" min="0.01" step="0.01" value={entry.hours} onChange={(event) => setEntry({ ...entry, hours: event.target.value })} required className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" /></label>
+      <button className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-700 px-4 py-3 text-xs font-black uppercase tracking-wider text-white hover:bg-red-800 md:col-span-2"><CheckCircle2 className="h-4 w-4" />Save verified term total</button>
     </form>}
 
     {tab === 'bulk' && <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"><div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="text-xl font-black text-slate-900">Bulk import</h2><p className="mt-1 text-sm text-slate-500">Paste CSV data. Every row receives the same student, cohort, term, and stamp-date validation.</p></div><button onClick={() => setBulkText(csvHeaders + '\n')} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-black uppercase tracking-wider text-slate-700"><Download className="h-4 w-4" />Use template</button></div><textarea value={bulkText} onChange={(event) => setBulkText(event.target.value)} rows={12} className="mt-5 w-full rounded-xl border border-slate-200 bg-slate-50 p-4 font-mono text-xs" placeholder={csvHeaders} /><button onClick={parseBulk} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-xs font-black uppercase tracking-wider text-white"><FileUp className="h-4 w-4" />Validate and import rows</button></section>}
@@ -328,8 +323,8 @@ export default function ServiceHoursPage() {
       </div>
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
         <div className="border-b border-slate-100 px-4 py-3"><h2 className="font-black text-slate-900">Recorded service history</h2></div>
-        <table className="min-w-full text-left text-sm"><thead className="bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500"><tr>{['Student', 'Cohort', 'Term', 'Stamp date', 'Service date', 'Hours', 'Ministry', 'Supervisor', ''].map((heading) => <th key={heading} className="whitespace-nowrap px-4 py-3">{heading}</th>)}</tr></thead>
-          <tbody className="divide-y divide-slate-100">{filteredRecords.map((record) => <tr key={record.id}><td className="whitespace-nowrap px-4 py-3"><p className="font-black text-slate-900">{record.name}</p><p className="text-xs text-slate-500">{record.student_id}</p></td><td className="px-4 py-3 font-semibold">{record.cohort}</td><td className="px-4 py-3">Term {record.term_id}</td><td className="whitespace-nowrap px-4 py-3">{formatDate(record.stamp_date)}</td><td className="whitespace-nowrap px-4 py-3">{formatDate(record.service_date || '')}</td><td className="px-4 py-3 font-black">{Number(record.hours).toFixed(2)}</td><td className="px-4 py-3">{record.ministry}</td><td className="px-4 py-3">{record.supervisor || '-'}</td><td className="px-4 py-3"><button onClick={async () => { if (await confirmWithApp('Delete this service-hour record?', { title: 'Delete service-hour record?', confirmText: 'Delete', tone: 'danger' })) { await api.serviceHours.remove(record.id); load(); } }} aria-label="Delete service-hour record" className="text-red-600"><Trash2 className="h-4 w-4" /></button></td></tr>)}</tbody>
+        <table className="min-w-full text-left text-sm"><thead className="bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500"><tr>{['Student', 'Cohort', 'Term', 'Stamp date', 'Total hours', ''].map((heading) => <th key={heading} className="whitespace-nowrap px-4 py-3">{heading}</th>)}</tr></thead>
+          <tbody className="divide-y divide-slate-100">{filteredRecords.map((record) => <tr key={record.id}><td className="whitespace-nowrap px-4 py-3"><p className="font-black text-slate-900">{record.name}</p><p className="text-xs text-slate-500">{record.student_id}</p></td><td className="px-4 py-3 font-semibold">{record.cohort}</td><td className="px-4 py-3">Term {record.term_id}</td><td className="whitespace-nowrap px-4 py-3">{formatDate(record.stamp_date)}</td><td className="px-4 py-3 font-black">{Number(record.hours).toFixed(2)}</td><td className="px-4 py-3"><button onClick={async () => { if (await confirmWithApp('Delete this service-hour term total?', { title: 'Delete service-hour term total?', confirmText: 'Delete', tone: 'danger' })) { await api.serviceHours.remove(record.id); await load(); } }} aria-label="Delete service-hour term total" className="text-red-600"><Trash2 className="h-4 w-4" /></button></td></tr>)}</tbody>
         </table>
         {!filteredRecords.length && <p className="p-10 text-center text-sm text-slate-500">No service-hour records match these filters.</p>}
       </div>

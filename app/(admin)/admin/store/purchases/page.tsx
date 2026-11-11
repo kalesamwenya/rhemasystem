@@ -34,7 +34,7 @@ type Purchase = {
   items: PurchaseItem[];
 };
 
-const money = (value: number | string, currency = 'GHS') => `${currency} ${Number(value).toFixed(2)}`;
+const money = (value: number | string, currency = 'ZMW') => `${currency} ${Number(value).toLocaleString('en-ZM', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const orderReceiptData = (purchase: Purchase) => ({
   category: 'Store purchase',

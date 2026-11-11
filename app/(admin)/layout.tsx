@@ -14,7 +14,7 @@ import FloatingChatBubble from '@/components/communications/FloatingChatBubble';
 import LoadingPlaceholder from '@/components/ui/LoadingPlaceholder';
 import { api, clearAuthSession } from '@/lib/api';
 import { setAuthSession } from '@/lib/auth';
-import { canAccessAdminModule, getAdminLandingPath, getAdminModuleForPath } from '@/lib/admin-access';
+import { canAccessAdminModule, canAccessAdminPath, getAdminLandingPath } from '@/lib/admin-access';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -337,7 +337,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     <AdminAudioPlayerProvider>
     <div
       style={{ '--sidebar-width': `${sidebarWidth}px` } as React.CSSProperties}
-      className="admin-shell relative h-screen overflow-hidden bg-[#f6f7f4] text-[#17201d] antialiased"
+      className="admin-shell relative h-[100dvh] overflow-hidden bg-[var(--rhema-canvas)] text-[var(--rhema-ink)] antialiased"
     >
       <AdminErrorMonitor />
       
@@ -364,7 +364,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       />
 
       {/* Main Structural Viewport Track */}
-      <div className={`relative ml-0 h-screen overflow-hidden ${isDesktopSidebarOpen ? 'md:ml-[var(--sidebar-width)]' : 'md:ml-0'}`}>
+      <div className={`relative ml-0 h-[100dvh] overflow-hidden ${isDesktopSidebarOpen ? 'md:ml-[var(--sidebar-width)]' : 'md:ml-0'}`}>
         
         {/* Separated Header Node */}
         <AdminHeader
@@ -376,18 +376,13 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         />
 
         {/* Shared Work Area Content Grid Route Node */}
-        <main className="h-screen overflow-y-auto no-scrollbar bg-[#f6f7f4] pt-16 md:pt-16">
-          <style dangerouslySetInnerHTML={{__html: `
-            .no-scrollbar::-webkit-scrollbar { display: none !important; }
-          `}} />
-
+        <main className="h-[100dvh] overflow-y-auto bg-[var(--rhema-canvas)] pt-16 md:pt-16">
           <div 
             className="mx-auto max-w-[1600px] space-y-6 px-4 py-5 md:px-7 md:py-7 lg:px-10"
-            style={{ msOverflowStyle: 'none', scrollbarWidth: 'none' }}
           >
             {pathname === '/admin' && !canAccessAdminModule(adminProfile.admin_role, adminProfile.department, 'dashboard')
               ? <p className="mt-12 text-center text-sm font-semibold text-slate-500">Opening your administrator workspace...</p>
-              : canAccessAdminModule(adminProfile.admin_role, adminProfile.department, getAdminModuleForPath(pathname))
+              : canAccessAdminPath(adminProfile.admin_role, adminProfile.department, pathname)
               ? children
               : <div className="mx-auto mt-12 max-w-xl rounded-2xl border border-amber-200 bg-white p-8 text-center shadow-sm">
                 <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-800" aria-hidden="true">!</div>

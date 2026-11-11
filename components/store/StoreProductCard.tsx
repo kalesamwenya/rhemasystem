@@ -11,22 +11,22 @@ export default function StoreProductCard({ product, onAddToCart }: StoreProductC
   const router = useRouter();
 
   return (
-    <article role="link" tabIndex={0} onClick={() => router.push(`/store/${product.id}`)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") router.push(`/store/${product.id}`); }} className="cursor-pointer overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm shadow-slate-200/60 transition hover:-translate-y-1 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-red-500">
+    <article role="link" tabIndex={0} onClick={() => router.push(`/store/${product.id}`)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") router.push(`/store/${product.id}`); }} className="cursor-pointer overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm shadow-slate-200/60 transition hover:-translate-y-1 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-red-500 sm:rounded-[2rem]">
       <div className="relative">
-        <img src={assetUrl(product.image)} alt={product.name} className="h-64 w-full object-cover" />
+        <img src={assetUrl(product.image)} alt={product.name} className="h-52 w-full object-cover sm:h-64" />
         <span className="absolute left-4 top-4 rounded-full bg-red-600 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-white">
           {product.badge}
         </span>
       </div>
-      <div className="p-5">
-        <div className="flex items-center justify-between gap-3">
+      <div className="p-4 sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">
             {product.category}
           </span>
-          <span className="text-lg font-black text-slate-900">{product.price}</span>
+          <span className="shrink-0 text-base font-black text-slate-900 sm:text-lg">{product.price}</span>
         </div>
-        <h3 className="mt-4 text-2xl font-black text-slate-900">{product.name}</h3>
-        <p className="mt-3 text-sm leading-7 text-slate-600">
+        <h3 className="mt-3 text-xl font-black text-slate-900 sm:mt-4 sm:text-2xl">{product.name}</h3>
+        <p className="mt-3 text-sm leading-6 text-slate-600 sm:leading-7">
           Branded for Godfrey Academy and designed for comfort, school pride, and everyday use.
         </p>
         <button

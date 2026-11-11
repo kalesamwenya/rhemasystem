@@ -7,13 +7,14 @@ import { api } from '@/lib/api';
 import { exportBrandedPdf } from '@/lib/branded-pdf';
 import { calculateGpa, formatGrade, summarizeCourseGrades, summarizeGrades, type StudentGrade } from '@/lib/student-grades';
 
-type GradesResponse = { data: StudentGrade[] };
+type GradesResponse = { data: StudentGrade[]; transcript_published?: boolean };
 
 export default function StudentGradesPage() {
   const [grades, setGrades] = useState<StudentGrade[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState<'view' | 'download' | null>(null);
+  const [transcriptPublished, setTranscriptPublished] = useState(false);
   const overallSummary = summarizeGrades(grades);
   const courseSummaries = summarizeCourseGrades(grades);
   const levelOneGpa = calculateGpa(courseSummaries, 1);
@@ -67,7 +68,10 @@ export default function StudentGradesPage() {
     let active = true;
     (api.students.myGrades() as Promise<GradesResponse>)
       .then((response: GradesResponse) => {
-        if (active) setGrades(response.data);
+        if (active) {
+          setGrades(response.data);
+          setTranscriptPublished(response.transcript_published === true);
+        }
       })
       .catch((reason: unknown) => {
         if (active) setError(reason instanceof Error ? reason.message : 'Unable to load your grades.');
@@ -85,7 +89,7 @@ export default function StudentGradesPage() {
           <h1 className="text-2xl font-black text-slate-900">My grades</h1>
           <p className="mt-1 text-sm text-slate-500">Published gradebook results for your enrolled courses.</p>
         </div>
-        {!loading && !error && grades.length > 0 && <div className="flex flex-wrap gap-2">
+        {!loading && !error && transcriptPublished && grades.length > 0 && <div className="flex flex-wrap gap-2">
           <button type="button" onClick={() => void exportTranscript('view')} disabled={exporting !== null} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-60">
             {exporting === 'view' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}View transcript PDF
           </button>
@@ -102,18 +106,26 @@ export default function StudentGradesPage() {
         <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">No published grades are available for your enrolled courses yet.</div>
       ) : (
         <>
-          <section aria-label="Level grade point averages" className="grid gap-3 sm:grid-cols-3">
-            {[['Level 1 GPA · first year', levelOneGpa], ['Level 2 GPA · second year', levelTwoGpa], ['Cumulative GPA', cumulativeGpa]].map(([label, gpa]) => (
-              <article key={String(label)} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-500">{label}</p>
-                <p className="mt-2 text-3xl font-black text-blue-950">{typeof gpa === 'number' ? gpa.toFixed(2) : 'Pending'}</p>
-                <p className="mt-1 text-xs text-slate-500">4.0 scale · equal course weighting</p>
-              </article>
-            ))}
-          </section>
-          <p className="text-xs text-slate-500">
-            {overallSummary.gradedActivityCount} of {overallSummary.activityCount} activities graded. GPA includes courses with published course totals only.
-          </p>
+          {transcriptPublished ? (
+            <>
+              <section aria-label="Level grade point averages" className="grid gap-3 sm:grid-cols-3">
+                {[['Level 1 GPA · first year', levelOneGpa], ['Level 2 GPA · second year', levelTwoGpa], ['Cumulative GPA', cumulativeGpa]].map(([label, gpa]) => (
+                  <article key={String(label)} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <p className="text-xs font-bold uppercase tracking-wider text-slate-500">{label}</p>
+                    <p className="mt-2 text-3xl font-black text-blue-950">{typeof gpa === 'number' ? gpa.toFixed(2) : 'Pending'}</p>
+                    <p className="mt-1 text-xs text-slate-500">4.0 scale · equal course weighting</p>
+                  </article>
+                ))}
+              </section>
+              <p className="text-xs text-slate-500" role="status">
+                {overallSummary.gradedActivityCount} of {overallSummary.activityCount} activities graded. GPA includes courses with published course totals only.
+              </p>
+            </>
+          ) : (
+            <p className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900" role="status">
+              Level GPA summaries and transcript downloads will appear here when the academic department generates your transcript.
+            </p>
+          )}
           <section aria-label="Course grades" className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-100 px-5 py-4">
               <h2 className="font-bold text-slate-900">Grades by course</h2>
@@ -137,7 +149,7 @@ export default function StudentGradesPage() {
                           {course.course_sessions} / {course.course_hours.toFixed(2)} h
                         </td>
                         <td className="p-4 text-right font-semibold text-slate-800">
-                          {course.percentage === null ? 'Pending' : `${course.percentage.toFixed(2)}% · ${course.letter_grade} · ${course.grade_points?.toFixed(1)} GPA`}
+                          {course.percentage === null ? 'Pending' : `${course.percentage.toFixed(2)}% · ${course.letter_grade}${transcriptPublished ? ` · ${course.grade_points?.toFixed(1)} GPA` : ''}`}
                         </td>
                         <td className="p-4 text-right">
                           <Link aria-label={`View ${course.course_name} grade details`} href={`/student/grades/${encodeURIComponent(course.course_id)}`} className="inline-flex items-center gap-1 text-xs font-bold text-blue-900 hover:underline">

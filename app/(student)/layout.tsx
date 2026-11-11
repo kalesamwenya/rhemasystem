@@ -68,7 +68,7 @@ export default function StudentDashboardLayout({
 
   return (
     <CommunicationProvider>
-    <div className="flex h-screen w-full overflow-hidden bg-[#f6f8fc] font-sans text-slate-900 antialiased">
+    <div className="flex h-[100dvh] w-full overflow-hidden bg-[var(--rhema-canvas)] font-sans text-slate-900 antialiased">
       
       <StudentSidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
 
@@ -80,7 +80,7 @@ export default function StudentDashboardLayout({
         />
         
         <StudentAudioProvider>
-          <main className="flex-1 scroll-smooth overflow-y-auto p-3 sm:p-5 lg:p-7">
+          <main className="flex-1 overflow-y-auto p-3 sm:p-5 lg:p-7">
             <div className="mx-auto max-w-[1440px]">
               {children}
             </div>

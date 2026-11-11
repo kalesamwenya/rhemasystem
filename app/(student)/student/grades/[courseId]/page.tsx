@@ -7,7 +7,7 @@ import { ArrowLeft, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { formatGrade, getCourseTotal, getGradePercentage, getLetterGrade, getGradePoints, isActivityGrade, summarizeGrades, summarizeCourseGrades, type StudentGrade } from '@/lib/student-grades';
 
-type GradesResponse = { data: StudentGrade[] };
+type GradesResponse = { data: StudentGrade[]; transcript_published?: boolean };
 
 function activityType(grade: StudentGrade) {
   const moduleName = grade.item_module || grade.item_type;
@@ -21,12 +21,16 @@ export default function StudentCourseGradesPage() {
   const [grades, setGrades] = useState<StudentGrade[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [transcriptPublished, setTranscriptPublished] = useState(false);
 
   useEffect(() => {
     let active = true;
     (api.students.myGrades() as Promise<GradesResponse>)
       .then((response) => {
-        if (active) setGrades(response.data);
+        if (active) {
+          setGrades(response.data);
+          setTranscriptPublished(response.transcript_published === true);
+        }
       })
       .catch((reason: unknown) => {
         if (active) setError(reason instanceof Error ? reason.message : 'Unable to load your grades.');
@@ -95,7 +99,7 @@ export default function StudentCourseGradesPage() {
               <p className="text-xl font-black text-blue-900">
                 {totalPercentage === null
                   ? 'Pending'
-                  : `${totalPercentage.toFixed(2)}% · ${getLetterGrade(totalPercentage)} · ${getGradePoints(totalPercentage).toFixed(1)} GPA`}
+                  : `${totalPercentage.toFixed(2)}% · ${getLetterGrade(totalPercentage)}${transcriptPublished ? ` · ${getGradePoints(totalPercentage).toFixed(1)} GPA` : ''}`}
               </p>
             </div>
           </section>

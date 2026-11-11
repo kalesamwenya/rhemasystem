@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AlertCircle, CheckCircle2, Loader2, Plus, RefreshCw, ShieldCheck } from 'lucide-react';
 import { api } from '@/lib/api';
+import { employeeDepartmentOptions } from '@/lib/employee-account-options';
 
 type AdminRole = 'owner' | 'administrator' | 'it' | 'finance' | 'academic' | 'registrar' | 'support' | 'operations';
 type AccountStatus = 'active' | 'suspended';
@@ -17,7 +18,7 @@ type AdminAccount = {
   last_login_at: string | null;
 };
 type AccessDraft = Pick<AdminAccount, 'department' | 'role' | 'status'>;
-type NewAccountDraft = { name: string; email: string; department: string; role: AdminRole };
+type NewAccountDraft = { name: string; email: string; department: string; otherDepartment: string; role: AdminRole };
 type AdminAccessResponse = {
   success: boolean;
   message?: string;
@@ -53,6 +54,7 @@ export default function StaffAccessPage() {
     name: '',
     email: '',
     department: '',
+    otherDepartment: '',
     role: 'support',
   });
   const [error, setError] = useState('');
@@ -113,18 +115,30 @@ export default function StaffAccessPage() {
 
   const createAccount = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const department = newAccount.department === 'Other'
+      ? newAccount.otherDepartment.trim()
+      : newAccount.department;
+    if (!department) {
+      setError('Enter the department for this account.');
+      return;
+    }
     setCreating(true);
     setError('');
     setMessage('');
     try {
-      const response = await api.createAdminAccess(newAccount) as {
+      const response = await api.createAdminAccess({
+        name: newAccount.name,
+        email: newAccount.email,
+        department,
+        role: newAccount.role,
+      }) as {
         success: boolean;
         message?: string;
         employee_number?: string;
       };
       if (!response.success) throw new Error(response.message || 'The account could not be created.');
       setMessage(`${response.message || 'Account created.'}${response.employee_number ? ` Employee number: ${response.employee_number}.` : ''}`);
-      setNewAccount({ name: '', email: '', department: '', role: 'support' });
+      setNewAccount({ name: '', email: '', department: '', otherDepartment: '', role: 'support' });
       await loadAccounts();
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : 'The account could not be created.');
@@ -182,8 +196,9 @@ export default function StaffAccessPage() {
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <label className="text-xs font-bold text-slate-600">Full name<input required maxLength={160} value={newAccount.name} onChange={(event) => setNewAccount((current) => ({ ...current, name: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5" /></label>
           <label className="text-xs font-bold text-slate-600">Email<input required type="email" value={newAccount.email} onChange={(event) => setNewAccount((current) => ({ ...current, email: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5" /></label>
-          <label className="text-xs font-bold text-slate-600">Department<input required maxLength={120} value={newAccount.department} onChange={(event) => setNewAccount((current) => ({ ...current, department: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5" /></label>
-          <label className="text-xs font-bold text-slate-600">Permission profile<select value={newAccount.role} onChange={(event) => setNewAccount((current) => ({ ...current, role: event.target.value as AdminRole }))} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5">{(canAssignPrivilegedRoles ? allRoles : staffRoles).map((role) => <option key={role} value={role}>{roleLabels[role]}</option>)}</select></label>
+          <label className="text-xs font-bold text-slate-600">Department<select required value={newAccount.department} onChange={(event) => setNewAccount((current) => ({ ...current, department: event.target.value, otherDepartment: event.target.value === 'Other' ? current.otherDepartment : '' }))} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5"><option value="">Select a department</option>{employeeDepartmentOptions.map((department) => <option key={department} value={department}>{department}</option>)}</select></label>
+          {newAccount.department === 'Other' && <label className="text-xs font-bold text-slate-600">Department name<input required maxLength={120} value={newAccount.otherDepartment} onChange={(event) => setNewAccount((current) => ({ ...current, otherDepartment: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2.5" /></label>}
+          <label className="text-xs font-bold text-slate-600">System access level<select value={newAccount.role} onChange={(event) => setNewAccount((current) => ({ ...current, role: event.target.value as AdminRole }))} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5">{(canAssignPrivilegedRoles ? allRoles : staffRoles).map((role) => <option key={role} value={role}>{roleLabels[role]}</option>)}</select><span className="mt-1 block text-[11px] font-normal text-slate-500">Controls which admin areas the login can access.</span></label>
         </div>
         <button type="submit" disabled={creating} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-blue-950 px-4 py-2.5 text-xs font-black text-white disabled:opacity-60">
           {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}

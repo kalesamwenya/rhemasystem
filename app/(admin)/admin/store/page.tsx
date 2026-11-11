@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useInventory, type InventoryProduct, type InventoryVariant } from '@/lib/store-inventory';
 import { api, assetUrl } from '@/lib/api';
+import { formatStoreMoney } from '@/lib/store-currency';
 
 type StoreOrder = { id: string; customer: string; item: string; amount: string; status: string };
 const initialOrders: StoreOrder[] = [];
@@ -215,7 +216,7 @@ export default function StoreManagementPage() {
       {/* Metrics Row */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Metric label="Total Inventory" value={totals.units.toString()} icon={<Package className="h-5 w-5 text-slate-500" />} />
-        <Metric label="Inventory Value" value={`GHS ${totals.value.toLocaleString()}`} icon={<DollarSign className="h-5 w-5 text-emerald-600" />} />
+        <Metric label="Inventory Value" value={formatStoreMoney(totals.value)} icon={<DollarSign className="h-5 w-5 text-emerald-600" />} />
         <Metric label="Orders This Month" value={orders.length.toString()} icon={<ShoppingCart className="h-5 w-5 text-blue-600" />} />
         <Metric label="Paid Orders" value={orders.filter((order) => order.status.toLowerCase() === 'paid').length.toString()} icon={<TrendingUp className="h-5 w-5 text-violet-600" />} />
       </div>
@@ -368,7 +369,7 @@ export default function StoreManagementPage() {
                           </div>
                         </td>
                         <td className="px-4 py-3 font-bold text-slate-900">
-                          {minPrice === maxPrice ? `GHS ${minPrice}` : `GHS ${minPrice} - ${maxPrice}`}
+                          {minPrice === maxPrice ? formatStoreMoney(minPrice) : `${formatStoreMoney(minPrice)} - ${formatStoreMoney(maxPrice)}`}
                         </td>
                         <td className="px-4 py-3 text-xs text-slate-700">
                           {[...new Set(product.variants.map((item) => item.batchCode))].filter(Boolean).join(', ') || 'N/A'}
@@ -606,7 +607,7 @@ export default function StoreManagementPage() {
                     <input
                       type="number"
                       min="0"
-                      placeholder="Price"
+                      placeholder="Price (ZMW)"
                       value={item.priceValue}
                       onChange={(e) => updateVariant(index, 'priceValue', Number(e.target.value), variantDrafts, setVariantDrafts)}
                       className="rounded-lg border border-slate-200 bg-white p-2 text-xs"

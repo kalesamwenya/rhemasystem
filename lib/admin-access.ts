@@ -61,12 +61,17 @@ function departmentMatchesRole(department: string, role: AdminRole): boolean {
   if (!normalized) return false;
   const matchingRoles = (Object.keys(departmentAliases) as Array<keyof typeof departmentAliases>)
     .filter((key) => departmentAliases[key].some((alias) => new RegExp(`(^|[^a-z])${alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^a-z]|$)`).test(normalized)));
-  return matchingRoles.length === 0 || (matchingRoles.length === 1 && matchingRoles.includes(role));
+  return matchingRoles.length === 1 && matchingRoles.includes(role);
 }
 
 export function isMediaOrItDepartment(department: string): boolean {
   const normalized = department.trim().toLowerCase().replace(/[_-]+/g, ' ');
   return /(^|[^a-z])(media|information technology|it)([^a-z]|$)/.test(normalized);
+}
+
+export function isItDepartment(department: string): boolean {
+  const normalized = department.trim().toLowerCase().replace(/[_-]+/g, ' ');
+  return /(^|[^a-z])(information technology|it)([^a-z]|$)/.test(normalized);
 }
 
 export function isFinanceDepartment(department: string): boolean {
@@ -82,7 +87,7 @@ export function normalizeAdminRole(value: string): AdminRole | null {
 export function canAccessAdminModule(roleValue: string, department: string, module: AdminModule): boolean {
   const role = normalizeAdminRole(roleValue);
   if (!role) return false;
-  if (module === 'staff-access') return role === 'owner' || role === 'administrator' || role === 'it';
+  if (module === 'staff-access') return isItDepartment(department);
   if (module === 'website-statistics') return role === 'owner' || role === 'administrator' || role === 'it';
   if (role === 'it') return true;
   if (module === 'budgets' || module === 'assets') return true;
@@ -97,9 +102,10 @@ export function canAccessAdminModule(roleValue: string, department: string, modu
   return departmentMatchesRole(department, role);
 }
 
-export function getAdminModuleForPath(pathname: string): AdminModule {
+export function getAdminModuleForPath(pathname: string): AdminModule | null {
   if (pathname === '/admin') return 'dashboard';
   if (pathname.startsWith('/admin/staff-access')) return 'staff-access';
+  if (pathname === '/admin/people/admin' || pathname.startsWith('/admin/people/admin/')) return 'staff-access';
   if (pathname.startsWith('/admin/reports')) return 'reports';
   if (pathname.startsWith('/admin/partnerships') || pathname.startsWith('/admin/partner-applications')) return 'partnerships';
   if (pathname.startsWith('/admin/admissions')) return 'admissions';
@@ -120,7 +126,7 @@ export function getAdminModuleForPath(pathname: string): AdminModule {
   if (pathname.startsWith('/admin/statistics')) return 'statistics';
   if (pathname.startsWith('/admin/website-statistics')) return 'website-statistics';
   if (pathname.startsWith('/admin/analysis')) return 'analysis';
-  if (pathname.startsWith('/admin/performance-logs') || pathname.startsWith('/admin/error-logs')) return 'performance';
+  if (pathname.startsWith('/admin/performance-logs') || pathname.startsWith('/admin/error-logs') || pathname.startsWith('/admin/student-activity-logs')) return 'performance';
   if (pathname.startsWith('/admin/budgets')) return 'budgets';
   if (pathname.startsWith('/admin/assets')) return 'assets';
   if (pathname.startsWith('/admin/activity-requests')) return 'activity-requests';
@@ -131,7 +137,12 @@ export function getAdminModuleForPath(pathname: string): AdminModule {
   if (pathname.startsWith('/admin/profile')) return 'profile';
   if (pathname.startsWith('/admin/settings')) return 'settings';
   if (pathname.startsWith('/admin/tasks')) return 'tasks';
-  return 'settings';
+  return null;
+}
+
+export function canAccessAdminPath(role: string, department: string, pathname: string): boolean {
+  const adminModule = getAdminModuleForPath(pathname);
+  return adminModule !== null && canAccessAdminModule(role, department, adminModule);
 }
 
 export function getAdminLandingPath(roleValue: string): string {

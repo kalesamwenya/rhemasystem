@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowRight, BookOpen, GraduationCap, Sparkles, X } from "lucide-react";
+import { ArrowRight, GraduationCap, Sparkles, X } from "lucide-react";
 import { api } from "@/lib/api";
 
 const DISMISSED_KEY = "rhema_enrollment_promotion_dismissed_v1";
@@ -11,12 +11,14 @@ type EnrollmentStatusResponse = {
   data?: {
     enrollment_open?: boolean;
     application_years?: number[];
+    promotion_video_url?: string | null;
   };
 };
 
 export default function EnrollmentPromotionModal() {
   const [open, setOpen] = useState(false);
   const [applicationYears, setApplicationYears] = useState<number[]>([]);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   const closePromotion = useCallback(() => {
@@ -46,6 +48,7 @@ export default function EnrollmentPromotionModal() {
           : [];
         if (!years.length) return;
         setApplicationYears(years);
+        setVideoUrl(typeof response.data.promotion_video_url === "string" ? response.data.promotion_video_url : null);
         setOpen(true);
       })
       .catch((cause: unknown) => {
@@ -113,7 +116,7 @@ export default function EnrollmentPromotionModal() {
         aria-modal="true"
         aria-labelledby="enrollment-promotion-title"
         aria-describedby="enrollment-promotion-description"
-        className="relative my-auto w-full max-w-xl overflow-hidden rounded-[28px] bg-white shadow-2xl shadow-slate-950/30"
+        className="relative my-auto w-full max-w-2xl overflow-hidden rounded-[28px] bg-white shadow-2xl shadow-slate-950/30"
       >
         <div className="relative overflow-hidden bg-[#10283a] px-6 pb-8 pt-7 text-white sm:px-9 sm:pb-10 sm:pt-8">
           <div aria-hidden="true" className="absolute -right-16 -top-20 h-56 w-56 rounded-full border-[28px] border-white/10" />
@@ -143,34 +146,38 @@ export default function EnrollmentPromotionModal() {
           </div>
         </div>
 
-        <div className="space-y-3 p-6 sm:p-8">
+        <div className="space-y-4 p-6 sm:p-8">
+          {videoUrl && (
+            <div className="overflow-hidden rounded-2xl bg-slate-950">
+              <iframe
+                title="Rhema enrollment video"
+                src={videoUrl}
+                className="aspect-video w-full"
+                loading="lazy"
+                referrerPolicy="strict-origin-when-cross-origin"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+              />
+            </div>
+          )}
           <Link
             href="/application"
             onClick={closePromotion}
-            className="group flex w-full items-center justify-between gap-4 rounded-2xl bg-rhema-red px-5 py-4 text-white shadow-lg shadow-red-900/10 transition hover:bg-rhema-red-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rhema-red focus-visible:ring-offset-2"
+            className="group flex w-full items-center justify-between gap-4 rounded-xl bg-rhema-red px-5 py-3.5 text-white shadow-lg shadow-red-900/10 transition hover:bg-rhema-red-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rhema-red focus-visible:ring-offset-2"
           >
             <span>
-              <span className="block text-sm font-black">Start your application</span>
-              <span className="mt-1 block text-xs text-white/85">Apply for {applicationYears.length === 1 ? applicationYears[0] : "an available year"}</span>
+              <span className="block text-sm font-black">Apply now</span>
+              <span className="mt-1 block text-xs text-white/85">Applications for {applicationYears.length === 1 ? applicationYears[0] : "available years"}</span>
             </span>
             <ArrowRight className="h-5 w-5 shrink-0 transition group-hover:translate-x-1" />
           </Link>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Link
-              href="/apply"
-              onClick={closePromotion}
-              className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0f4c5c] focus-visible:ring-offset-2"
-            >
-              <BookOpen className="h-4 w-4 text-[#0f4c5c]" /> Admissions guide
-            </Link>
-            <Link
-              href="/offered-programs"
-              onClick={closePromotion}
-              className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0f4c5c] focus-visible:ring-offset-2"
-            >
-              <GraduationCap className="h-4 w-4 text-[#0f4c5c]" /> Explore programs
-            </Link>
-          </div>
+          <Link
+            href="/apply"
+            onClick={closePromotion}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0f4c5c] focus-visible:ring-offset-2"
+          >
+            <GraduationCap className="h-4 w-4 text-[#0f4c5c]" /> Know more
+          </Link>
           <button
             type="button"
             onClick={closePromotion}

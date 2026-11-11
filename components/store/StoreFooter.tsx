@@ -20,8 +20,8 @@ export default function StoreFooter() {
             <GraduationCap className="h-5 w-5" />
           </div>
           <div className="flex flex-col truncate">
-            <span className="font-black text-xs tracking-wider uppercase text-white leading-tight">EduPortal</span>
-            <span className="text-[9px] font-black tracking-widest text-slate-400 uppercase mt-0.5">Admin Workspace</span>
+            <span className="font-black text-xs tracking-wider uppercase text-white leading-tight">Godfrey Academy</span>
+            <span className="text-[9px] font-black tracking-widest text-slate-400 uppercase mt-0.5">School store</span>
           </div>
         </div>
             <p className="mt-5 max-w-xs text-sm leading-7 text-slate-300">

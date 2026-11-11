@@ -3,6 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { 
   GraduationCap, 
   LayoutDashboard, 
@@ -49,24 +50,34 @@ const studentLinks: NavItem[] = [
 
 export default function StudentSidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 767px)');
+    const updateViewport = () => setIsMobile(mediaQuery.matches);
+    updateViewport();
+    mediaQuery.addEventListener('change', updateViewport);
+    return () => mediaQuery.removeEventListener('change', updateViewport);
+  }, []);
 
   return (
     <>
       {isOpen && (
-        <div 
+        <div
           onClick={onClose}
+          aria-hidden="true"
           className="fixed inset-0 z-40 bg-slate-950/35 backdrop-blur-sm transition-opacity duration-300 md:hidden"
         />
       )}
 
       <aside className={`
         fixed inset-y-0 left-0 z-[60] flex shrink-0 flex-col border-r border-white/15 bg-rhema-red text-white transition-all duration-300 ease-in-out
-        md:sticky md:z-30 h-screen overflow-hidden
+        md:sticky md:z-30 h-[100dvh] overflow-hidden
         ${isOpen 
           ? 'w-64 translate-x-0' 
           : '-translate-x-full md:translate-x-0 md:w-20 lg:w-64'
         }
-      `}>
+      `} id="student-navigation" aria-label="Student navigation" aria-hidden={isMobile && !isOpen} inert={isMobile && !isOpen}>
         <div className="flex h-16 shrink-0 items-center justify-between border-b border-white/15 px-4 lg:px-5">
           <div className="flex items-center gap-3 overflow-hidden">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-rhema-red shadow-sm">
@@ -87,7 +98,7 @@ export default function StudentSidebar({ isOpen, onClose }: SidebarProps) {
           </button>
         </div>
 
-        <nav aria-label="Student navigation" className="flex-1 space-y-1 overflow-y-auto px-3 py-5">
+        <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-5">
           {studentLinks.map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.href;

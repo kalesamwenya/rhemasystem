@@ -3,8 +3,23 @@
 :root {
   --rhema-red: #c8102e;
   --rhema-red-dark: color-mix(in srgb, var(--rhema-red), black 15%);
+  --rhema-red-50: color-mix(in srgb, var(--rhema-red), white 97%);
+  --rhema-red-100: color-mix(in srgb, var(--rhema-red), white 94%);
+  --rhema-red-200: color-mix(in srgb, var(--rhema-red), white 84%);
+  --rhema-red-300: color-mix(in srgb, var(--rhema-red), white 66%);
+  --rhema-red-400: color-mix(in srgb, var(--rhema-red), white 40%);
+  --rhema-red-500: color-mix(in srgb, var(--rhema-red), white 15%);
+  --rhema-red-600: var(--rhema-red);
+  --rhema-red-700: var(--rhema-red-dark);
+  --rhema-red-800: color-mix(in srgb, var(--rhema-red), black 30%);
+  --rhema-red-900: color-mix(in srgb, var(--rhema-red), black 45%);
+  --rhema-red-950: color-mix(in srgb, var(--rhema-red), black 60%);
   --rhema-blue: #003da5;
   --rhema-accent: #f2b544;
+  --rhema-canvas: #f6f7f4;
+  --rhema-ink: #17201d;
+  --rhema-muted: #68746e;
+  --rhema-line: #dce3de;
   --rhema-blue-50: color-mix(in srgb, var(--rhema-blue), white 97%);
   --rhema-blue-100: color-mix(in srgb, var(--rhema-blue), white 94%);
   --rhema-blue-200: color-mix(in srgb, var(--rhema-blue), white 84%);
@@ -16,11 +31,11 @@
   --rhema-blue-800: color-mix(in srgb, var(--rhema-blue), black 30%);
   --rhema-blue-900: color-mix(in srgb, var(--rhema-blue), black 45%);
   --rhema-blue-950: color-mix(in srgb, var(--rhema-blue), black 60%);
-  --background: #f6f7f4;
-  --foreground: #17201d;
-  --admin-ink: #17201d;
-  --admin-muted: #68746e;
-  --admin-line: #dce3de;
+  --background: var(--rhema-canvas);
+  --foreground: var(--rhema-ink);
+  --admin-ink: var(--rhema-ink);
+  --admin-muted: var(--rhema-muted);
+  --admin-line: var(--rhema-line);
   --admin-paper: #ffffff;
   --admin-teal: var(--rhema-blue);
 }
@@ -30,6 +45,17 @@
   --color-foreground: var(--foreground);
   --color-rhema-red: var(--rhema-red);
   --color-rhema-red-dark: var(--rhema-red-dark);
+  --color-red-50: var(--rhema-red-50);
+  --color-red-100: var(--rhema-red-100);
+  --color-red-200: var(--rhema-red-200);
+  --color-red-300: var(--rhema-red-300);
+  --color-red-400: var(--rhema-red-400);
+  --color-red-500: var(--rhema-red-500);
+  --color-red-600: var(--rhema-red-600);
+  --color-red-700: var(--rhema-red-700);
+  --color-red-800: var(--rhema-red-800);
+  --color-red-900: var(--rhema-red-900);
+  --color-red-950: var(--rhema-red-950);
   --color-rhema-blue: var(--rhema-blue);
   --color-rhema-accent: var(--rhema-accent);
   --color-blue-50: var(--rhema-blue-50);
@@ -58,17 +84,56 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  color-scheme: light;
+  scroll-behavior: smooth;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), sans-serif;
+}
+
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+
+:is(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 3px solid var(--rhema-blue);
+  outline-offset: 3px;
+}
+
+:is(input, select, textarea):focus-visible {
+  border-color: var(--rhema-blue);
+}
+
+::selection {
+  background: color-mix(in srgb, var(--rhema-blue), white 82%);
+  color: var(--rhema-ink);
+}
+
+* {
+  scrollbar-color: color-mix(in srgb, var(--rhema-blue), white 50%) transparent;
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: 0.6rem;
+  height: 0.6rem;
+}
+
+*::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--rhema-blue), white 50%);
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--rhema-blue);
+  background-clip: padding-box;
 }
 
 .swal2-popup.rhema-swal-popup {
@@ -133,17 +198,6 @@ body {
   background: #f1f5f9;
 }
 
-* {
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-
-*::-webkit-scrollbar {
-  display: none;
-  width: 0;
-  height: 0;
-}
-
 button,
 input,
 select,
@@ -175,19 +229,18 @@ textarea {
   }
 
   .admin-focus:focus-visible {
-    outline: 2px solid var(--admin-teal);
-    outline-offset: 2px;
+    outline: 3px solid var(--rhema-blue);
+    outline-offset: 3px;
   }
 }
 
 @layer utilities {
-  /* Suppress scrollbar visibility across webkit/firefox layout nodes */
   .scrollbar-none::-webkit-scrollbar {
-    display: none;
+    width: 0.6rem;
+    height: 0.6rem;
   }
   .scrollbar-none {
-    -ms-overflow-style: none;  /* IE and Edge */
-    scrollbar-width: none;  /* Firefox */
+    scrollbar-width: thin;
   }
 }
 
@@ -231,6 +284,10 @@ textarea {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
   .rhema-skeleton,
   .rhema-toast,
   .rhema-toast-exit,

@@ -39,9 +39,10 @@ export default function StudentTopbar({ student, onMenuToggle, isSidebarOpen }: 
       <div className="flex min-w-0 items-center gap-3">
         <button
           onClick={onMenuToggle}
-          className="rounded-xl border border-slate-200 p-2 text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 focus:outline-none"
+          className="rounded-xl border border-slate-200 p-2 text-slate-600 transition-colors hover:bg-blue-50 hover:text-blue-900"
           aria-label="Toggle navigation"
           aria-expanded={isSidebarOpen}
+          aria-controls="student-navigation"
         >
           <Menu className="h-5 w-5" />
         </button>

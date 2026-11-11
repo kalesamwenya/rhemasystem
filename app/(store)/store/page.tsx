@@ -25,6 +25,7 @@ import { api } from "@/lib/api";
 import { assetUrl, uploadPdfDocument } from "@/lib/api";
 import { openFlutterwaveInlineCheckout, type FlutterwaveInlineCheckout } from "@/lib/flutterwave-inline";
 import { createOrderPaymentReceiptPdf, openPaymentReceiptBlob } from "@/lib/payment-receipt";
+import { formatStoreMoney, storeCurrency } from "@/lib/store-currency";
 
 const deliveryOptions = ["School pickup", "Home delivery within city", "Regional delivery", "Courier dispatch"];
 const paymentMethods = [
@@ -66,7 +67,7 @@ function StorePageContent() {
   });
   const products: StoreProduct[] = inventory.map((product) => ({
     ...product,
-    price: `ZMW ${product.variants[0]?.priceValue ?? 0}`,
+    price: formatStoreMoney(product.variants[0]?.priceValue ?? 0),
     priceValue: product.variants[0]?.priceValue ?? 0,
     colors: [...new Set(product.variants.map((item) => item.color).filter(Boolean))] as string[],
     sizes: [...new Set(product.variants.map((item) => item.size).filter(Boolean))] as string[],
@@ -232,7 +233,7 @@ function StorePageContent() {
               payer_phone: formData.phone,
               paid_for: "School store order",
               amount: Number(checkout.amount),
-              currency: checkout.currency || "GHS",
+              currency: checkout.currency || storeCurrency,
               reference: purchaseReference,
               gateway: "Flutterwave",
               gateway_transaction_id: transactionId,
@@ -317,15 +318,15 @@ function StorePageContent() {
 
   return (
     <main>
-      <section className="relative min-h-[560px] overflow-hidden bg-[#0b1737] text-white">
+      <section className="relative min-h-[460px] overflow-hidden bg-[#0b1737] text-white sm:min-h-[560px]">
         <img src={heroSlide.image} alt="" className="absolute inset-0 h-full w-full object-cover opacity-35" />
         <div className="absolute inset-0 bg-gradient-to-r from-[#0b1737] via-[#0b1737]/85 to-[#0b1737]/30" />
-        <div className="relative mx-auto flex min-h-[560px] max-w-7xl items-end px-4 py-16 sm:px-6 lg:px-8">
+        <div className="relative mx-auto flex min-h-[460px] max-w-7xl items-end px-4 py-10 sm:min-h-[560px] sm:px-6 sm:py-16 lg:px-8">
           <div className="max-w-2xl">
             <span className="inline-flex items-center rounded-full border border-red-300/40 bg-red-600/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] text-white">{heroSlide.eyebrow}</span>
-            <h1 className="mt-6 text-4xl font-black tracking-tight md:text-6xl">{heroSlide.title}</h1>
-            <p className="mt-5 max-w-xl text-lg leading-8 text-slate-200">{heroSlide.copy}</p>
-            <div className="mt-8 flex flex-wrap items-center gap-4">
+            <h1 className="mt-5 text-3xl font-black tracking-tight sm:mt-6 sm:text-4xl md:text-6xl">{heroSlide.title}</h1>
+            <p className="mt-4 max-w-xl text-base leading-7 text-slate-200 sm:mt-5 sm:text-lg sm:leading-8">{heroSlide.copy}</p>
+            <div className="mt-6 flex flex-wrap items-center gap-3 sm:mt-8 sm:gap-4">
               <button type="button" onClick={() => heroSlide.product && openQuickAdd(heroSlide.product)} className="inline-flex items-center gap-2 rounded-full bg-red-600 px-6 py-3.5 text-sm font-semibold text-white transition hover:bg-red-500">{heroSlide.type === "item" ? "View item" : "Shop offer"}<ArrowRight size={16} /></button>
               <span className="rounded-full border border-white/20 bg-white/10 px-4 py-2.5 text-sm font-bold text-white">{heroSlide.badge}</span>
             </div>
@@ -349,7 +350,7 @@ function StorePageContent() {
         </div>
 
         {filteredProducts.length ? (
-          <div className="grid gap-8 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-5 sm:gap-7 md:grid-cols-2 xl:grid-cols-3">
             {filteredProducts.map((product) => (
               <StoreProductCard key={product.id} product={product} onAddToCart={openQuickAdd} />
             ))}
@@ -395,7 +396,7 @@ function StorePageContent() {
       ) : null}
 
       {cart.length && cartOpen ? (
-        <aside className="fixed bottom-4 right-4 z-50 w-[min(92vw,22rem)] rounded-[2rem] border border-slate-200 bg-white p-4 shadow-2xl shadow-slate-300/70">
+        <aside className="fixed bottom-3 right-3 z-50 flex max-h-[calc(100dvh-1.5rem)] w-[min(94vw,22rem)] flex-col overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white p-3 shadow-2xl shadow-slate-300/70 sm:bottom-4 sm:right-4 sm:rounded-[2rem] sm:p-4">
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <ShoppingCart size={18} className="text-red-600" />
@@ -406,7 +407,7 @@ function StorePageContent() {
             </button>
           </div>
 
-          <div className="space-y-3">
+          <div className="max-h-[45dvh] min-h-0 space-y-3 overflow-y-auto sm:max-h-[50dvh]">
             {cart.map((item) => (
               <div key={item.variantId} className="flex items-center gap-3 rounded-2xl border border-slate-200 p-2">
                 <img src={assetUrl(item.image)} alt={item.name} className="h-14 w-14 rounded-xl object-cover" />
@@ -416,7 +417,7 @@ function StorePageContent() {
                     {item.selectedColor ? `${item.selectedColor} • ` : ""}
                     {item.selectedSize ?? "Standard"}
                   </p>
-                  <p className="text-xs text-slate-500">GHS {item.priceValue * item.quantity}</p>
+                  <p className="text-xs text-slate-500">{formatStoreMoney(item.priceValue * item.quantity)}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <button type="button" onClick={() => updateQuantity(item.variantId, -1)} className="rounded-full bg-slate-100 p-1.5 text-slate-700">
@@ -437,7 +438,7 @@ function StorePageContent() {
           <div className="mt-4 border-t border-slate-200 pt-4">
             <div className="flex items-center justify-between text-sm text-slate-600">
               <span>Subtotal</span>
-              <span className="font-bold text-slate-900">GHS {cartTotal}</span>
+              <span className="font-bold text-slate-900">{formatStoreMoney(cartTotal)}</span>
             </div>
             <button
               type="button"
@@ -451,8 +452,8 @@ function StorePageContent() {
       ) : null}
 
       {selectedProduct ? (
-        <div className="fixed inset-0 z-[60] flex items-end justify-center bg-slate-950/45 p-4 md:items-center">
-          <div className="w-full max-w-md rounded-[2rem] bg-white p-6 shadow-2xl shadow-slate-900/20">
+        <div className="fixed inset-0 z-[60] flex items-end justify-center overflow-y-auto bg-slate-950/45 p-2 sm:items-center sm:p-4">
+          <div className="my-auto max-h-[calc(100dvh-1rem)] w-full max-w-md overflow-y-auto rounded-[1.5rem] bg-white p-4 shadow-2xl shadow-slate-900/20 sm:max-h-[calc(100dvh-2rem)] sm:rounded-[2rem] sm:p-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-red-600">Product details</p>
@@ -516,7 +517,7 @@ function StorePageContent() {
 
             <div className="mt-6 flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
               <span className="text-sm text-slate-500">Price</span>
-              <span className="text-right text-xl font-black text-slate-900">GHS {selectedProduct.variants.find((item) => item.color === selectedColor && item.size === selectedSize)?.priceValue ?? selectedProduct.priceValue}<small className="block text-xs font-medium text-slate-500">{selectedProduct.variants.find((item) => item.color === selectedColor && item.size === selectedSize)?.quantity ?? 0} in stock</small></span>
+              <span className="text-right text-xl font-black text-slate-900">{formatStoreMoney(selectedProduct.variants.find((item) => item.color === selectedColor && item.size === selectedSize)?.priceValue ?? selectedProduct.priceValue)}<small className="block text-xs font-medium text-slate-500">{selectedProduct.variants.find((item) => item.color === selectedColor && item.size === selectedSize)?.quantity ?? 0} in stock</small></span>
             </div>
             <p className="mt-3 text-xs text-slate-500">Batch: {selectedProduct.variants.find((item) => item.color === selectedColor && item.size === selectedSize)?.batchCode ?? "-"}</p>
 
@@ -533,8 +534,8 @@ function StorePageContent() {
       ) : null}
 
       {checkoutOpen ? (
-        <div className="fixed inset-0 z-[70] bg-slate-950/40 p-4 backdrop-blur-sm">
-          <div className="mx-auto mt-12 max-w-2xl rounded-[2rem] bg-white p-6 shadow-2xl shadow-slate-900/20">
+        <div className="fixed inset-0 z-[70] overflow-y-auto bg-slate-950/40 p-2 backdrop-blur-sm sm:p-4">
+          <div className="mx-auto my-2 max-h-[calc(100dvh-1rem)] max-w-2xl overflow-y-auto rounded-[1.5rem] bg-white p-4 shadow-2xl shadow-slate-900/20 sm:my-8 sm:max-h-[calc(100dvh-4rem)] sm:rounded-[2rem] sm:p-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-red-600">Checkout</p>
@@ -561,7 +562,7 @@ function StorePageContent() {
                   value={formData.phone}
                   onChange={(event) => setFormData((prev) => ({ ...prev, phone: event.target.value }))}
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-red-400 focus:bg-white"
-                  placeholder="+233 20 000 0000"
+                  placeholder="+260 97 000 0000"
                 />
               </div>
               <div>
@@ -619,13 +620,13 @@ function StorePageContent() {
                 {cart.map((item) => (
                   <div key={item.variantId} className="flex items-start justify-between gap-3 text-xs text-slate-600">
                     <span className="min-w-0"><span className="font-semibold text-slate-800">{item.name}</span><span className="block">Qty {item.quantity}{item.selectedColor ? ` • ${item.selectedColor}` : ""}{item.selectedSize ? ` • ${item.selectedSize}` : ""}</span></span>
-                    <span className="shrink-0 font-bold text-slate-900">GHS {item.priceValue * item.quantity}</span>
+                    <span className="shrink-0 font-bold text-slate-900">{formatStoreMoney(item.priceValue * item.quantity)}</span>
                   </div>
                 ))}
               </div>
               <div className="mt-2 flex items-center justify-between text-sm text-slate-600">
                 <span>Subtotal</span>
-                <span className="font-bold text-slate-900">GHS {cartTotal}</span>
+                <span className="font-bold text-slate-900">{formatStoreMoney(cartTotal)}</span>
               </div>
             </div>
 

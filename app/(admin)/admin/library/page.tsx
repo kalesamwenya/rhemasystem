@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { BookOpen, ChevronLeft, ChevronRight, FileText, Headphones, Link2, Pencil, Plus, Search, Trash2, UploadCloud, X } from 'lucide-react';
 import { confirmWithApp } from '@/components/ui/app-dialogs';
 import { api } from '@/lib/api';
@@ -405,8 +406,11 @@ export default function LibraryList() {
   return (
     <div className="space-y-6 pb-12">
       <header className="flex flex-col gap-4 border-b border-slate-200 pb-5 md:flex-row md:items-end md:justify-between">
-        <div><p className="text-[10px] font-black uppercase tracking-[0.22em] text-red-600">Academic repository</p><h1 className="mt-2 text-3xl font-black tracking-tight text-slate-900">Resource Center</h1><p className="mt-1 text-sm text-slate-500">Attach documents, links, and session audio to a selected course and class session.</p></div>
-        <button type="button" onClick={openCreate} className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white hover:bg-slate-800"><Plus className="h-4 w-4" /> Add resources</button>
+        <div><p className="text-[10px] font-black uppercase tracking-[0.22em] text-red-600">Academic repository</p><h1 className="mt-2 text-3xl font-black tracking-tight text-slate-900">Resource Center</h1><p className="mt-1 text-sm text-slate-500">Manage course materials and the student book collection.</p></div>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Link href="/admin/library/books" className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-black uppercase tracking-wider text-slate-700 hover:bg-slate-50"><BookOpen className="h-4 w-4" /> Manage books</Link>
+          <button type="button" onClick={openCreate} className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white hover:bg-slate-800"><Plus className="h-4 w-4" /> Add resources</button>
+        </div>
       </header>
       {notice && <div role="status" className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs font-semibold text-blue-800">{notice}</div>}
 

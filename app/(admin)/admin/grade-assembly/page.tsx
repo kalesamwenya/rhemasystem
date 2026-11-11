@@ -11,7 +11,12 @@ import {
 } from '@/lib/student-grades';
 
 type Student = { student_id: string; name: string; class: string };
-type GradeResponse = { data?: StudentGrade[]; message?: string };
+type GradeResponse = {
+  data?: StudentGrade[];
+  message?: string;
+  transcript_published?: boolean;
+  transcript_generated_at?: string | null;
+};
 type RosterResponse = { data?: Student[]; message?: string };
 type CourseHoursForm = { sessions: string; hours: string };
 
@@ -28,6 +33,9 @@ export default function GradeAssemblyPage() {
   const [loadingRoster, setLoadingRoster] = useState(true);
   const [loadingGrades, setLoadingGrades] = useState(false);
   const [savingCourseId, setSavingCourseId] = useState('');
+  const [publishingTranscript, setPublishingTranscript] = useState(false);
+  const [transcriptPublished, setTranscriptPublished] = useState(false);
+  const [transcriptGeneratedAt, setTranscriptGeneratedAt] = useState<string | null>(null);
   const [courseTotals, setCourseTotals] = useState<Record<string, CourseHoursForm>>({});
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -52,6 +60,8 @@ export default function GradeAssemblyPage() {
     if (!selectedStudentId) {
       setGrades([]);
       setCourseTotals({});
+      setTranscriptPublished(false);
+      setTranscriptGeneratedAt(null);
       return;
     }
     let active = true;
@@ -63,6 +73,8 @@ export default function GradeAssemblyPage() {
         if (!Array.isArray(response.data)) throw new Error(response.message ?? 'Student grades were not returned.');
         if (!active) return;
         setGrades(response.data);
+        setTranscriptPublished(response.transcript_published === true);
+        setTranscriptGeneratedAt(response.transcript_generated_at ?? null);
         const courses = summarizeCourseGrades(response.data);
         setCourseTotals(Object.fromEntries(courses.map((course) => {
           const courseGrades = response.data?.filter((grade) => grade.course_id === course.course_id) ?? [];
@@ -139,6 +151,31 @@ export default function GradeAssemblyPage() {
     }
   };
 
+  const setTranscriptPublication = async (published: boolean) => {
+    if (!selectedStudent) return;
+    setPublishingTranscript(true);
+    setError('');
+    setNotice('');
+    try {
+      const response = await api.students.setTranscriptPublication({
+        student_id: selectedStudent.student_id,
+        published,
+      }) as { success?: boolean; message?: string; published?: boolean };
+      if (!response.success || response.published !== published) {
+        throw new Error(response.message ?? 'Unable to update transcript availability.');
+      }
+      setTranscriptPublished(published);
+      setTranscriptGeneratedAt(published ? new Date().toISOString() : null);
+      setNotice(response.message ?? (published
+        ? 'Transcript generated and made available to the student.'
+        : 'Transcript is no longer available to the student.'));
+    } catch (cause) {
+      setError(messageOf(cause, 'Unable to update transcript availability.'));
+    } finally {
+      setPublishingTranscript(false);
+    }
+  };
+
   return (
     <main className="space-y-6">
       <header className="border-b border-slate-200 pb-5">
@@ -179,10 +216,22 @@ export default function GradeAssemblyPage() {
               <h2 className="text-xl font-black text-slate-900">{selectedStudent.name}</h2>
               <p className="text-sm text-slate-500">{selectedStudent.student_id} · Current cohort {selectedStudent.class}</p>
             </div>
-            <button type="button" onClick={() => window.print()} className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-bold text-white hover:bg-slate-800">
-              <Printer className="h-4 w-4" /> Print front &amp; back transcript
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" onClick={() => void setTranscriptPublication(true)} disabled={publishingTranscript} className="inline-flex items-center justify-center gap-2 rounded-xl bg-rhema-red px-4 py-3 text-sm font-bold text-white hover:bg-rhema-red-dark disabled:opacity-60">
+                {publishingTranscript ? <Loader2 className="h-4 w-4 animate-spin" /> : <BookOpen className="h-4 w-4" />}
+                {transcriptPublished ? 'Regenerate transcript' : 'Generate for student'}
+              </button>
+              {transcriptPublished && <button type="button" onClick={() => void setTranscriptPublication(false)} disabled={publishingTranscript} className="rounded-xl border border-red-200 bg-white px-4 py-3 text-sm font-bold text-red-800 hover:bg-red-50 disabled:opacity-60">Remove student access</button>}
+              <button type="button" onClick={() => window.print()} className="inline-flex items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm font-bold text-blue-900 hover:bg-blue-50">
+                <Printer className="h-4 w-4" /> Print transcript
+              </button>
+            </div>
           </div>
+          <p role="status" className="text-xs text-slate-600">
+            {transcriptPublished
+              ? `Transcript is available to this student${transcriptGeneratedAt ? ` · generated ${new Date(transcriptGeneratedAt).toLocaleString()}` : ''}.`
+              : 'The student can see course grades, but GPA summaries and transcript downloads remain hidden until generated here.'}
+          </p>
 
           <section aria-label="Grade point averages" className="grid gap-3 sm:grid-cols-3">
             {[['Level 1 GPA · first year', levelOneGpa], ['Level 2 GPA · second year', levelTwoGpa], ['Cumulative GPA', cumulativeGpa]].map(([label, gpa]) => (

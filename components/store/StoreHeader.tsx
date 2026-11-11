@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { GraduationCap, Menu, Search, ShoppingBag, ShoppingCart, X } from "lucide-react";
+import { GraduationCap, Menu, Search, ShoppingCart, X } from "lucide-react";
 import { useStore } from "@/components/store/StoreContext";
 
 const navItems = [{ href: "/store", label: "Home" }];
@@ -20,8 +20,8 @@ export default function StoreHeader() {
             <GraduationCap className="h-5 w-5" />
           </div>
           <div className="flex flex-col truncate">
-            <span className="font-black text-xs tracking-wider uppercase text-white leading-tight">EduPortal</span>
-            <span className="text-[9px] font-black tracking-widest text-slate-400 uppercase mt-0.5">Admin Workspace</span>
+            <span className="font-black text-xs tracking-wider uppercase text-white leading-tight">Godfrey Academy</span>
+            <span className="text-[9px] font-black tracking-widest text-slate-400 uppercase mt-0.5">School store</span>
           </div>
         </div>
         </Link>
@@ -49,13 +49,7 @@ export default function StoreHeader() {
             <button type="button" onClick={() => setSearchOpen(true)} className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3.5 py-2.5 text-sm font-medium text-white transition hover:bg-white/10"><Search size={16} /> Search</button>
           )}
 
-          <button
-            type="button"
-            className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10"
-          >
-            <ShoppingBag size={16} />
-            Shop now
-          </button>
+          <Link href="/store#shop" className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10">Shop now</Link>
 
           <Link href="/store/cart" className="relative flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20" aria-label={`Open cart with ${cartCount} items`}>
             <ShoppingCart size={18} />
@@ -98,6 +92,19 @@ export default function StoreHeader() {
               <Search size={16} />
               Search products
             </button>
+            {searchOpen && (
+              <label className="flex items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-3 py-3">
+                <Search size={16} className="shrink-0 text-slate-300" />
+                <input
+                  autoFocus
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search products..."
+                  className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-slate-400"
+                />
+                {query && <button type="button" onClick={() => setQuery('')} aria-label="Clear search" className="text-slate-300"><X size={15} /></button>}
+              </label>
+            )}
             <Link href="/store/cart" onClick={() => setMobileOpen(false)} className="inline-flex items-center justify-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10">
               <ShoppingCart size={16} />
               Cart ({cartCount})

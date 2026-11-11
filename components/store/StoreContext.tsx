@@ -12,6 +12,7 @@ import {
 import { useEffect } from "react";
 import type { InventoryVariant } from "@/lib/store-inventory";
 import type { StorePromotion } from "@/lib/store-promotions";
+import { formatStoreMoney } from "@/lib/store-currency";
 
 export type StoreProduct = {
   id: string;
@@ -142,7 +143,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           inventoryVariantId: selectedVariant.id,
           batchCode: selectedVariant.batchCode,
           priceValue: selectedVariant.priceValue,
-          price: `GHS ${selectedVariant.priceValue}`,
+          price: formatStoreMoney(selectedVariant.priceValue),
         },
       ];
     });
