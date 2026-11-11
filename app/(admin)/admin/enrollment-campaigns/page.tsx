@@ -66,6 +66,7 @@ export default function EnrollmentCampaignsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingVideo, setUploadingVideo] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [videoSource, setVideoSource] = useState<'upload' | 'link'>('upload');
   const [notice, setNotice] = useState('');
   const [isError, setIsError] = useState(false);
@@ -107,16 +108,17 @@ export default function EnrollmentCampaignsPage() {
       setIsError(true);
       return;
     }
-    if (file.size > 100 * 1024 * 1024) {
-      setNotice('Video files must be 100 MB or smaller.');
+    if (file.size > 360 * 1024 * 1024) {
+      setNotice('Video files must be 360 MB or smaller.');
       setIsError(true);
       return;
     }
     setUploadingVideo(true);
+    setUploadProgress(0);
     setNotice('');
     setIsError(false);
     try {
-      const response = await api.admissions.uploadEnrollmentCampaignVideo(file) as ApiResponse<{ path: string; type: 'upload' }>;
+      const response = await api.admissions.uploadEnrollmentCampaignVideo(file, (progress: number) => setUploadProgress(progress)) as ApiResponse<{ path: string; type: 'upload' }>;
       if (!response.data?.path) throw new Error(response.message || 'The video upload did not return a file path.');
       updateCampaign({ video_url: response.data.path, video_type: 'upload', video_enabled: true });
       setVideoSource('upload');
@@ -126,6 +128,7 @@ export default function EnrollmentCampaignsPage() {
       setIsError(true);
     } finally {
       setUploadingVideo(false);
+      setUploadProgress(null);
     }
   };
 
@@ -204,9 +207,20 @@ export default function EnrollmentCampaignsPage() {
                       <label className="flex cursor-pointer flex-col items-center gap-2 text-center">
                         <UploadCloud className="h-6 w-6 text-teal-700" />
                         <span className="text-sm font-bold text-slate-800">{uploadingVideo ? 'Uploading video…' : 'Choose a video from your device'}</span>
-                        <span className="text-xs text-slate-500">MP4 or WebM · Maximum 100 MB</span>
+                        <span className="text-xs text-slate-500">MP4 or WebM · Maximum 360 MB</span>
                         <input type="file" accept="video/mp4,video/webm,.mp4,.webm" disabled={uploadingVideo} onChange={(event) => { void uploadVideo(event.target.files?.[0]); event.currentTarget.value = ''; }} className="sr-only" />
                       </label>
+                      {uploadingVideo && uploadProgress !== null && (
+                        <div className="mt-4 rounded-lg border border-slate-200 bg-white p-3" role="status" aria-live="polite">
+                          <div className="mb-2 flex items-center justify-between gap-3 text-xs font-semibold text-slate-600">
+                            <span className="inline-flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin text-teal-700" />{uploadProgress === 100 ? 'Processing upload…' : 'Uploading video…'}</span>
+                            <span>{uploadProgress}%</span>
+                          </div>
+                          <div role="progressbar" aria-label="Video upload progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={uploadProgress} className="h-2 overflow-hidden rounded-full bg-slate-100">
+                            <div className="h-full rounded-full bg-teal-600 transition-[width]" style={{ width: `${uploadProgress}%` }} />
+                          </div>
+                        </div>
+                      )}
                       {campaign.video_type === 'upload' && campaign.video_url && (
                         <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
                           <span className="truncate text-xs font-semibold text-slate-600">{campaign.video_url.split('/').pop()}</span>
