@@ -29,6 +29,7 @@ import {
   LogOut,
   MessageSquareText,
   Mail,
+  Megaphone,
   Share2,
   ShieldCheck,
   ShoppingBag,
@@ -90,6 +91,7 @@ const navigationGroups: NavGroup[] = [
     title: 'People',
     items: [
       { title: 'Admissions', href: '/admin/admissions', module: 'admissions', icon: ClipboardCheck },
+      { title: 'Enrollment Campaigns', href: '/admin/enrollment-campaigns', module: 'admissions', icon: Megaphone },
       { title: 'Partnership applications', href: '/admin/partner-applications', module: 'partnerships', icon: Handshake },
       { title: 'Partner management', href: '/admin/partnerships', module: 'partnerships', icon: Handshake },
       { title: 'Student Directory', href: '/admin/students', module: 'students', icon: Users },

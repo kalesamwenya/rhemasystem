@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { Bell, CalendarRange, CheckCircle2, CreditCard, Database, GraduationCap, Save, ShieldCheck, Wallet, XCircle } from 'lucide-react';
 import { api } from '@/lib/api';
 
@@ -25,8 +26,6 @@ type SettingsState = {
     applicationFeeRequired: boolean;
     applicationFeeAmount: number;
     applicationYears: number[];
-    promotionVideoEnabled: boolean;
-    promotionVideoUrl: string;
   };
   cohorts: Record<string, string>;
   terms: Record<string, TermDates>;
@@ -81,8 +80,6 @@ const initialState: SettingsState = {
     applicationFeeRequired: false,
     applicationFeeAmount: 0,
     applicationYears: [2026, 2027, 2028],
-    promotionVideoEnabled: false,
-    promotionVideoUrl: '',
   },
   cohorts: defaultCohorts,
   terms: defaultTerms,
@@ -174,10 +171,6 @@ export default function SettingsHub() {
                 .filter((year) => Number.isInteger(year) && year >= 2000 && year <= 2100)))
                 .sort((left, right) => left - right)
               : [2026, 2027, 2028],
-            promotionVideoEnabled: data.admissions?.promotionVideoEnabled === true,
-            promotionVideoUrl: typeof data.admissions?.promotionVideoUrl === 'string'
-              ? data.admissions.promotionVideoUrl
-              : '',
           },
           cohorts,
           terms: normalizeTerms(data.terms),
@@ -323,43 +316,10 @@ export default function SettingsHub() {
         />
         <span className="text-sm font-bold text-slate-800">Open applications for enrollment</span>
       </label>
-      <div className="rounded-xl border border-slate-200 p-4">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="text-sm font-black text-slate-900">Video enrollment popup</p>
-            <p className="mt-1 text-xs leading-5 text-slate-600">Optionally feature a YouTube or Vimeo video in the enrollment popup. The Apply and Know more buttons appear below it.</p>
-          </div>
-          <label className="flex items-center gap-2 text-sm font-bold text-slate-800">
-            <input
-              type="checkbox"
-              checked={settings.admissions.promotionVideoEnabled}
-              onChange={(event) => setSettings((current) => ({
-                ...current,
-                admissions: { ...current.admissions, promotionVideoEnabled: event.target.checked },
-              }))}
-              className="h-4 w-4 accent-emerald-700"
-            />
-            Show video in popup
-          </label>
-        </div>
-        {settings.admissions.promotionVideoEnabled && (
-          <label className="mt-4 block text-xs font-bold uppercase tracking-wide text-slate-500">
-            YouTube or Vimeo URL
-            <input
-              type="url"
-              required
-              maxLength={2048}
-              value={settings.admissions.promotionVideoUrl}
-              onChange={(event) => setSettings((current) => ({
-                ...current,
-                admissions: { ...current.admissions, promotionVideoUrl: event.target.value },
-              }))}
-              placeholder="https://youtu.be/… or https://vimeo.com/…"
-              className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-normal normal-case tracking-normal text-slate-900 outline-none focus:border-slate-400"
-            />
-          </label>
-        )}
-      </div>
+      <Link href="/admin/enrollment-campaigns" className="flex flex-col gap-1 rounded-xl border border-teal-200 bg-teal-50 p-4 hover:border-teal-400 sm:flex-row sm:items-center sm:justify-between">
+        <span><span className="block text-sm font-black text-teal-950">Enrollment popup campaign</span><span className="mt-1 block text-xs text-teal-800">Manage its message, video, visibility, and Apply / Know more actions.</span></span>
+        <span className="text-sm font-bold text-teal-800">Manage campaign →</span>
+      </Link>
       <div className="rounded-xl border border-slate-200 p-4">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>

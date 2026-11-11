@@ -108,7 +108,7 @@ export function getAdminModuleForPath(pathname: string): AdminModule | null {
   if (pathname === '/admin/people/admin' || pathname.startsWith('/admin/people/admin/')) return 'staff-access';
   if (pathname.startsWith('/admin/reports')) return 'reports';
   if (pathname.startsWith('/admin/partnerships') || pathname.startsWith('/admin/partner-applications')) return 'partnerships';
-  if (pathname.startsWith('/admin/admissions')) return 'admissions';
+  if (pathname.startsWith('/admin/admissions') || pathname.startsWith('/admin/enrollment-campaigns')) return 'admissions';
   if (pathname.startsWith('/admin/students')) return 'students';
   if (pathname.startsWith('/admin/people')) return 'people';
   if (pathname.startsWith('/admin/student-affairs')) return 'student-affairs';
