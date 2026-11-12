@@ -28,12 +28,13 @@ export type AdminModule =
   | 'profile'
   | 'settings'
   | 'tasks'
-  | 'staff-access';
+  | 'staff-access'
+  | 'id-cards';
 
 const allModules: AdminModule[] = [
   'dashboard', 'reports', 'admissions', 'partnerships', 'students', 'people', 'student-affairs', 'academics',
   'communications', 'contact-messages', 'chatbot', 'social-media', 'events', 'store', 'help-desk', 'tasks',
-  'statistics', 'website-statistics', 'analysis', 'performance', 'finance', 'budgets', 'assets', 'activity-requests', 'schedule', 'library', 'profile', 'settings', 'staff-access',
+  'statistics', 'website-statistics', 'analysis', 'performance', 'finance', 'budgets', 'assets', 'activity-requests', 'schedule', 'library', 'profile', 'settings', 'staff-access', 'id-cards',
 ];
 
 const roleModules: Record<AdminRole, AdminModule[]> = {
@@ -88,6 +89,10 @@ export function canAccessAdminModule(roleValue: string, department: string, modu
   const role = normalizeAdminRole(roleValue);
   if (!role) return false;
   if (module === 'staff-access') return isItDepartment(department);
+  if (module === 'id-cards') {
+    return role === 'owner' || role === 'administrator' || role === 'it'
+      || (role === 'support' && isMediaOrItDepartment(department));
+  }
   if (module === 'website-statistics') return role === 'owner' || role === 'administrator' || role === 'it';
   if (role === 'it') return true;
   if (module === 'budgets' || module === 'assets') return true;
@@ -105,6 +110,7 @@ export function canAccessAdminModule(roleValue: string, department: string, modu
 export function getAdminModuleForPath(pathname: string): AdminModule | null {
   if (pathname === '/admin') return 'dashboard';
   if (pathname.startsWith('/admin/staff-access')) return 'staff-access';
+  if (pathname.startsWith('/admin/id-cards')) return 'id-cards';
   if (pathname === '/admin/people/admin' || pathname.startsWith('/admin/people/admin/')) return 'staff-access';
   if (pathname.startsWith('/admin/reports')) return 'reports';
   if (pathname.startsWith('/admin/partnerships') || pathname.startsWith('/admin/partner-applications')) return 'partnerships';

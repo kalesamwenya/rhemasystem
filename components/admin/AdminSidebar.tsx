@@ -95,6 +95,7 @@ const navigationGroups: NavGroup[] = [
       { title: 'Partnership applications', href: '/admin/partner-applications', module: 'partnerships', icon: Handshake },
       { title: 'Partner management', href: '/admin/partnerships', module: 'partnerships', icon: Handshake },
       { title: 'Student Directory', href: '/admin/students', module: 'students', icon: Users },
+      { title: 'Student ID Cards', href: '/admin/id-cards', module: 'id-cards', icon: CreditCard },
       { title: 'Staff & Lecturers', href: '/admin/people', module: 'people', icon: UserCog },
     ],
   },
