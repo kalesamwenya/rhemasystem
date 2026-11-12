@@ -12,6 +12,7 @@ type EnrollmentCampaign = {
   apply_url: string;
   know_more_url: string;
   video_enabled: boolean;
+  video_attached?: boolean;
   video_url: string | null;
   video_type: 'upload' | 'embed' | null;
   video_library?: EnrollmentVideo[];
@@ -99,7 +100,11 @@ export default function EnrollmentCampaignsPage() {
   }, []);
 
   const updateCampaign = (update: Partial<EnrollmentCampaign>) => {
-    setCampaign((current) => ({ ...current, ...update }));
+    setCampaign((current) => ({
+      ...current,
+      ...update,
+      ...('video_url' in update ? { video_attached: Boolean(update.video_url) } : {}),
+    }));
     setNotice('');
   };
 
@@ -209,6 +214,10 @@ export default function EnrollmentCampaignsPage() {
                 <span><span className="block text-sm font-bold text-slate-900">Include a video popup</span><span className="mt-1 block text-xs leading-5 text-slate-600">Turn this on only when you want the selected video to appear in the enrollment ad. Uploaded videos are saved to your library either way.</span></span>
               </label>
               <div className="mt-4 space-y-4">
+                  <p role="status" className={`text-xs font-semibold ${campaign.video_attached ? 'text-emerald-700' : 'text-slate-500'}`}>
+                    {campaign.video_attached ? 'A video is attached to this campaign.' : 'No video is attached yet.'}
+                    {campaign.video_attached && !campaign.video_enabled ? ' It will remain hidden from the popup until you enable it.' : ''}
+                  </p>
                   <div className="flex w-fit rounded-lg border border-slate-200 bg-slate-50 p-1">
                     <button type="button" onClick={() => { setVideoSource('upload'); if (campaign.video_type !== 'upload') updateCampaign({ video_url: '', video_type: null }); }} className={`rounded-md px-3 py-2 text-xs font-bold ${videoSource === 'upload' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>Uploaded videos</button>
                     <button type="button" onClick={() => { setVideoSource('link'); if (campaign.video_type !== 'embed') updateCampaign({ video_url: '', video_type: null }); }} className={`rounded-md px-3 py-2 text-xs font-bold ${videoSource === 'link' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>Use video link</button>
