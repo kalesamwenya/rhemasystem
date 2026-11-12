@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowRight, GraduationCap, Sparkles, X } from "lucide-react";
 import { api, assetUrl } from "@/lib/api";
+import EnrollmentCampaignVideoPlayer from "@/components/main/EnrollmentCampaignVideoPlayer";
 
 const DISMISSED_KEY = "rhema_enrollment_promotion_dismissed_v1";
 
@@ -167,13 +168,13 @@ export default function EnrollmentPromotionModal() {
 
         <div className="space-y-4 p-6 sm:p-8">
           {videoUrl && (
-            <div className="overflow-hidden rounded-2xl bg-slate-950">
+            <div>
               {videoType === "upload"
-                ? <video title="Rhema enrollment video" src={assetUrl(videoUrl)} controls playsInline preload="metadata" className="aspect-video w-full" />
+                ? <EnrollmentCampaignVideoPlayer src={assetUrl(videoUrl)} />
                 : <iframe
                   title="Rhema enrollment video"
                   src={videoUrl}
-                  className="aspect-video w-full"
+                  className="aspect-video w-full overflow-hidden rounded-2xl bg-slate-950"
                   loading="lazy"
                   referrerPolicy="strict-origin-when-cross-origin"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"

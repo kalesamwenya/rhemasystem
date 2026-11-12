@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { CheckCircle2, Eye, GraduationCap, Loader2, Megaphone, Save, UploadCloud, Video, X } from 'lucide-react';
 import { api, assetUrl } from '@/lib/api';
+import EnrollmentCampaignVideoPlayer from '@/components/main/EnrollmentCampaignVideoPlayer';
 
 type EnrollmentCampaign = {
   enabled: boolean;
@@ -13,8 +14,10 @@ type EnrollmentCampaign = {
   video_enabled: boolean;
   video_url: string | null;
   video_type: 'upload' | 'embed' | null;
+  video_library?: EnrollmentVideo[];
 };
 
+type EnrollmentVideo = { path: string; size: number };
 type ApiResponse<T> = { success?: boolean; message?: string; data?: T };
 
 const initialCampaign: EnrollmentCampaign = {
@@ -120,9 +123,16 @@ export default function EnrollmentCampaignsPage() {
     try {
       const response = await api.admissions.uploadEnrollmentCampaignVideo(file, (progress: number) => setUploadProgress(progress)) as ApiResponse<{ path: string; type: 'upload' }>;
       if (!response.data?.path) throw new Error(response.message || 'The video upload did not return a file path.');
-      updateCampaign({ video_url: response.data.path, video_type: 'upload', video_enabled: true });
+      updateCampaign({
+        video_url: response.data.path,
+        video_type: 'upload',
+        video_library: [
+          { path: response.data.path, size: file.size },
+          ...(campaign.video_library ?? []).filter((video) => video.path !== response.data?.path),
+        ],
+      });
       setVideoSource('upload');
-      setNotice('Video uploaded. Save the campaign to publish it.');
+      setNotice('Video uploaded and selected. Turn on “Include a video popup” to show it in the ad.');
     } catch (cause) {
       setNotice(cause instanceof Error ? cause.message : 'Unable to upload the video.');
       setIsError(true);
@@ -138,9 +148,11 @@ export default function EnrollmentCampaignsPage() {
     setNotice('');
     setIsError(false);
     try {
-      const response = await api.admissions.saveEnrollmentCampaign(campaign) as ApiResponse<EnrollmentCampaign>;
+      const campaignData = { ...campaign };
+      delete campaignData.video_library;
+      const response = await api.admissions.saveEnrollmentCampaign(campaignData) as ApiResponse<EnrollmentCampaign>;
       if (!response.data) throw new Error(response.message || 'The saved campaign was not returned.');
-      setCampaign(response.data);
+      setCampaign({ ...response.data, video_library: campaign.video_library });
       setNotice('Enrollment campaign saved.');
     } catch (cause) {
       setNotice(cause instanceof Error ? cause.message : 'Unable to save the campaign.');
@@ -194,16 +206,28 @@ export default function EnrollmentCampaignsPage() {
             <div className="rounded-xl border border-slate-200 p-4">
               <label className="flex cursor-pointer items-start gap-3">
                 <input type="checkbox" checked={campaign.video_enabled} onChange={(event) => updateCampaign({ video_enabled: event.target.checked })} className="mt-0.5 h-4 w-4 accent-teal-700" />
-                <span><span className="block text-sm font-bold text-slate-900">Include a video popup</span><span className="mt-1 block text-xs leading-5 text-slate-600">Show an uploaded video or YouTube/Vimeo link above the Apply and Know more buttons.</span></span>
+                <span><span className="block text-sm font-bold text-slate-900">Include a video popup</span><span className="mt-1 block text-xs leading-5 text-slate-600">Turn this on only when you want the selected video to appear in the enrollment ad. Uploaded videos are saved to your library either way.</span></span>
               </label>
-              {campaign.video_enabled && (
-                <div className="mt-4 space-y-4">
+              <div className="mt-4 space-y-4">
                   <div className="flex w-fit rounded-lg border border-slate-200 bg-slate-50 p-1">
-                    <button type="button" onClick={() => { setVideoSource('upload'); if (campaign.video_type !== 'upload') updateCampaign({ video_url: '', video_type: null }); }} className={`rounded-md px-3 py-2 text-xs font-bold ${videoSource === 'upload' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>Upload video</button>
+                    <button type="button" onClick={() => { setVideoSource('upload'); if (campaign.video_type !== 'upload') updateCampaign({ video_url: '', video_type: null }); }} className={`rounded-md px-3 py-2 text-xs font-bold ${videoSource === 'upload' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>Uploaded videos</button>
                     <button type="button" onClick={() => { setVideoSource('link'); if (campaign.video_type !== 'embed') updateCampaign({ video_url: '', video_type: null }); }} className={`rounded-md px-3 py-2 text-xs font-bold ${videoSource === 'link' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>Use video link</button>
                   </div>
                   {videoSource === 'upload' ? (
-                    <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4">
+                    <div className="space-y-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4">
+                      <label className="block text-xs font-bold uppercase tracking-wide text-slate-600">
+                        Attach an uploaded video
+                        <select
+                          value={campaign.video_type === 'upload' ? campaign.video_url ?? '' : ''}
+                          onChange={(event) => updateCampaign({ video_url: event.target.value || '', video_type: event.target.value ? 'upload' : null })}
+                          className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold normal-case tracking-normal text-slate-900"
+                        >
+                          <option value="">No video selected</option>
+                          {(campaign.video_library ?? []).map((video) => (
+                            <option key={video.path} value={video.path}>{video.path.split('/').pop()} ({(video.size / (1024 * 1024)).toFixed(1)} MB)</option>
+                          ))}
+                        </select>
+                      </label>
                       <label className="flex cursor-pointer flex-col items-center gap-2 text-center">
                         <UploadCloud className="h-6 w-6 text-teal-700" />
                         <span className="text-sm font-bold text-slate-800">{uploadingVideo ? 'Uploading video…' : 'Choose a video from your device'}</span>
@@ -222,7 +246,7 @@ export default function EnrollmentCampaignsPage() {
                         </div>
                       )}
                       {campaign.video_type === 'upload' && campaign.video_url && (
-                        <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
+                        <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
                           <span className="truncate text-xs font-semibold text-slate-600">{campaign.video_url.split('/').pop()}</span>
                           <button type="button" onClick={() => updateCampaign({ video_url: '', video_type: null })} aria-label="Remove uploaded video" className="shrink-0 rounded p-1 text-slate-500 hover:bg-rose-50 hover:text-rose-600"><X className="h-4 w-4" /></button>
                         </div>
@@ -231,12 +255,11 @@ export default function EnrollmentCampaignsPage() {
                   ) : (
                     <label className="block text-xs font-bold uppercase tracking-wide text-slate-600">
                       YouTube or Vimeo video URL
-                      <input required type="url" maxLength={2048} value={campaign.video_type === 'embed' ? campaign.video_url ?? '' : ''} onChange={(event) => updateCampaign({ video_url: event.target.value, video_type: 'embed' })} placeholder="https://youtu.be/… or https://vimeo.com/…" className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal normal-case tracking-normal text-slate-900 outline-none focus:border-teal-600" />
+                      <input required={campaign.video_enabled} type="url" maxLength={2048} value={campaign.video_type === 'embed' ? campaign.video_url ?? '' : ''} onChange={(event) => updateCampaign({ video_url: event.target.value, video_type: 'embed' })} placeholder="https://youtu.be/… or https://vimeo.com/…" className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal normal-case tracking-normal text-slate-900 outline-none focus:border-teal-600" />
                       <span className="mt-1 block text-[11px] font-normal normal-case tracking-normal text-slate-500">Paste a share link. Only secure YouTube and Vimeo links are accepted.</span>
                     </label>
                   )}
-                </div>
-              )}
+              </div>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
@@ -274,7 +297,7 @@ export default function EnrollmentCampaignsPage() {
                 <div className="space-y-3 p-5">
                   {campaign.video_enabled && (
                     campaign.video_type === 'upload' && campaign.video_url
-                      ? <video src={assetUrl(campaign.video_url)} controls playsInline preload="metadata" className="aspect-video w-full" />
+                      ? <EnrollmentCampaignVideoPlayer src={assetUrl(campaign.video_url)} title="Enrollment campaign preview" />
                       : getVideoPreviewUrl(campaign.video_type === 'embed' ? campaign.video_url ?? '' : '')
                       ? <div className="aspect-video overflow-hidden rounded-xl bg-slate-950"><iframe title="Campaign video preview" src={getVideoPreviewUrl(campaign.video_url ?? '') ?? ''} sandbox="allow-scripts allow-same-origin allow-presentation" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" allowFullScreen className="h-full w-full" /></div>
                       : <div className="flex aspect-video items-center justify-center gap-2 rounded-xl bg-slate-900 text-xs font-semibold text-white/80"><Video className="h-5 w-5" /> Add a valid YouTube or Vimeo URL to preview it</div>
