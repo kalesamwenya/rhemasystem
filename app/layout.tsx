@@ -22,11 +22,12 @@ export const metadata: Metadata = {
   metadataBase: new URL(SITE_ORIGIN),
   title: {
     default: SITE_NAME,
-    template: "%s | Rhema Zambia",
+    template: `%s | ${SITE_NAME}`,
   },
   description: SITE_DESCRIPTION,
   applicationName: SITE_NAME,
   category: "education",
+  icons: { icon: "/emit-academy-mark.svg" },
   openGraph: {
     type: "website",
     siteName: SITE_NAME,

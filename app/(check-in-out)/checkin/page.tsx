@@ -62,7 +62,7 @@ function csvCell(value: string | number): string {
 function downloadCsv(rows: CheckInRow[], from: string, to: string) {
   const heading = ['Session date', 'Course', 'Student ID', 'Student name', 'Cohort', 'Status', 'Check-in time', 'Check-out time'];
   const lines = [
-    ['Rhema Bible School - Attendance report', '', '', '', '', '', '', ''],
+    ['Emit Academy - Attendance report', '', '', '', '', '', '', ''],
     [`Date range: ${from} to ${to}`, '', '', '', '', '', '', ''],
     heading,
     ...rows.map((row) => [

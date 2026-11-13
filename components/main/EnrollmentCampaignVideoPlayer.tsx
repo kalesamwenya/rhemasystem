@@ -10,7 +10,7 @@ type EnrollmentCampaignVideoPlayerProps = {
 
 export default function EnrollmentCampaignVideoPlayer({
   src,
-  title = "Rhema enrollment video",
+  title = "Emit Academy enrollment video",
 }: EnrollmentCampaignVideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);

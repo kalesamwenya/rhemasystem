@@ -78,7 +78,7 @@ export default function PartnerProfilePage() {
         </label>
         <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
           <input type="checkbox" checked={profile.newsletter_opt_in} disabled={loading} onChange={(event) => setProfile((current) => ({ ...current, newsletter_opt_in: event.target.checked }))} className="mt-1 h-4 w-4 accent-blue-800" />
-          <span><span className="font-bold text-slate-800">Receive Rhema Zambia’s journey newsletter</span><span className="mt-1 block text-xs font-normal leading-5 text-slate-500">Share updates and stories with me by email. I can change this preference at any time.</span></span>
+          <span><span className="font-bold text-slate-800">Receive Emit Academy’s newsletter</span><span className="mt-1 block text-xs font-normal leading-5 text-slate-500">Share updates and stories with me by email. I can change this preference at any time.</span></span>
         </label>
         <button type="submit" disabled={saving || loading} className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-5 py-3 text-sm font-black text-white hover:bg-slate-800 disabled:opacity-50">
           <Save className="h-4 w-4" /> {saving ? "Saving…" : "Save profile"}

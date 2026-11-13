@@ -7,6 +7,7 @@ import { AlertCircle, ArrowRight, Eye, EyeOff, GraduationCap, Loader2, Lock, Mai
 import { api } from '@/lib/api';
 import { getAdminLandingPath } from '@/lib/admin-access';
 import { setAuthSession } from '@/lib/auth';
+import { BRAND_LOGO, BRAND_NAME } from '@/lib/brand';
 
 type AccountType = 'student' | 'lecturer' | 'admin';
 type LoginResponse = {
@@ -89,7 +90,7 @@ export default function LoginPage() {
   return (
     <main className="min-h-screen bg-[#f6f7f4] lg:grid lg:grid-cols-[1.08fr_0.92fr]">
       <section
-        aria-label="Welcome to Rhema Bible Training Center"
+        aria-label={`Welcome to ${BRAND_NAME}`}
         className="relative isolate hidden min-h-screen items-end overflow-hidden bg-rhema-blue px-7 py-10 lg:flex lg:px-16 lg:py-16"
       >
         <Image
@@ -106,7 +107,7 @@ export default function LoginPage() {
           <div className="mb-8 flex h-12 w-12 items-center justify-center rounded-2xl border border-white/20 bg-white/10 text-rhema-accent backdrop-blur-sm">
             <GraduationCap className="h-6 w-6" />
           </div>
-          <p className="text-xs font-black uppercase tracking-[0.22em] text-rhema-accent">Rhema Bible Training Center</p>
+          <p className="text-xs font-black uppercase tracking-[0.22em] text-rhema-accent">{BRAND_NAME}</p>
           <h2 className="mt-4 text-4xl font-black leading-tight tracking-tight sm:text-5xl">
             Grow in faith.
             <br />
@@ -123,11 +124,8 @@ export default function LoginPage() {
         <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(242,181,68,0.14),transparent_38%),radial-gradient(ellipse_at_bottom_left,rgba(0,61,165,0.09),transparent_42%)]" />
         <div className="relative w-full max-w-md rounded-3xl border border-slate-100 bg-white p-7 shadow-xl shadow-slate-900/5 sm:p-10">
           <header className="text-center">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-rhema-blue text-rhema-accent shadow-lg shadow-rhema-blue/20">
-              <GraduationCap className="h-7 w-7" />
-            </div>
-            <p className="mt-5 text-xs font-black uppercase tracking-[0.2em] text-rhema-red">Rhema Bible Training Center</p>
-            <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">Welcome back</h1>
+            <Image src={BRAND_LOGO} alt={BRAND_NAME} width={220} height={56} className="mx-auto h-14 w-auto object-contain" />
+            <h1 className="mt-5 text-3xl font-black tracking-tight text-slate-950">Welcome back</h1>
             <p className="mt-2 text-sm text-slate-500">Sign in with your school account.</p>
           </header>
 

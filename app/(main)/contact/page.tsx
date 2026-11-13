@@ -61,7 +61,7 @@ export default function ContactPage() {
         source_action: "contact",
         page_path: "/contact",
       });
-      setStatus({ type: "success", title: "Enquiry sent", message: "Thank you for contacting Rhema Zambia. Our team will be in touch." });
+      setStatus({ type: "success", title: "Enquiry sent", message: "Thank you for contacting Emit Academy. Our team will be in touch." });
       setFormData({ name: "", email: "", subject: "", message: "" });
     } catch (error) {
       setStatus({ type: "error", title: "Enquiry not sent", message: error instanceof Error ? error.message : "Unable to send your enquiry. Please try again." });

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, Menu, X } from "lucide-react";
+import { BRAND_LOGO, BRAND_NAME } from "@/lib/brand";
 
 type HeaderLink = { href: string; label: string };
 type NavigationItem = HeaderLink & { links?: HeaderLink[] };
@@ -15,7 +16,7 @@ const navigation: NavigationItem[] = [
     href: "/about",
     label: "About",
     links: [
-      { href: "/about#story", label: "About Rhema" },
+      { href: "/about#story", label: `About ${BRAND_NAME}` },
       { href: "/about#heritage", label: "Heritage" },
       { href: "/about#faith", label: "Statement of faith" },
       { href: "/about#team", label: "Staff team" },
@@ -102,7 +103,7 @@ export default function SiteHeader() {
     <header ref={headerRef} className={`${isSolid ? "fixed bg-white text-slate-900 shadow-md shadow-slate-950/5" : "absolute bg-transparent text-white"} inset-x-0 top-0 z-50 transition-[background-color,box-shadow] duration-300`}>
       <div className="h-6 bg-rhema-red text-white">
         <div className="mx-auto flex h-full max-w-7xl items-center justify-between px-4 text-[10px] font-semibold sm:px-6 lg:px-8">
-          <span>Rhema Bible Training Center Zambia · Lusaka</span>
+          <span>{BRAND_NAME} · Lusaka</span>
           <div className="flex items-center gap-3">
             <a href="tel:+260977480033" className="hidden hover:underline sm:inline">+260 977 480 033</a>
             <Link href="/login" className="hover:underline">Portal sign in</Link>
@@ -112,12 +113,8 @@ export default function SiteHeader() {
 
       <div className={`border-b ${isSolid ? "border-slate-200" : "border-white/20"}`}>
         <div className="mx-auto flex min-h-[72px] max-w-7xl items-center justify-between gap-5 px-4 sm:px-6 lg:px-8">
-          <Link href="/" aria-label="Rhema Zambia home" className="flex shrink-0 items-center gap-2.5">
-            <Image src="/logo.png" alt="" width={52} height={56} priority className="h-11 w-auto object-contain sm:h-12" />
-            <span className="hidden leading-tight sm:block">
-              <span className={`block text-sm font-black ${isSolid ? "text-rhema-red" : transparentOnDarkHero ? "text-white" : "text-rhema-red"}`}>Rhema Zambia</span>
-              <span className={`mt-0.5 block text-[9px] font-bold uppercase tracking-[0.12em] ${isSolid ? "text-slate-500" : transparentOnDarkHero ? "text-white/85" : "text-slate-500"}`}>Bible Training Center</span>
-            </span>
+          <Link href="/" aria-label={`${BRAND_NAME} home`} className="flex shrink-0 items-center">
+            <Image src={BRAND_LOGO} alt={BRAND_NAME} width={220} height={56} priority className="h-12 w-auto object-contain" />
           </Link>
 
           <nav className="hidden items-center gap-1 lg:flex" aria-label="Main navigation">

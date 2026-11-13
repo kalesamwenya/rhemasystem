@@ -89,10 +89,10 @@ export default function AcademicTranscriptPrint({
       <section className="transcript-page">
         <header className="transcript-heading">
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <Image src="/logo.png" alt="Rhema Zambia" width={48} height={52} />
+            <Image src="/emit-academy-mark.svg" alt="Emit Academy" width={48} height={52} />
             <div>
               <h1>ACADEMIC TRANSCRIPT</h1>
-              <p>Rhema Zambia Bible Training Center</p>
+              <p>Emit Academy</p>
             </div>
           </div>
         </header>
@@ -133,7 +133,7 @@ export default function AcademicTranscriptPrint({
       <section className="transcript-page">
         <header className="transcript-heading">
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <Image src="/logo.png" alt="Rhema Zambia" width={48} height={52} />
+            <Image src="/emit-academy-mark.svg" alt="Emit Academy" width={48} height={52} />
             <div><h1>GRADING &amp; VERIFICATION</h1><p>Academic transcript · {student.student_id}</p></div>
           </div>
         </header>
@@ -156,7 +156,7 @@ export default function AcademicTranscriptPrint({
           <div>Registrar</div>
         </div>
         <div className="transcript-verification">
-          This transcript is an official record only when issued and signed by an authorized Rhema Zambia officer. For verification, contact the Rhema Zambia Registrar and provide the student ID printed on the front page.
+          This transcript is an official record only when issued and signed by an authorized Emit Academy officer. For verification, contact the Emit Academy Registrar and provide the student ID printed on the front page.
         </div>
       </section>
     </div>

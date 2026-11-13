@@ -1,7 +1,7 @@
 const WEBSITE_PAGE_NAMES: Record<string, string> = {
   "/": "Home",
-  "/about": "About Rhema",
-  "/apply": "Apply to Rhema",
+  "/about": "About Emit Academy",
+  "/apply": "Apply to Emit Academy",
   "/community": "Community",
   "/contact": "Contact",
   "/events": "Events",

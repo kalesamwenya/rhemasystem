@@ -136,8 +136,17 @@ function drawCoveredImage(context: CanvasRenderingContext2D, image: HTMLImageEle
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new window.Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error('The student ID card image could not be prepared for PDF generation.'));
+    const timeout = window.setTimeout(() => {
+      reject(new Error('The student ID card image took too long to prepare.'));
+    }, 15000);
+    image.onload = () => {
+      window.clearTimeout(timeout);
+      resolve(image);
+    };
+    image.onerror = () => {
+      window.clearTimeout(timeout);
+      reject(new Error('The student ID card image could not be prepared for PDF generation.'));
+    };
     image.src = src;
   });
 }
@@ -156,6 +165,7 @@ async function loadBarcodeImage(svgElement: SVGSVGElement): Promise<HTMLImageEle
 
 function drawStudentIdCard(
   student: Student,
+  expiryYear: string,
   expiry: string,
   logo: HTMLImageElement,
   photo: HTMLImageElement,
@@ -170,8 +180,6 @@ function drawStudentIdCard(
   const width = canvas.width;
   const height = canvas.height;
   const mm = cardPixels;
-  context.fillStyle = '#ffffff';
-  context.fillRect(0, 0, width, height);
   context.save();
   roundedRectPath(context, 0, 0, width, height, mm(3));
   context.clip();
@@ -183,6 +191,19 @@ function drawStudentIdCard(
   context.fillStyle = background;
   context.fillRect(0, 0, width, height);
 
+  context.save();
+  context.translate(width / 2, height / 2);
+  context.rotate(-18 * Math.PI / 180);
+  context.globalAlpha = 0.02;
+  const watermarkWidth = mm(14);
+  const watermarkHeight = mm(12);
+  for (let x = -width; x <= width; x += watermarkWidth) {
+    for (let y = -height; y <= height; y += watermarkHeight) {
+      context.drawImage(logo, x, y, watermarkWidth, watermarkHeight);
+    }
+  }
+  context.restore();
+
   const accent = context.createLinearGradient(0, 0, width, 0);
   accent.addColorStop(0, '#172554');
   accent.addColorStop(0.55, '#1d4ed8');
@@ -190,20 +211,22 @@ function drawStudentIdCard(
   context.fillStyle = accent;
   context.fillRect(0, 0, width, mm(1.3));
 
-  drawContainedImage(context, logo, mm(4.3), mm(8.5), mm(6), mm(6));
+  const title = 'RHEMA BIBLE TRAINING COLLEGE';
+  context.font = `900 ${cardFontPixels(7)}px Arial, sans-serif`;
+  const logoSize = mm(8);
+  const headerGap = mm(1.5);
+  const headerWidth = logoSize + headerGap + context.measureText(title).width;
+  const headerX = (width - headerWidth) / 2;
+  drawContainedImage(context, logo, headerX, mm(7.5), logoSize, logoSize);
   context.textAlign = 'left';
   context.textBaseline = 'middle';
   context.fillStyle = '#172554';
-  context.font = `900 ${cardFontPixels(7)}px Arial, sans-serif`;
-  context.fillText('RHEMA BIBLE SCHOOL', mm(11.8), mm(10.3));
-  context.fillStyle = '#64748b';
-  context.font = `700 ${cardFontPixels(4.5)}px Arial, sans-serif`;
-  context.fillText('STUDENT IDENTIFICATION', mm(11.8), mm(12.5));
+  context.fillText(title, headerX + logoSize + headerGap, mm(11.5));
 
+  const contentCenterX = mm(CARD_SIDE_PADDING_MM + (CARD_CONTENT_WIDTH_MM - 22) / 2);
   context.textAlign = 'center';
   context.fillStyle = '#172554';
   context.font = `900 ${cardFontPixels(8)}px Arial, sans-serif`;
-  const contentCenterX = mm(CARD_SIDE_PADDING_MM + (CARD_CONTENT_WIDTH_MM - 22) / 2);
   context.fillText(student.name, contentCenterX, mm(21.9), mm(CARD_CONTENT_WIDTH_MM - 22));
   context.drawImage(barcode, contentCenterX - mm(24), mm(24.4), mm(48), mm(9));
   context.fillStyle = '#172554';
@@ -229,12 +252,19 @@ function drawStudentIdCard(
   context.textAlign = 'center';
   context.textBaseline = 'middle';
   context.font = `900 ${cardFontPixels(3.5)}px Arial, sans-serif`;
-  MONTHS.forEach((month, index) => {
-    const monthX = mm(CARD_SIDE_PADDING_MM + (CARD_CONTENT_WIDTH_MM / MONTHS.length) * (index + 0.5));
-    context.fillStyle = '#b91c1c';
-    context.fillText(month, monthX, mm(43.1));
-    context.fillStyle = '#1d4ed8';
-    context.fillText(month, monthX, mm(46));
+  const monthsWidth = mm(CARD_CONTENT_WIDTH_MM - 7.2);
+  const monthCellWidth = monthsWidth / MONTHS.length;
+  [43.1, 46].forEach((rowY, row) => {
+    context.fillStyle = '#334155';
+    context.fillText(expiryYear || '----', mm(CARD_SIDE_PADDING_MM + 3.6), mm(rowY));
+    MONTHS.forEach((month, index) => {
+      context.fillStyle = row === 0 ? '#b91c1c' : '#1d4ed8';
+      context.fillText(
+        month,
+        mm(CARD_SIDE_PADDING_MM + 7.2) + monthCellWidth * (index + 0.5),
+        mm(rowY),
+      );
+    });
   });
 
   context.fillStyle = '#475569';
@@ -258,8 +288,21 @@ function waitForCardImages(cardNode: HTMLElement): Promise<HTMLImageElement[]> {
         : Promise.reject(new Error('The school logo or student photo could not be loaded.'));
     }
     return new Promise<HTMLImageElement>((resolve, reject) => {
-      image.addEventListener('load', () => resolve(image), { once: true });
-      image.addEventListener('error', () => reject(new Error('The school logo or student photo could not be loaded.')), { once: true });
+      const finish = (error?: Error) => {
+        window.clearTimeout(timeout);
+        image.removeEventListener('load', handleLoad);
+        image.removeEventListener('error', handleError);
+        if (error) reject(error);
+        else resolve(image);
+      };
+      const handleLoad = () => finish();
+      const handleError = () => finish(new Error('The school logo or student photo could not be loaded.'));
+      const timeout = window.setTimeout(
+        () => finish(new Error('The school logo or student photo took too long to load.')),
+        15000,
+      );
+      image.addEventListener('load', handleLoad, { once: true });
+      image.addEventListener('error', handleError, { once: true });
     });
   }));
 }
@@ -567,17 +610,31 @@ export default function StudentIdCardsPage() {
     }
 
     setCardSaving(true);
-    setMessage('');
+    setMessageIsError(false);
+    setMessage('Preparing the card images...');
     setSavedPdfUrl('');
     try {
+      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
       const cardImages = await waitForCardImages(cardNode);
-      const logoImage = cardImages.find((image) => image.alt === 'Rhema logo');
+      const logoImage = cardImages.find((image) => image.alt === 'Emit Academy logo');
       const photoImage = cardImages.find((image) => image.alt === `${student.name} ID photo`);
       if (!logoImage || !photoImage) throw new Error('The school logo or student photo could not be loaded.');
       if (!barcodeElement.current) throw new Error('The student ID barcode could not be prepared for PDF generation.');
 
+      setMessage('Rendering the ID card...');
+      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
       const barcodeImage = await loadBarcodeImage(barcodeElement.current);
-      const cardCanvas = drawStudentIdCard(student, expiryDate(expiryYear), logoImage, photoImage, barcodeImage);
+      const cardCanvas = drawStudentIdCard(
+        student,
+        expiryYear,
+        expiryDate(expiryYear),
+        logoImage,
+        photoImage,
+        barcodeImage,
+      );
+
+      setMessage('Creating the PDF...');
+      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
       const { jsPDF } = await import('jspdf');
       const pdfDocument = new jsPDF({
         orientation: 'landscape',
@@ -587,11 +644,26 @@ export default function StudentIdCardsPage() {
       });
       pdfDocument.addImage(cardCanvas, 'JPEG', 0, 0, CARD_WIDTH_MM, CARD_HEIGHT_MM, undefined, 'FAST');
       const pdf = pdfDocument.output('blob');
-      if (!(pdf instanceof Blob)) throw new Error('The ID card PDF generator returned an invalid document.');
+      if (!(pdf instanceof Blob) || pdf.type !== 'application/pdf' || pdf.size === 0) {
+        throw new Error('The ID card PDF generator returned an invalid document.');
+      }
+      if (pdf.size > 15 * 1024 * 1024) {
+        throw new Error('The generated ID card PDF is too large to save. Try using a smaller photo.');
+      }
 
+      setMessage('Saving the generated ID card...');
       await api.studentIdCards.save(student.student_id, studyYear, pdf, photoFile);
-      const savedPdf = await api.studentIdCards.file(student.student_id, 'pdf') as Blob;
-      setSavedPdfUrl(URL.createObjectURL(savedPdf));
+      const pdfUrl = URL.createObjectURL(pdf);
+      setSavedPdfUrl(pdfUrl);
+      const downloadLink = document.createElement('a');
+      downloadLink.href = pdfUrl;
+      downloadLink.download = `Rhema-ID-${student.student_id.replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`;
+      document.body.appendChild(downloadLink);
+      try {
+        downloadLink.click();
+      } finally {
+        downloadLink.remove();
+      }
       setCard({
         year_of_study: studyYear,
         expires_on: `${expiryYear}-10-31`,
@@ -601,7 +673,7 @@ export default function StudentIdCardsPage() {
       });
       setPhotoLoadError(false);
       setMessageIsError(false);
-      setMessage('Student ID card generated, saved securely, and linked to the student record.');
+      setMessage('Student ID card generated and saved. The PDF download has started; use Download PDF if your browser blocks it.');
     } catch (error) {
       setMessageIsError(true);
       setMessage(error instanceof Error ? error.message : 'Unable to generate and save this ID card.');
@@ -848,7 +920,7 @@ export default function StudentIdCardsPage() {
             <div className="mt-5 overflow-x-auto rounded-2xl border border-slate-200 bg-slate-100 p-4 shadow-inner">
               <div
                 ref={cardElement}
-                className="relative mx-auto flex flex-col overflow-hidden rounded-[3mm] text-slate-900 shadow-xl"
+                className="relative isolate mx-auto flex flex-col overflow-hidden rounded-[3mm] text-slate-900 shadow-xl"
                 style={{
                   boxSizing: 'border-box',
                   width: `${CARD_WIDTH_MM}mm`,
@@ -858,23 +930,23 @@ export default function StudentIdCardsPage() {
                   fontFamily: 'Arial, sans-serif',
                 }}
               >
-                <div className="absolute inset-x-0 top-0 h-[1.3mm] bg-gradient-to-r from-blue-950 via-blue-700 to-amber-500" />
-                <div className="flex h-[7mm] items-center border-b border-slate-200 pb-[1mm]">
+                <div aria-hidden className="pointer-events-none absolute inset-[-20%] z-0 rotate-[-18deg] opacity-[0.02]" style={{ backgroundImage: 'url("/emit-academy-mark.svg")', backgroundRepeat: 'repeat', backgroundSize: '14mm 12mm' }} />
+                <div className="absolute inset-x-0 top-0 z-20 h-[1.3mm] bg-gradient-to-r from-blue-950 via-blue-700 to-amber-500" />
+                <div className="relative z-10 flex h-[7mm] items-center justify-center pb-[1mm]">
                   <div className="flex items-center gap-[1.5mm]">
-                    <Image src="/logo.png" width={28} height={28} alt="Rhema logo" priority className="h-[6mm] w-[6mm] object-contain" />
-                    <div className="leading-tight">
-                      <p className="text-[7pt] font-black tracking-[0.08em] text-blue-950">RHEMA BIBLE SCHOOL</p>
-                      <p className="text-[4.5pt] font-bold uppercase tracking-[0.12em] text-slate-500">Student identification</p>
+                    <Image src="/emit-academy-mark.svg" width={30} height={30} alt="Emit Academy logo" priority className="h-[8mm] w-[8mm] object-contain" />
+                    <div className="leading-tight text-center">
+                      <p className="text-[7pt] font-black tracking-[0.08em] text-blue-950">EMIT ACADEMY</p>
                     </div>
                   </div>
                 </div>
 
-                <div className="flex h-[27mm] items-center gap-[2mm] py-[1.5mm]">
+                <div className="relative z-10 flex h-[27mm] items-center gap-[2mm] py-[1.5mm]">
                   <div className="flex min-w-0 flex-1 flex-col items-center text-center">
                     <p className="max-h-[6mm] overflow-hidden text-[8pt] font-black leading-tight text-blue-950">{student.name}</p>
                     <svg ref={barcodeElement} className="mt-[1mm] h-[9mm] w-[48mm] max-w-full" aria-label={`Code 128 barcode for student ID ${student.student_id}`} />
                     {barcodeError && <p className="mt-[0.5mm] text-[4pt] font-bold text-rose-700">{barcodeError}</p>}
-                    <p className="text-[9pt] font-black leading-none tracking-[0.06em] text-blue-950">{student.student_id}</p>
+                    <p className="mt-[0.8mm] text-[9pt] font-black leading-none tracking-[0.06em] text-blue-950">{student.student_id}</p>
                   </div>
                   <div className="flex w-[20mm] flex-none flex-col items-center">
                     <div className="relative h-[18mm] w-[17mm] overflow-hidden rounded-[1.5mm] border border-slate-300 bg-slate-200">
@@ -887,9 +959,12 @@ export default function StudentIdCardsPage() {
                   </div>
                 </div>
 
-                <div className="space-y-[0.7mm] bg-white">
+                <div className="relative z-10 space-y-[0.7mm]">
                   {[0, 1].map((row) => (
-                    <div key={row} className="grid grid-cols-10 gap-[0.35mm]">
+                    <div key={row} className="grid grid-cols-[7.2mm_repeat(10,minmax(0,1fr))]">
+                      <span className="py-[0.5mm] text-center text-[3.5pt] font-black leading-none text-slate-700">
+                        {expiryYear || '----'}
+                      </span>
                       {MONTHS.map((month) => (
                         <span key={month} className={`py-[0.5mm] text-center text-[3.5pt] font-black leading-none ${row === 0 ? 'text-red-700' : 'text-blue-700'}`}>
                           {month}
@@ -898,38 +973,58 @@ export default function StudentIdCardsPage() {
                     </div>
                   ))}
                 </div>
-                <p className="mt-auto pb-[0.9mm] text-center text-[4pt] font-bold text-slate-600">Expires {expiryDate(expiryYear)}</p>
+                <p className="relative z-10 mt-auto pb-[0.9mm] text-center text-[4pt] font-bold text-slate-600">Expires {expiryDate(expiryYear)}</p>
               </div>
             </div>
 
-            <div className="mt-5 flex flex-wrap justify-end gap-3">
+            <div className="mt-5 flex flex-nowrap justify-end gap-2 overflow-x-auto">
               <button
                 type="button"
                 onClick={handleGenerateAndSave}
                 disabled={cardSaving || settingsDirty || !expiryYear || (!photoFile && !canReusePhoto) || barcodeReadyFor !== student.student_id || Boolean(barcodeError)}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-sm font-bold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-blue-700 px-4 py-3 text-sm font-bold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {cardSaving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                 Generate &amp; save PDF
               </button>
-              {savedPdfUrl && (
+              {savedPdfUrl ? (
                 <>
-                  <a href={savedPdfUrl} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-800 hover:bg-slate-50">
+                  <a href={savedPdfUrl} target="_blank" rel="noreferrer" className="inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-800 hover:bg-slate-50">
                     <Printer className="h-4 w-4" />
                     Open PDF to print
                   </a>
-                  <a href={savedPdfUrl} download={`Rhema-ID-${student.student_id}.pdf`} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-800 hover:bg-slate-50">
+                  <a href={savedPdfUrl} download={`Rhema-ID-${student.student_id}.pdf`} className="inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-800 hover:bg-slate-50">
                     <Download className="h-4 w-4" />
                     Download PDF
                   </a>
                 </>
+              ) : (
+                <>
+                  <button type="button" disabled className="inline-flex shrink-0 cursor-not-allowed items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-400 opacity-60">
+                    <Printer className="h-4 w-4" />
+                    Print
+                  </button>
+                  <button type="button" disabled className="inline-flex shrink-0 cursor-not-allowed items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-400 opacity-60">
+                    <Download className="h-4 w-4" />
+                    Download
+                  </button>
+                </>
               )}
             </div>
+            {message && (
+              <p
+                role="status"
+                aria-live="polite"
+                className={`mt-3 rounded-xl px-4 py-3 text-sm ${messageIsError ? 'bg-rose-50 text-rose-800' : 'bg-blue-50 text-blue-800'}`}
+              >
+                {message}
+              </p>
+            )}
           </section>
         </div>
       )}
 
-      {message && (
+      {message && !previewOpen && (
         <p role="status" className={`rounded-xl px-4 py-3 text-sm ${messageIsError ? 'bg-rose-50 text-rose-800' : 'bg-emerald-50 text-emerald-800'}`}>
           {message}
         </p>

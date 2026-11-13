@@ -9,7 +9,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(SITE_ORIGIN),
   title: {
     default: SITE_NAME,
-    template: "%s | Rhema Zambia",
+    template: `%s | ${SITE_NAME}`,
   },
   description: SITE_DESCRIPTION,
   alternates: { canonical: "/" },
@@ -51,7 +51,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
               "@type": "EducationalOrganization",
               name: SITE_NAME,
               url: SITE_ORIGIN,
-              logo: new URL("/logo.png", SITE_ORIGIN).toString(),
+              logo: new URL("/emit-academy-logo.svg", SITE_ORIGIN).toString(),
               description: SITE_DESCRIPTION,
               address: {
                 "@type": "PostalAddress",

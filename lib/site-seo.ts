@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
+import { BRAND_NAME } from "@/lib/brand";
 
 export const SITE_ORIGIN = getSiteOrigin();
-export const SITE_NAME = "Rhema Zambia Bible Training Center";
+export const SITE_NAME = BRAND_NAME;
 export const SITE_DESCRIPTION =
-  "Rhema Zambia equips believers for ministry through biblical education, practical training and spiritual formation in Lusaka, Zambia.";
+  "Emit Academy supports learning, personal growth, and purposeful leadership through biblical education and practical training in Lusaka, Zambia.";
 export const SITE_SOCIAL_IMAGE = "/api/seo/og-image";
 
 function getSiteOrigin() {

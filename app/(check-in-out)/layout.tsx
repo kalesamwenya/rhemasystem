@@ -1,15 +1,17 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
+import { BRAND_MARK, BRAND_NAME } from '@/lib/brand';
 
 export default function CheckInOutLayout({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-[#f6f7f4] text-[#17201d] antialiased">
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex min-h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-          <Link href="/admin/student-affairs" className="flex min-w-0 items-center gap-3" aria-label="Rhema Student Affairs">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-red-700 text-sm font-black tracking-tight text-white">R</span>
+          <Link href="/admin/student-affairs" className="flex min-w-0 items-center gap-3" aria-label={`${BRAND_NAME} Student Affairs`}>
+            <Image src={BRAND_MARK} alt="" width={40} height={40} className="h-10 w-10 shrink-0" />
             <span className="min-w-0">
-              <span className="block truncate text-sm font-black tracking-wide text-slate-900">RHEMA BIBLE SCHOOL</span>
+              <span className="block truncate text-sm font-black tracking-wide text-slate-900">{BRAND_NAME.toUpperCase()}</span>
               <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Student affairs · Attendance desk</span>
             </span>
           </Link>

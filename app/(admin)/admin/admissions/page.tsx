@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from 'react';
-import { ArrowDown, ArrowLeft, Ban, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, ClipboardCheck, CreditCard, Eye, Filter, Mail, RefreshCw, Search, ShieldCheck, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, Ban, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, ClipboardCheck, CreditCard, Eye, Filter, Mail, Pencil, RefreshCw, Save, Search, ShieldCheck, X } from 'lucide-react';
 import { api, assetUrl } from '@/lib/api';
 import { confirmWithApp } from '@/components/ui/app-dialogs';
 
@@ -55,6 +55,14 @@ type ApplicationRecord = {
   documents: ApplicationDocument[];
 };
 
+type ApplicationEditDraft = {
+  applicant_name: string;
+  applicant_email: string;
+  applicant_phone: string;
+  program: string;
+  application_data: Record<string, unknown>;
+};
+
 type ApiResponse<T> = { success?: boolean; message?: string; email_sent?: boolean; data?: T };
 const cohorts = ['FYM', 'FYE', 'SYM', 'SYE'] as const;
 const applicationStatuses = ['Submitted', 'Recommendations pending', 'Payment pending', 'Under review', 'Interview scheduled', 'Approved', 'Rejected'];
@@ -84,6 +92,36 @@ const legacyDocumentFields = [
   ['reportCard', 'Academic report / transcript'],
   ['idDocument', 'Identification document'],
 ] as const;
+
+const readOnlyApplicationFields = new Set([
+  'nrcOrPassport',
+  'birthCertificate',
+  'resultsCertificate',
+  'passportPhoto',
+  'reportCard',
+  'idDocument',
+  'pastoralRecommenderName',
+  'recommendationPastoralName',
+  'recommendationPastoralPhone',
+  'recommendationPastoralEmail',
+  'recommendationPastoralChurch',
+  'recommendationPastoralPosition',
+  'recommendationPastoralAddress',
+  'personalReferenceName',
+  'personalReferenceEmail',
+  'personalReferencePhone',
+  'personalReferenceAddress',
+  'personalReferenceRelation',
+  'personalReferenceDuration',
+  'declarationAccuracy',
+  'declarationRecommenders',
+]);
+
+const editableDetailSections = detailSections.filter(({ title }) => (
+  title !== 'Pastoral recommender details'
+  && title !== 'Personal recommender details'
+  && title !== 'Declarations'
+));
 
 const fieldLabels: Record<string, string> = {
   firstName: 'First name',
@@ -183,6 +221,8 @@ const searchApplication = (item: ApplicationRecord) => [
 export default function AdmissionsPage() {
   const [applications, setApplications] = useState<ApplicationRecord[]>([]);
   const [selectedId, setSelectedId] = useState('');
+  const [editingApplication, setEditingApplication] = useState(false);
+  const [editDraft, setEditDraft] = useState<ApplicationEditDraft | null>(null);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All statuses');
   const [paymentFilter, setPaymentFilter] = useState('All payments');
@@ -267,10 +307,110 @@ export default function AdmissionsPage() {
   const avatarUrl = photoValue && (photoValue.startsWith('http://') || photoValue.startsWith('https://') || photoValue.includes('/'))
     ? assetUrl(photoValue)
     : '';
+  const editApplicationData = editDraft?.application_data ?? {};
+  const hasNameParts = 'firstName' in editApplicationData || 'lastName' in editApplicationData;
+  const additionalEditFields = Object.entries(editApplicationData)
+    .filter(([key, value]) => !knownFields.has(key)
+      && !readOnlyApplicationFields.has(key)
+      && (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'));
 
   const setFilter = (setter: (value: string) => void, value: string) => {
     setter(value);
     setPage(1);
+  };
+
+  const beginEditingApplication = () => {
+    if (!selected || ['Approved', 'Rejected'].includes(selected.status) || selected.student_id) return;
+    setEditDraft({
+      applicant_name: selected.applicant_name,
+      applicant_email: selected.applicant_email,
+      applicant_phone: selected.applicant_phone,
+      program: selected.program,
+      application_data: { ...selected.application_data },
+    });
+    setEditingApplication(true);
+    setError('');
+    setNotice('');
+  };
+
+  const cancelEditingApplication = () => {
+    if (saving) return;
+    setEditingApplication(false);
+    setEditDraft(null);
+    setError('');
+  };
+
+  const updateApplicationDataField = (field: string, value: string | number | boolean) => {
+    setEditDraft((current) => current
+      ? { ...current, application_data: { ...current.application_data, [field]: value } }
+      : current);
+  };
+
+  const saveApplicationDetails = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selected || !editDraft) return;
+    if (['Approved', 'Rejected'].includes(selected.status) || selected.student_id) {
+      setError('Application details can only be edited before a final decision.');
+      setEditingApplication(false);
+      setEditDraft(null);
+      return;
+    }
+
+    const applicationData = { ...editDraft.application_data };
+    const hasNameParts = 'firstName' in applicationData || 'lastName' in applicationData;
+    const applicantName = hasNameParts
+      ? [applicationData.firstName, applicationData.lastName].map((value) => String(value ?? '').trim()).filter(Boolean).join(' ')
+      : String(applicationData.studentName ?? editDraft.applicant_name).trim();
+    const applicantEmail = String(applicationData.email ?? editDraft.applicant_email).trim();
+    const applicantPhone = String(applicationData.phone ?? editDraft.applicant_phone).trim();
+    const program = String(applicationData.program || applicationData.preferredClass || editDraft.program).trim();
+
+    if (!applicantName) {
+      setError('Enter the applicant’s first and last name.');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(applicantEmail)) {
+      setError('Enter a valid applicant email address.');
+      return;
+    }
+    if ('studentName' in applicationData) applicationData.studentName = applicantName;
+    if ('email' in applicationData) applicationData.email = applicantEmail;
+    if ('confirmEmail' in applicationData) applicationData.confirmEmail = applicantEmail;
+    if ('phone' in applicationData) applicationData.phone = applicantPhone;
+    if ('program' in applicationData) applicationData.program = program;
+
+    setSaving(true);
+    setError('');
+    setNotice('');
+    try {
+      const response = await api.admissions.updateDetails({
+        application_id: selected.id,
+        applicant_name: applicantName,
+        applicant_email: applicantEmail,
+        applicant_phone: applicantPhone,
+        program,
+        application_data: applicationData,
+      }) as ApiResponse<unknown>;
+      if (!response.success) throw new Error(response.message ?? 'Unable to save application details.');
+
+      setApplications((current) => current.map((item) => item.id === selected.id
+        ? {
+          ...item,
+          applicant_name: applicantName,
+          applicant_email: applicantEmail,
+          applicant_phone: applicantPhone,
+          program,
+          application_data: applicationData,
+        }
+        : item));
+      setEditingApplication(false);
+      setEditDraft(null);
+      setNotice(response.message ?? 'Application details updated.');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to save application details.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const updateStatus = async (status: 'Under review' | 'Rejected') => {
@@ -346,6 +486,8 @@ export default function AdmissionsPage() {
 
   const openApplication = (id: string) => {
     setSelectedId(id);
+    setEditingApplication(false);
+    setEditDraft(null);
     setActiveReviewTab('applicant');
     setCohort('');
     setShowInterviewForm(false);
@@ -357,6 +499,8 @@ export default function AdmissionsPage() {
 
   const returnToApplications = () => {
     setSelectedId('');
+    setEditingApplication(false);
+    setEditDraft(null);
     setCohort('');
     setShowInterviewForm(false);
   };
@@ -502,7 +646,8 @@ export default function AdmissionsPage() {
                   <td className="px-4 py-3 text-right"><button type="button" onClick={() => openApplication(item.id)} className="inline-flex items-center gap-1.5 rounded-lg bg-[#0f766e] px-3 py-2 text-[10px] font-black uppercase tracking-wide text-white hover:bg-[#115e59]"><Eye className="h-3.5 w-3.5" /> Read application</button></td>
                 </tr>)}</tbody>
               </table>
-            </div>}
+            </div>
+        }
         {!loading && filtered.length > 0 && <div className="flex flex-col gap-3 border-t border-[#dce3de] px-4 py-3 text-xs sm:flex-row sm:items-center sm:justify-between">
           <p className="text-[#68746e]">Showing {(visiblePage - 1) * pageSize + 1}–{Math.min(visiblePage * pageSize, filtered.length)} of {filtered.length}</p>
           <div className="flex items-center gap-2">
@@ -523,12 +668,107 @@ export default function AdmissionsPage() {
               </div>
               <div className="pb-1"><p className="font-mono text-[10px] font-black uppercase tracking-[0.16em] text-[#0f766e]">{selected.id}</p><h2 className="mt-1 text-2xl font-black text-slate-950">{selected.applicant_name}</h2><p className="mt-1 text-xs text-[#68746e]">{selected.program || 'Programme pending'} · Submitted {new Date(selected.created_at).toLocaleString()}</p></div>
             </div>
-            <div className="flex flex-wrap gap-2 pb-1"><span className="inline-flex items-center gap-2 rounded-xl bg-[#eef7f4] px-3 py-2 text-xs font-bold text-[#0f766e]"><CreditCard className="h-4 w-4" />{selected.payment_status}</span><span className="inline-flex items-center gap-2 rounded-xl bg-[#fff7df] px-3 py-2 text-xs font-bold text-[#9a6700]"><ShieldCheck className="h-4 w-4" />{selected.status}</span></div>
+            <div className="flex flex-wrap gap-2 pb-1">
+              <span className="inline-flex items-center gap-2 rounded-xl bg-[#eef7f4] px-3 py-2 text-xs font-bold text-[#0f766e]"><CreditCard className="h-4 w-4" />{selected.payment_status}</span>
+              <span className="inline-flex items-center gap-2 rounded-xl bg-[#fff7df] px-3 py-2 text-xs font-bold text-[#9a6700]"><ShieldCheck className="h-4 w-4" />{selected.status}</span>
+              {!editingApplication && !selected.student_id && !['Approved', 'Rejected'].includes(selected.status) && (
+                <button type="button" disabled={saving} onClick={beginEditingApplication} className="inline-flex items-center gap-2 rounded-xl bg-[#17201d] px-3 py-2 text-xs font-bold text-white hover:bg-[#26342e] disabled:opacity-50">
+                  <Pencil className="h-4 w-4" /> Edit application
+                </button>
+              )}
+            </div>
           </div>
           {selected.student_id && <p className="mt-5 rounded-xl bg-slate-50 p-3 text-sm font-semibold">Student record already created: {selected.student_id}</p>}
         </div>
       </div>
 
+      {editingApplication && editDraft ? (
+        <form onSubmit={saveApplicationDetails} className="admin-paper space-y-5 p-5 sm:p-6">
+          <div>
+            <p className="admin-kicker">Edit application</p>
+            <h3 className="mt-2 text-xl font-black">Applicant information</h3>
+            <p className="mt-2 text-sm text-[#68746e]">Edits are available before a final decision. Uploaded documents, recommender details, submitted recommendations, and declarations remain unchanged.</p>
+          </div>
+
+          {(!hasNameParts || !('email' in editApplicationData) || !('phone' in editApplicationData)
+            || (!('preferredClass' in editApplicationData) && !('program' in editApplicationData))
+            || 'program' in editApplicationData) && (
+            <section className="rounded-xl border border-[#dce3de] bg-[#f8faf8] p-4">
+              <h4 className="font-bold text-slate-900">Application record</h4>
+              <div className="mt-3 grid gap-4 md:grid-cols-2">
+                {!hasNameParts && (
+                  'studentName' in editApplicationData
+                    ? <EditableApplicationField field="studentName" value={editApplicationData.studentName} onChange={(value) => updateApplicationDataField('studentName', value)} />
+                    : <label className="block text-xs font-bold uppercase tracking-wide text-[#68746e]">
+                      Applicant name
+                      <input value={editDraft.applicant_name} onChange={(event) => setEditDraft((current) => current ? { ...current, applicant_name: event.target.value } : current)} required className="mt-2 w-full rounded-xl border border-[#dce3de] bg-white px-3 py-2.5 text-sm" />
+                    </label>
+                )}
+                {!('email' in editApplicationData) && <label className="block text-xs font-bold uppercase tracking-wide text-[#68746e]">
+                  Applicant email
+                  <input type="email" value={editDraft.applicant_email} onChange={(event) => setEditDraft((current) => current ? { ...current, applicant_email: event.target.value } : current)} required className="mt-2 w-full rounded-xl border border-[#dce3de] bg-white px-3 py-2.5 text-sm" />
+                </label>}
+                {!('phone' in editApplicationData) && <label className="block text-xs font-bold uppercase tracking-wide text-[#68746e]">
+                  Applicant phone
+                  <input type="tel" value={editDraft.applicant_phone} onChange={(event) => setEditDraft((current) => current ? { ...current, applicant_phone: event.target.value } : current)} className="mt-2 w-full rounded-xl border border-[#dce3de] bg-white px-3 py-2.5 text-sm" />
+                </label>}
+                {!('preferredClass' in editApplicationData) && !('program' in editApplicationData) && <label className="block text-xs font-bold uppercase tracking-wide text-[#68746e]">
+                  Programme
+                  <input value={editDraft.program} onChange={(event) => setEditDraft((current) => current ? { ...current, program: event.target.value } : current)} className="mt-2 w-full rounded-xl border border-[#dce3de] bg-white px-3 py-2.5 text-sm" />
+                </label>}
+                {'program' in editApplicationData && <EditableApplicationField field="program" value={editApplicationData.program} onChange={(value) => updateApplicationDataField('program', value)} />}
+              </div>
+            </section>
+          )}
+
+          {editableDetailSections.map((section) => {
+            const fields = section.fields.filter((field) => (
+              !readOnlyApplicationFields.has(field)
+              && field !== 'confirmEmail'
+              && (typeof editApplicationData[field] === 'string'
+                || typeof editApplicationData[field] === 'number'
+                || typeof editApplicationData[field] === 'boolean')
+            ));
+            if (!fields.length) return null;
+            return <section key={section.title} className="rounded-xl border border-[#dce3de] bg-[#f8faf8] p-4">
+              <h4 className="font-bold text-slate-900">{section.title}</h4>
+              <div className="mt-3 grid gap-4 md:grid-cols-2">
+                {fields.map((field) => (
+                  <EditableApplicationField
+                    key={field}
+                    field={field}
+                    value={editApplicationData[field]}
+                    onChange={(value) => updateApplicationDataField(field, value)}
+                  />
+                ))}
+              </div>
+            </section>;
+          })}
+
+          {additionalEditFields.length > 0 && <section className="rounded-xl border border-[#dce3de] bg-[#f8faf8] p-4">
+            <h4 className="font-bold text-slate-900">Other applicant information</h4>
+            <div className="mt-3 grid gap-4 md:grid-cols-2">
+              {additionalEditFields.map(([field, value]) => (
+                <EditableApplicationField
+                  key={field}
+                  field={field}
+                  value={value}
+                  onChange={(nextValue) => updateApplicationDataField(field, nextValue)}
+                />
+              ))}
+            </div>
+          </section>}
+
+          <div className="flex flex-wrap gap-3">
+            <button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-[#0f766e] px-4 py-3 text-xs font-black uppercase tracking-wide text-white disabled:opacity-50">
+              <Save className="h-4 w-4" /> {saving ? 'Saving changes…' : 'Save application'}
+            </button>
+            <button type="button" disabled={saving} onClick={cancelEditingApplication} className="inline-flex items-center gap-2 rounded-xl border border-[#dce3de] bg-white px-4 py-3 text-xs font-black uppercase tracking-wide text-slate-700 disabled:opacity-50">
+              <X className="h-4 w-4" /> Cancel
+            </button>
+          </div>
+        </form>
+      ) : (
       <section className="admin-paper overflow-hidden">
         <div className="overflow-x-auto border-b border-[#dce3de] bg-[#f6f7f4]">
           <div aria-label="Application review sections" className="flex min-w-max gap-1 px-3 pt-2" role="tablist">
@@ -639,8 +879,9 @@ export default function AdmissionsPage() {
           )}
         </div>
       </section>
+      )}
 
-      <div className="admin-paper space-y-4 p-6">
+      {!editingApplication && <div className="admin-paper space-y-4 p-6">
         {['Approved', 'Rejected'].includes(selected.status) ? (
           <>
             <div><p className="admin-kicker">Final decision</p><h3 className="mt-2 text-xl font-black">Application {selected.status.toLowerCase()}</h3></div>
@@ -683,7 +924,7 @@ export default function AdmissionsPage() {
         </form>}
           </>
         )}
-      </div>
+      </div>}
     </section>}
     {documentPreview && <div
       className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/75 p-3 sm:p-6"
@@ -767,6 +1008,64 @@ function renderReviewSections(
       </section>;
     })}
   </div>;
+}
+
+function EditableApplicationField({
+  field,
+  value,
+  onChange,
+}: {
+  field: string;
+  value: unknown;
+  onChange: (value: string | number | boolean) => void;
+}) {
+  if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') return null;
+  const label = formatFieldLabel(field);
+  const baseClass = 'mt-2 w-full rounded-xl border border-[#dce3de] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#0f766e]';
+
+  if (typeof value === 'boolean') {
+    return <label className="flex items-center gap-3 rounded-xl border border-[#dce3de] bg-white p-3 text-sm font-semibold">
+      <input type="checkbox" checked={value} onChange={(event) => onChange(event.target.checked)} className="h-4 w-4 accent-[#0f766e]" />
+      {label}
+    </label>;
+  }
+
+  if (field === 'hasFiveOLevelCredits') {
+    const options = ['Yes', 'No', 'Pending'];
+    const currentValue = String(value);
+    if (currentValue && !options.includes(currentValue)) options.unshift(currentValue);
+    return <label className="block text-xs font-bold uppercase tracking-wide text-[#68746e]">
+      {label}
+      <select value={currentValue} onChange={(event) => onChange(event.target.value)} className={baseClass}>
+        {options.map((option) => <option key={option} value={option}>{option}</option>)}
+      </select>
+    </label>;
+  }
+
+  const normalizedField = field.toLowerCase();
+  const inputType = normalizedField.includes('email')
+    ? 'email'
+    : normalizedField.includes('phone')
+      ? 'tel'
+      : normalizedField.includes('date')
+        ? 'date'
+        : normalizedField.includes('year')
+          ? 'number'
+          : 'text';
+  const currentValue = String(value);
+  const isMultiline = /address|qualification|results|supportneeds|experience/i.test(field) || currentValue.includes('\n');
+
+  return <label className="block text-xs font-bold uppercase tracking-wide text-[#68746e]">
+    {label}
+    {isMultiline
+      ? <textarea value={currentValue} onChange={(event) => onChange(event.target.value)} rows={3} className={baseClass} />
+      : <input
+        type={inputType}
+        value={currentValue}
+        onChange={(event) => onChange(event.target.value)}
+        className={baseClass}
+      />}
+  </label>;
 }
 
 function DetailField({ label, value, documentUrl, onView }: { label: string; value: string; documentUrl?: string; onView?: () => void }) {

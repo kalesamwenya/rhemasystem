@@ -126,7 +126,7 @@ export default function BookLibraryPage() {
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-5 px-5 py-5 sm:px-8">
           <Link href="/student" className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-400 text-[#17201d]"><LibraryBig className="h-5 w-5" /></div>
-            <div><p className="text-xs font-black uppercase tracking-[0.2em] text-amber-400">Rhema</p><p className="text-lg font-black">Digital Library</p></div>
+            <div><p className="text-xs font-black uppercase tracking-[0.2em] text-amber-400">Emit Academy</p><p className="text-lg font-black">Digital Library</p></div>
           </Link>
           <div className="hidden items-center gap-5 text-sm font-semibold text-slate-300 sm:flex"><a href="#catalogue" className="hover:text-white">Catalogue</a><button type="button" onClick={() => setSavedOnly((value) => !value)} className="hover:text-white">{savedOnly ? 'All books' : 'Saved books'}</button><Link href="/student" className="hover:text-white">Campus portal</Link></div>
           <button type="button" onClick={() => setSavedOnly((value) => !value)} className="rounded-lg border border-white/20 px-3 py-2 text-xs font-bold sm:hidden">{savedOnly ? 'All books' : 'Saved'}</button>

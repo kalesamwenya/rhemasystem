@@ -101,7 +101,7 @@ export default function PartnerNeedsPage() {
       <header>
         <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-700">Needs marketplace</p>
         <h1 className="mt-2 text-3xl font-black text-slate-950">Opportunities & pledges</h1>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">Choose an open Rhema Zambia partnership opportunity. Depending on the opportunity, you can pledge financial support, offer service to a department, or both. Monetary contributions are confirmed after payment is verified.</p>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">Choose an open Emit Academy partnership opportunity. Depending on the opportunity, you can pledge financial support, offer service to a department, or both. Monetary contributions are confirmed after payment is verified.</p>
       </header>
 
       {message ? <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">{message}</div> : null}

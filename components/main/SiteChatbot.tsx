@@ -31,7 +31,7 @@ const contextForPath = (pathname: string): ChatContext => {
   if (pathname.startsWith("/events")) return { label: "Events concierge", greeting: "Hi! I can help you find an upcoming event or walk you through registration.", prompts: ["What events are coming up?", "How do I register?"] };
   if (pathname.startsWith("/apply") || pathname.startsWith("/application")) return { label: "Admissions guide", greeting: "Hello! Applying can raise a lot of questions. I can help with the application or entry requirements.", prompts: ["How do I apply?", "What are the entry requirements?"] };
   if (pathname.startsWith("/contact")) return { label: "School support", greeting: "Hi there! Tell me what you need help with and I’ll point you in the right direction.", prompts: ["Talk to admissions", "Where is the school located?"] };
-  return { label: "Rhema assistant", greeting: "Welcome to Rhema Zambia. I can help with the ministry program, admissions, events or finding the school team.", prompts: ["Explore courses", "How do I apply?"] };
+  return { label: "Emit Academy assistant", greeting: "Welcome to Emit Academy. I can help with the ministry program, admissions, events or finding the school team.", prompts: ["Explore courses", "How do I apply?"] };
 };
 
 const actionLinks = [
@@ -164,7 +164,7 @@ export default function SiteChatbot() {
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15"><Sparkles size={19} /></div>
-              <div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-red-100">{context.label}</p><h2 className="mt-1 text-base font-black">Rhema Zambia</h2></div>
+              <div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-red-100">{context.label}</p><h2 className="mt-1 text-base font-black">Emit Academy</h2></div>
             </div>
             <button type="button" onClick={() => setOpen(false)} className="rounded-lg p-1.5 text-white hover:bg-white/15" aria-label="Close school assistant"><X size={18} /></button>
           </div>

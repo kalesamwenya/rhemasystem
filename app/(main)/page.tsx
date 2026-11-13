@@ -55,7 +55,7 @@ export default function HomePage() {
   })).filter((card) => card.title.trim() || card.description.trim());
   const publishedStories = content.testimonials;
   const quickLinks = [
-    { href: "/apply", title: "Apply to Rhema", detail: "Admissions process and requirements", icon: GraduationCap },
+    { href: "/apply", title: "Apply to Emit Academy", detail: "Admissions process and requirements", icon: GraduationCap },
     { href: "/offered-programs", title: "Explore academics", detail: "Discover our two-year ministry program", icon: BookOpen },
     { href: "/login", title: "Student portal", detail: "Access your student account", icon: Users },
     { href: "/contact", title: "Visit the campus", detail: "Find us in Lusaka, Zambia", icon: MapPin },
@@ -124,7 +124,7 @@ export default function HomePage() {
       {lifeCards.length > 0 && (
         <section className="bg-[#f5f5f3] py-20 sm:py-24">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-blue-800">{page.life_badge || "Life at Rhema"}</p>
+            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-blue-800">{page.life_badge || "Life at Emit Academy"}</p>
             <h2 className="mt-3 max-w-3xl text-4xl font-black leading-tight tracking-tight text-[#10283a] sm:text-5xl">{page.life_title}</h2>
             {page.life_description && <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-600">{page.life_description}</p>}
             <div className="mt-9 grid gap-5 md:grid-cols-3">

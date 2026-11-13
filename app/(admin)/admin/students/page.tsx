@@ -204,7 +204,7 @@ export default function StudentManagementPage() {
       currency: studentFinance.currency,
       maximumFractionDigits: 2,
     }).format(studentFinance.total_account_due);
-    const text = `Rhema Bible School account reminder for ${selectedStudent.name}: your outstanding balance is ${amountDue}. Review your charges and pay securely here: ${paymentUrl}`;
+    const text = `Emit Academy account reminder for ${selectedStudent.name}: your outstanding balance is ${amountDue}. Review your charges and pay securely here: ${paymentUrl}`;
     const destination = channel === 'whatsapp'
       ? `https://wa.me/${digits}?text=${encodeURIComponent(text)}`
       : `sms:${phone.replace(/[^\d+]/g, '')}?body=${encodeURIComponent(text)}`;
@@ -268,13 +268,13 @@ export default function StudentManagementPage() {
   };
 
   const sendStudentPasswordReset = async () => {
-    if (!formFields.email.trim() || passwordResetBusy) return;
+    if (!selectedStudent || passwordResetBusy) return;
     setPasswordResetBusy(true);
     setPasswordResetError('');
     setPasswordResetNotice('');
     try {
-      const response = await api.forgotPassword({ email: formFields.email, account_type: 'student' }) as { message?: string };
-      setPasswordResetNotice(response.message || 'If an active account matches the verified email, a secure reset link will be sent.');
+      const response = await api.students.sendAdminPasswordReset(selectedStudent.id) as { message?: string };
+      setPasswordResetNotice(response.message || 'The secure password reset link was sent to the student’s verified email.');
     } catch (reason) {
       setPasswordResetError(reason instanceof Error ? reason.message : 'Unable to send the password reset link.');
     } finally {
@@ -762,7 +762,7 @@ export default function StudentManagementPage() {
 
                   {editorMode === 'edit' && (
                     <div className="space-y-2 rounded-xl border border-slate-200 p-3">
-                      <button type="button" onClick={() => void sendStudentPasswordReset()} disabled={passwordResetBusy || !formFields.email.trim()} className="inline-flex items-center gap-2 text-xs font-bold text-blue-900 hover:underline disabled:opacity-50">
+                      <button type="button" onClick={() => void sendStudentPasswordReset()} disabled={passwordResetBusy || !selectedStudent} className="inline-flex items-center gap-2 text-xs font-bold text-blue-900 hover:underline disabled:opacity-50">
                         {passwordResetBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <KeyRound className="h-3.5 w-3.5" />}
                         Send secure password reset link
                       </button>

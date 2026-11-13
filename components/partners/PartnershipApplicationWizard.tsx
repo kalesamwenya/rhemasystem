@@ -119,7 +119,7 @@ export default function PartnershipApplicationWizard() {
           <p className="mt-5 text-xs font-black uppercase tracking-[0.2em] text-emerald-700">Application received</p>
           <h3 className="mt-2 text-2xl font-black text-[#10283a] sm:text-3xl">Thank you for reaching out.</h3>
           <p className="mt-3 text-sm leading-6 text-slate-600">
-            Your application has been received and will be reviewed by the Rhema Zambia team.
+            Your application has been received and will be reviewed by the Emit Academy team.
             {receiptEmailSent
               ? " A confirmation email is on its way. If your application is approved, you will receive a separate email with a secure, one-time link to create your partner account password."
               : " We could not send a confirmation email, but this will not affect the review. If your application is approved, we will contact you with a secure, one-time link to create your partner account password."}
@@ -131,7 +131,7 @@ export default function PartnershipApplicationWizard() {
           <div className="mx-auto max-w-3xl text-center">
             <p className="text-[11px] font-black uppercase tracking-[0.2em] text-blue-800">Partner application</p>
             <h3 className="mt-2 text-2xl font-black tracking-tight text-[#10283a] sm:text-3xl">Let’s explore working together.</h3>
-            <p className="mt-2 text-sm leading-6 text-slate-600">Complete four short steps. Your application will be reviewed by the Rhema Zambia team.</p>
+            <p className="mt-2 text-sm leading-6 text-slate-600">Complete four short steps. Your application will be reviewed by the Emit Academy team.</p>
           </div>
 
           <ol aria-label="Application progress" className="mx-auto mt-7 grid max-w-4xl grid-cols-4 gap-2 sm:gap-4">
@@ -247,7 +247,7 @@ export default function PartnershipApplicationWizard() {
                   {form.service_departments.length ? <div className="sm:col-span-2"><dt className="text-[10px] font-black uppercase tracking-wider text-slate-500">Departments</dt><dd className="mt-1 text-sm font-bold text-slate-900">{form.service_departments.map((department) => department === "Other" ? form.other_department : department).join(", ")}</dd></div> : null}
                   <div className="sm:col-span-2"><dt className="text-[10px] font-black uppercase tracking-wider text-slate-500">Collaboration area</dt><dd className="mt-1 text-sm font-bold text-slate-900">{form.area}</dd></div>
                   <div className="sm:col-span-2"><dt className="text-[10px] font-black uppercase tracking-wider text-slate-500">Proposal</dt><dd className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-700">{form.details}</dd></div>
-                  <p className="text-xs leading-5 text-slate-500 sm:col-span-2">By submitting, you agree that Rhema Zambia may contact you about this proposal. Submission does not guarantee partnership approval.</p>
+                  <p className="text-xs leading-5 text-slate-500 sm:col-span-2">By submitting, you agree that Emit Academy may contact you about this proposal. Submission does not guarantee partnership approval.</p>
                 </dl>
               ) : null}
 

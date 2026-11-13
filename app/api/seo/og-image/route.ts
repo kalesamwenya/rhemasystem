@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
 export async function GET() {
-  const fallback = NextResponse.redirect(new URL("/logo.png", process.env.NEXT_PUBLIC_SITE_URL || "https://rhemasystem-78th.vercel.app"), 307);
+  const fallback = NextResponse.redirect(new URL("/emit-academy-logo.svg", process.env.NEXT_PUBLIC_SITE_URL || "https://rhemasystem-78th.vercel.app"), 307);
   fallback.headers.set("Cache-Control", "public, max-age=300, s-maxage=300, stale-while-revalidate=3600");
 
   try {

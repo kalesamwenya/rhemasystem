@@ -34,7 +34,7 @@ export default function NewsletterSignup() {
         <div>
           <p className="text-[11px] font-black uppercase tracking-[0.2em] text-amber-300">News from Rhema</p>
           <h2 className="mt-3 max-w-xl text-3xl font-black leading-tight sm:text-4xl">Follow our journey.</h2>
-          <p className="mt-4 max-w-xl text-sm leading-7 text-slate-200">Receive occasional stories, updates, and opportunities from the Rhema Zambia community. We’ll only email you after you confirm your subscription.</p>
+          <p className="mt-4 max-w-xl text-sm leading-7 text-slate-200">Receive occasional stories, updates, and opportunities from the Emit Academy community. We’ll only email you after you confirm your subscription.</p>
         </div>
         <form onSubmit={submit} className="rounded-2xl border border-white/15 bg-white p-5 text-slate-900 shadow-xl sm:p-6">
           {message ? (

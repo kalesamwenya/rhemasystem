@@ -161,7 +161,7 @@ export default function EnrollmentPromotionModal() {
               {campaignTitle}
             </h2>
             <p id="enrollment-promotion-description" className="mt-3 max-w-lg text-sm leading-6 text-slate-100 sm:text-base">
-              Applications to Rhema Zambia Bible Training Center are open for {applicationYears.join(", ")}. {campaignDescription}
+              Applications to Emit Academy are open for {applicationYears.join(", ")}. {campaignDescription}
             </p>
           </div>
         </div>

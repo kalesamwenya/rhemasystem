@@ -2,7 +2,9 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
+import { BRAND_MARK, BRAND_NAME } from '@/lib/brand';
 import {
   Activity,
   Bug,
@@ -201,8 +203,8 @@ export default function AdminSidebar({
     >
       <div className="flex h-16 shrink-0 items-center justify-between border-b border-white/15 bg-rhema-red px-4">
         <div className="flex items-center gap-3 overflow-hidden">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-rhema-red"><GraduationCap className="h-5 w-5" /></div>
-          <div className="flex flex-col truncate"><span className="text-xs font-black uppercase leading-tight tracking-wider text-white">Rhema</span><span className="mt-0.5 text-[9px] font-bold uppercase tracking-widest text-white/70">Admin workspace</span></div>
+          <Image src={BRAND_MARK} alt="" width={36} height={36} className="h-9 w-9 shrink-0 rounded-xl bg-white" />
+          <div className="flex flex-col truncate"><span className="text-xs font-black uppercase leading-tight tracking-wider text-white">{BRAND_NAME}</span><span className="mt-0.5 text-[9px] font-bold uppercase tracking-widest text-white/70">Admin workspace</span></div>
         </div>
         <button type="button" onClick={closeSidebar} className="rounded-lg border border-white/20 p-1.5 text-white/80 transition-colors hover:bg-white/10 hover:text-white md:hidden" aria-label="Close admin navigation"><X className="h-4 w-4" /></button>
       </div>

@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useManagedPageContent } from "@/lib/use-managed-page-content";
+import { BRAND_LOGO, BRAND_NAME } from "@/lib/brand";
 
 export default function SiteFooter() {
   const { content, error, isLoading } = useManagedPageContent("contact");
@@ -11,7 +12,7 @@ export default function SiteFooter() {
     return (
       <footer className="bg-rhema-blue px-4 py-10 text-white sm:px-6 lg:px-8">
         <div className="mx-auto flex max-w-7xl items-center gap-4">
-          <Image src="/logo.png" alt="Rhema Zambia Bible Training Center" width={48} height={52} className="h-12 w-auto rounded bg-white p-1 object-contain" />
+          <Image src={BRAND_LOGO} alt={BRAND_NAME} width={220} height={56} className="h-12 w-auto rounded bg-white p-1 object-contain" />
           <p role={error ? "alert" : "status"} className="text-sm text-blue-100">
             {error || (isLoading ? "Loading school contact details..." : "School contact details are unavailable.")}
           </p>
@@ -25,8 +26,8 @@ export default function SiteFooter() {
       <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
         <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-[1.4fr_0.8fr_1fr_1.2fr]">
           <div>
-            <Link href="/" aria-label="Rhema Zambia home" className="inline-flex rounded-lg bg-white p-2">
-              <Image src="/logo.png" alt="Rhema Zambia Bible Training Center" width={64} height={68} className="h-16 w-auto object-contain" />
+            <Link href="/" aria-label={`${BRAND_NAME} home`} className="inline-flex rounded-lg bg-white p-2">
+              <Image src={BRAND_LOGO} alt={BRAND_NAME} width={220} height={56} className="h-12 w-auto object-contain" />
             </Link>
             <p className="mt-5 max-w-xs text-sm leading-7 text-slate-300">
               {content.footer_description}
@@ -67,12 +68,12 @@ export default function SiteFooter() {
 
         <div className="mt-12 border-t border-white/20 pt-6 text-xs text-blue-100">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p>© {new Date().getFullYear()} {content.footer_school_name}. All rights reserved.</p>
+            <p>© {new Date().getFullYear()} {BRAND_NAME}. All rights reserved.</p>
             <div className="flex gap-5">
               <Link href="/privacy" className="hover:text-white">Privacy</Link>
               <Link href="/terms" className="hover:text-white">Terms</Link>
             </div>
-            <p>{content.footer_school_name}</p>
+            <p>{BRAND_NAME}</p>
           </div>
         </div>
       </div>

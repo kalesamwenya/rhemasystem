@@ -336,7 +336,7 @@ export default function CommunicationsPage() {
         setNotice("Every selected contact needs an email address before opening an email draft.");
         return;
       }
-      destination = `mailto:?bcc=${encodeURIComponent(emailAddresses.join(","))}&subject=${encodeURIComponent("Message from Rhema Zambia")}&body=${encodedMessage}`;
+      destination = `mailto:?bcc=${encodeURIComponent(emailAddresses.join(","))}&subject=${encodeURIComponent("Message from Emit Academy")}&body=${encodedMessage}`;
     } else {
       const number = recipient.phone.replace(/[^\d+]/g, "");
       if (!number) {
