@@ -14,7 +14,7 @@ interface AdminHeaderProps {
   onMenuToggle: () => void;
   isMobileSidebarOpen: boolean;
   isDesktopSidebarOpen: boolean;
-  admin: { id: string; name: string; email: string; admin_role: string; department: string };
+  admin: { id: string; name: string; email: string; admin_role: string; department: string; avatar?: string };
   onSignOut: () => Promise<void>;
 }
 

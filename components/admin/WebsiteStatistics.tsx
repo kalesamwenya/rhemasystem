@@ -61,6 +61,10 @@ type AnalyticsDashboard = {
     visitors: number | string;
   }>;
   locations: VisitorLocation[];
+  location_capture?: {
+    page_views: number;
+    located_page_views: number;
+  };
   countries?: CountryStat[];
   technology: VisitorTechnology;
   location_database_loaded: boolean;
@@ -392,6 +396,11 @@ export default function WebsiteStatistics({ summaryOnly = false }: { summaryOnly
                 <div>
                   <h2 className="text-sm font-black uppercase tracking-wider text-[#003da5]">Visitor locations</h2>
                   <p className="mt-1 text-xs text-slate-500">Approximate IP-based locations. Points indicate city or region, not a visitor’s exact address.</p>
+                  {dashboard?.location_capture && (
+                    <p className="mt-1 text-xs text-slate-500">
+                      IP geolocation: {numberFormat.format(dashboard.location_capture.located_page_views)} of {numberFormat.format(dashboard.location_capture.page_views)} page views mapped. Raw IP addresses are not stored.
+                    </p>
+                  )}
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
                   <button
@@ -516,9 +525,9 @@ export default function WebsiteStatistics({ summaryOnly = false }: { summaryOnly
               {screenshotError && <p role="alert" className="mt-2 text-xs font-semibold text-red-700">{screenshotError}</p>}
               {!mappedLocations.length && (
                 <p className="mt-3 text-xs text-slate-500">
-                  {dashboard?.location_database_loaded
-                    ? 'No mapped visitor locations are available for this period.'
-                    : 'The world map is available offline. Visitor markers appear when server-side IP geolocation is configured.'}
+                  {!dashboard?.location_database_loaded
+                    ? 'No visitor markers: GeoLite2 City ranges are not loaded in the PHP API database. Import the ranges and collect new public-page views; admin pages are not tracked.'
+                    : 'No public-page views matched a GeoLite2 location for this period. Admin pages are not tracked, and localhost or private-network IPs cannot be mapped.'}
                 </p>
               )}
               {mappedLocations.length > 0 && (

@@ -27,6 +27,7 @@ interface AdminProfile {
   role: 'admin';
   admin_role: string;
   department: string;
+  avatar?: string;
 }
 
 interface AdminLoginResponse {
@@ -40,6 +41,7 @@ interface AdminLoginResponse {
     role: string;
     admin_role: string;
     department: string;
+    avatar?: string;
   };
 }
 
@@ -137,6 +139,21 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   }, [router]);
 
   useEffect(() => {
+    const handleProfileUpdate = (event: Event) => {
+      const detail = (event as CustomEvent<Partial<AdminProfile>>).detail;
+      if (!detail) return;
+      setAdminProfile((current) => {
+        if (!current) return current;
+        const updated = { ...current, ...detail };
+        window.localStorage.setItem('rhema_user', JSON.stringify(updated));
+        return updated;
+      });
+    };
+    window.addEventListener('rhema-admin-profile-updated', handleProfileUpdate);
+    return () => window.removeEventListener('rhema-admin-profile-updated', handleProfileUpdate);
+  }, []);
+
+  useEffect(() => {
     if (!adminProfile || isLocked) return;
 
     let lastActivityAt = Number(window.sessionStorage.getItem(ADMIN_LAST_ACTIVITY_KEY)) || Date.now();
@@ -224,6 +241,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         role: 'admin',
         admin_role: user.admin_role,
         department: user.department,
+        avatar: user.avatar || adminProfile.avatar || '',
       };
       window.localStorage.setItem('rhema_user', JSON.stringify(refreshedProfile));
       window.sessionStorage.setItem(ADMIN_LOCK_USER_KEY, refreshedProfile.id);

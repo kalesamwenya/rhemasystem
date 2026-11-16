@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { BRAND_MARK, BRAND_NAME } from '@/lib/brand';
+import { assetUrl } from '@/lib/api';
 import {
   Activity,
   Bug,
@@ -49,6 +50,7 @@ interface AdminProfile {
   email: string;
   admin_role: string;
   department: string;
+  avatar?: string;
 }
 
 interface AdminSidebarProps {
@@ -210,7 +212,12 @@ export default function AdminSidebar({
       </div>
 
       <div className="mb-2 flex flex-col items-center gap-3 rounded-xl bg-white/10 px-3 py-3 text-center">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white text-sm font-black text-rhema-red" aria-label={`${admin.name} avatar`}>{getInitials(admin.name)}</div>
+          <div
+            className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white bg-cover bg-center text-sm font-black text-rhema-red"
+            aria-label={`${admin.name} avatar`}
+            role="img"
+            style={admin.avatar ? { backgroundImage: `url("${assetUrl(admin.avatar)}")` } : undefined}
+          >{admin.avatar ? '' : getInitials(admin.name)}</div>
           <div className="min-w-0 flex-1"><p className="truncate text-xs font-black text-white">{admin.name}</p><p className="mt-0.5 truncate text-[10px] font-semibold capitalize text-rhema-accent">{formatRole(admin.admin_role)}</p><p className="truncate text-[9px] text-white/70">{admin.department}</p></div>
       </div>
 

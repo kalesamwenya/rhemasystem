@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { AlertCircle, CheckCircle2, Loader2, Plus, RefreshCw, ShieldCheck } from 'lucide-react';
-import { api } from '@/lib/api';
+import { api, assetUrl } from '@/lib/api';
 import { employeeDepartmentOptions } from '@/lib/employee-account-options';
 
 type AdminRole = 'owner' | 'administrator' | 'it' | 'finance' | 'academic' | 'registrar' | 'support' | 'operations';
@@ -11,6 +11,7 @@ type AdminAccount = {
   id: string;
   name: string;
   email: string;
+  avatar: string;
   employee_number: string | null;
   department: string;
   role: AdminRole;
@@ -40,6 +41,22 @@ const roleLabels: Record<AdminRole, string> = {
   support: 'Support',
   operations: 'Operations',
 };
+
+function initials(name: string) {
+  return name.trim().split(/\s+/).slice(0, 2).map((part) => part[0] || '').join('').toUpperCase() || 'A';
+}
+
+function formatLastSignIn(value: string | null) {
+  if (!value) return 'Never';
+  const date = new Date(`${value.replace(' ', 'T')}Z`);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
 
 export default function StaffAccessPage() {
   const [accounts, setAccounts] = useState<AdminAccount[]>([]);
@@ -207,16 +224,16 @@ export default function StaffAccessPage() {
       </form>
 
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <table className="min-w-[900px] w-full text-left text-sm">
+        <table className="min-w-[860px] w-full text-left text-xs">
           <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500">
             <tr>
-              <th className="px-5 py-4">Administrator</th>
-              <th className="px-5 py-4">Employee number</th>
-              <th className="px-5 py-4">Department</th>
-              <th className="px-5 py-4">Permission profile</th>
-              <th className="px-5 py-4">Account status</th>
-              <th className="px-5 py-4">Last sign-in</th>
-              <th className="px-5 py-4">Save</th>
+              <th className="px-3 py-2.5">Administrator</th>
+              <th className="px-3 py-2.5">Employee no.</th>
+              <th className="px-3 py-2.5">Department</th>
+              <th className="px-3 py-2.5">Access</th>
+              <th className="px-3 py-2.5">Status</th>
+              <th className="px-3 py-2.5">Last sign-in</th>
+              <th className="px-3 py-2.5">Save</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -228,62 +245,78 @@ export default function StaffAccessPage() {
               const optionsWithCurrent = Array.from(new Set([account.role, ...roleOptions]));
               const isDirty = draft.department !== account.department || draft.role !== account.role || draft.status !== account.status;
               return (
-                <tr key={account.id} className="align-top">
-                  <td className="px-5 py-4">
-                    <p className="font-bold text-slate-900">{account.name}</p>
-                    <p className="mt-1 text-xs text-slate-500">{account.email}</p>
+                <tr key={account.id} className="align-middle">
+                  <td className="px-3 py-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-blue-50 text-[10px] font-black text-blue-900">
+                        {account.avatar ? (
+                          <div
+                            role="img"
+                            aria-label={`${account.name} avatar`}
+                            className="h-full w-full bg-cover bg-center"
+                            style={{ backgroundImage: `url("${assetUrl(account.avatar)}")` }}
+                          />
+                        ) : (
+                          <span aria-hidden="true">{initials(account.name)}</span>
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate font-bold text-slate-900" title={account.name}>{account.name}</p>
+                        <p className="truncate text-[11px] text-slate-500" title={account.email}>{account.email}</p>
+                      </div>
+                    </div>
                   </td>
-                  <td className="px-5 py-4 text-xs font-semibold text-slate-600">{account.employee_number || '—'}</td>
-                  <td className="px-5 py-4">
+                  <td className="whitespace-nowrap px-3 py-2 font-semibold text-slate-600">{account.employee_number || '—'}</td>
+                  <td className="px-3 py-2">
                     <input
                       aria-label={`${account.name} department`}
                       value={draft.department}
                       disabled={!canEdit}
                       maxLength={120}
                       onChange={(event) => updateDraft(account.id, 'department', event.target.value)}
-                      className="w-44 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-blue-800 disabled:bg-slate-50 disabled:text-slate-400"
+                      className="w-36 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs outline-none focus:border-blue-800 disabled:bg-slate-50 disabled:text-slate-400"
                     />
                   </td>
-                  <td className="px-5 py-4">
+                  <td className="px-3 py-2">
                     <select
                       aria-label={`${account.name} permission profile`}
                       value={draft.role}
                       disabled={!canEdit}
                       onChange={(event) => updateDraft(account.id, 'role', event.target.value as AdminRole)}
-                      className="w-44 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-blue-800 disabled:bg-slate-50 disabled:text-slate-400"
+                      className="w-36 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs outline-none focus:border-blue-800 disabled:bg-slate-50 disabled:text-slate-400"
                     >
                       {optionsWithCurrent.map((role) => <option key={role} value={role}>{roleLabels[role]}</option>)}
                     </select>
-                    {account.role === 'it' && <p className="mt-1 flex items-center gap-1 text-[10px] font-semibold text-blue-800"><ShieldCheck className="h-3 w-3" />Full system access</p>}
+                    {account.role === 'it' && <p className="mt-0.5 flex items-center gap-1 text-[10px] font-semibold text-blue-800"><ShieldCheck className="h-3 w-3" />Full access</p>}
                   </td>
-                  <td className="px-5 py-4">
+                  <td className="px-3 py-2">
                     <select
                       aria-label={`${account.name} account status`}
                       value={draft.status}
                       disabled={!canEdit}
                       onChange={(event) => updateDraft(account.id, 'status', event.target.value as AccountStatus)}
-                      className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-blue-800 disabled:bg-slate-50 disabled:text-slate-400"
+                      className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs outline-none focus:border-blue-800 disabled:bg-slate-50 disabled:text-slate-400"
                     >
                       <option value="active">Active</option>
                       <option value="suspended">Suspended</option>
                     </select>
                   </td>
-                  <td className="px-5 py-4 text-xs text-slate-500">
-                    {account.last_login_at ? new Date(`${account.last_login_at.replace(' ', 'T')}Z`).toLocaleString() : 'Never'}
+                  <td className="whitespace-nowrap px-3 py-2 text-[11px] text-slate-500" title={account.last_login_at || undefined}>
+                    {formatLastSignIn(account.last_login_at)}
                   </td>
-                  <td className="px-5 py-4">
+                  <td className="px-3 py-2">
                     {canEdit && (
                       <button
                         type="button"
                         disabled={!isDirty || savingId === account.id}
                         onClick={() => void saveAccess(account)}
-                        className="inline-flex items-center gap-2 rounded-lg bg-blue-950 px-3 py-2 text-xs font-bold text-white hover:bg-blue-900 disabled:cursor-not-allowed disabled:opacity-40"
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-blue-950 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-blue-900 disabled:cursor-not-allowed disabled:opacity-40"
                       >
                         {savingId === account.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
                         Save
                       </button>
                     )}
-                    {!canEdit && <span className="text-xs text-slate-400">{account.id === currentAdminId ? 'Your account' : 'Protected account'}</span>}
+                    {!canEdit && <span className="whitespace-nowrap text-[11px] text-slate-400">{account.id === currentAdminId ? 'Your account' : 'Protected'}</span>}
                   </td>
                 </tr>
               );

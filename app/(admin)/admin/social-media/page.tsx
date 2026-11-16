@@ -141,8 +141,10 @@ export default function SocialMediaPage() {
   const [saving, setSaving] = useState(false);
   const [retryingPostId, setRetryingPostId] = useState<number | null>(null);
   const [notice, setNotice] = useState('');
+  const [mediaError, setMediaError] = useState('');
   const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [mediaOrganizerOpen, setMediaOrganizerOpen] = useState(false);
   const [filter, setFilter] = useState<'all' | 'review' | 'assigned'>('all');
   const [activeTab, setActiveTab] = useState<'calendar' | 'queue'>('calendar');
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
@@ -157,7 +159,6 @@ export default function SocialMediaPage() {
   const [mediaDragActive, setMediaDragActive] = useState(false);
   const [draggedMediaIndex, setDraggedMediaIndex] = useState<number | null>(null);
   const [mediaDropIndex, setMediaDropIndex] = useState<number | null>(null);
-  const mediaInputRef = useRef<HTMLInputElement>(null);
   const publishNowButtonRef = useRef<HTMLButtonElement>(null);
   const mediaPreviewUrlsRef = useRef(new Set<string>());
 
@@ -264,6 +265,7 @@ export default function SocialMediaPage() {
 
   const openNew = (date = new Date()) => {
     setNotice('');
+    setMediaError('');
     setDraft(newDraft(date));
   };
 
@@ -276,6 +278,7 @@ export default function SocialMediaPage() {
     }
     setSaving(true);
     setNotice('');
+    setMediaError('');
     let wasSaved = false;
     try {
       const mediaPaths: string[] = [];
@@ -284,8 +287,17 @@ export default function SocialMediaPage() {
           mediaPaths.push(media.path);
           continue;
         }
-        const upload = await api.socialMedia.upload(media.file) as { data?: { path?: string; media_type?: 'image' | 'video' } };
-        if (!upload.data?.path || !upload.data.media_type) throw new Error('Media upload did not return a usable file path.');
+        let upload: { data?: { path?: string; media_type?: 'image' | 'video' } };
+        try {
+          upload = await api.socialMedia.upload(media.file) as { data?: { path?: string; media_type?: 'image' | 'video' } };
+        } catch (error) {
+          setMediaError(error instanceof Error ? error.message : `Unable to upload ${media.file.name}.`);
+          throw error;
+        }
+        if (!upload.data?.path || !upload.data.media_type) {
+          setMediaError(`Unable to upload ${media.file.name}. The API returned no usable file path.`);
+          throw new Error('Media upload did not return a usable file path.');
+        }
         mediaPaths.push(upload.data.path);
       }
       const mediaPath = mediaPaths[0] ?? '';
@@ -382,16 +394,12 @@ export default function SocialMediaPage() {
       return !supportedTypes.includes(file.type) && !supportedExtensions.includes(extension);
     });
     if (unsupported) {
-      setNotice(`${unsupported.name} is not a supported media format. Use JPG, PNG, WEBP, GIF, MP4, MOV, or WEBM.`);
+      setMediaError(`${unsupported.name} is not a supported media format. Use JPG, PNG, WEBP, GIF, MP4, MOV, or WEBM.`);
       return;
     }
-    const tooLarge = selected.find((file) => mediaFileType(file) === 'video'
-      ? file.size > 100 * 1024 * 1024
-      : file.size >= 10 * 1024 * 1024);
+    const tooLarge = selected.find((file) => file.size > 3 * 1024 * 1024 * 1024);
     if (tooLarge) {
-      setNotice(mediaFileType(tooLarge) === 'video'
-        ? `${tooLarge.name} is larger than the 100 MB video limit.`
-        : `${tooLarge.name} must be smaller than 10 MB for Meta publishing.`);
+      setMediaError(`${tooLarge.name} is larger than the 3 GB media upload limit.`);
       return;
     }
     const currentMediaTypes = [
@@ -402,9 +410,10 @@ export default function SocialMediaPage() {
     const addedTypes = selected.map(mediaFileType);
     const combinedTypes = [...currentMediaTypes, ...addedTypes];
     if (combinedTypes.includes('video') && (combinedTypes.length > 1 || addedTypes.length > 1)) {
-      setNotice('Attach multiple images, or one video. Videos cannot be combined with other media.');
+      setMediaError('Attach multiple images, or one video. Videos cannot be combined with other media.');
       return;
     }
+    setMediaError('');
     setNotice('');
     const newMedia: DraftMedia[] = selected.map((file) => ({
       kind: 'new',
@@ -439,8 +448,22 @@ export default function SocialMediaPage() {
     });
   };
 
+  const openMediaOrganizer = () => {
+    setDraggedMediaIndex(null);
+    setMediaDropIndex(null);
+    setMediaOrganizerOpen(true);
+  };
+
+  const closeMediaOrganizer = () => {
+    setMediaOrganizerOpen(false);
+    setDraggedMediaIndex(null);
+    setMediaDropIndex(null);
+  };
+
   const closeDraft = () => {
     clearMediaPreview();
+    setMediaError('');
+    setMediaOrganizerOpen(false);
     setDraft(null);
   };
 
@@ -712,7 +735,7 @@ export default function SocialMediaPage() {
             {draft.id && <label className="text-xs font-bold text-slate-600 sm:col-span-2">Note to content owner<textarea rows={2} maxLength={5000} value={draft.reviewer_note} onChange={(event) => setDraftField('reviewer_note', event.target.value)} className={inputClass} placeholder="Optional review feedback or requested changes." /></label>}
             <div className="text-xs font-bold text-slate-600 sm:col-span-2">
               <span>Attach images or video</span>
-              {draft.platform !== 'facebook' && <p className="mt-1 font-normal text-slate-500">Instagram accepts JPG photos or a single MP4 video; carousels support up to 10 JPG photos.</p>}
+              {draft.platform !== 'facebook' && <p className="mt-1 font-normal text-slate-500">Instagram accepts JPG photos or a single MP4 video; carousels support up to 10 JPG photos. Meta may reject large files when publishing.</p>}
               <div
                 onDragOver={(event) => {
                   event.preventDefault();
@@ -731,117 +754,62 @@ export default function SocialMediaPage() {
                 }}
                 className={`mt-1 rounded-2xl border border-dashed p-5 transition-colors ${mediaDragActive ? 'border-red-400 bg-red-50' : 'border-slate-300 bg-slate-50'}`}
               >
-                <input
-                  ref={mediaInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime,video/webm"
-                  multiple
-                  onChange={(event) => {
-                    if (event.currentTarget.files) chooseMediaFiles(event.currentTarget.files);
-                    event.currentTarget.value = '';
-                  }}
-                  className="sr-only"
-                  aria-label="Choose images or a video"
-                />
                 <div className="flex flex-col items-center justify-center py-3 text-center">
                   <ImagePlus className={`h-7 w-7 ${mediaDragActive ? 'text-red-600' : 'text-slate-400'}`} />
                   <p className="mt-2 text-xs font-bold text-slate-700">{mediaDragActive ? 'Drop your media here' : 'Drag and drop images here'}</p>
                   <p className="mt-1 text-[11px] font-normal text-slate-500">Choose multiple images, or one video</p>
-                  <button type="button" onClick={() => mediaInputRef.current?.click()} className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold text-slate-700">Choose media</button>
+                  <label className="mt-3 cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold text-slate-700 hover:bg-slate-50">
+                    Choose media
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime,video/webm"
+                      multiple
+                      onChange={(event) => {
+                        if (event.currentTarget.files) chooseMediaFiles(event.currentTarget.files);
+                        event.currentTarget.value = '';
+                      }}
+                      className="sr-only"
+                    />
+                  </label>
                 </div>
                 {draft.media.length > 0 && (
-                  <>
-                    <div className="mt-4 flex flex-wrap items-end justify-between gap-2">
-                      <div>
-                        <p className="text-sm font-bold text-slate-800">Story order</p>
-                        <p className="mt-1 text-[11px] font-normal text-slate-500">Drag any photo onto another photo to set its place. The numbered order is used when publishing.</p>
-                      </div>
-                      <span className="rounded-full bg-white px-3 py-1 text-[10px] font-bold text-slate-600">{draft.media.length} item{draft.media.length === 1 ? '' : 's'}</span>
-                    </div>
-                    <div className="mt-3 grid max-h-[55vh] grid-cols-2 gap-4 overflow-y-auto rounded-xl border border-slate-200 bg-white/70 p-3 sm:grid-cols-3 xl:grid-cols-4">
-                      {draft.media.map((media, index) => {
-                        const previewUrl = media.kind === 'saved' ? assetUrl(media.path) : media.previewUrl;
-                        const isVideo = media.kind === 'saved'
-                          ? isVideoPath(media.path)
-                          : mediaFileType(media.file) === 'video';
-                        const key = media.kind === 'saved' ? `saved-${media.path}` : media.previewUrl;
-                        return (
-                          <div
-                            key={key}
-                            draggable={draft.media.length > 1}
-                            onDragStart={(event) => {
-                              setDraggedMediaIndex(index);
-                              setMediaDropIndex(null);
-                              event.dataTransfer.effectAllowed = 'move';
-                              event.dataTransfer.setData('application/x-social-media-index', String(index));
-                            }}
-                            onDragEnd={() => {
-                              setDraggedMediaIndex(null);
-                              setMediaDropIndex(null);
-                            }}
-                            onDragOver={(event) => {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              const isReordering = event.dataTransfer.types.includes('application/x-social-media-index');
-                              event.dataTransfer.dropEffect = isReordering ? 'move' : 'copy';
-                              setMediaDropIndex(isReordering ? index : null);
-                            }}
-                            onDragLeave={(event) => {
-                              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-                                setMediaDropIndex((current) => current === index ? null : current);
-                              }
-                            }}
-                            onDrop={(event) => {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              setMediaDragActive(false);
-                              setDraggedMediaIndex(null);
-                              setMediaDropIndex(null);
-                              const rawSourceIndex = event.dataTransfer.getData('application/x-social-media-index');
-                              const sourceIndex = Number(rawSourceIndex);
-                              if (rawSourceIndex !== '' && Number.isInteger(sourceIndex)) {
-                                moveMedia(sourceIndex, index);
-                              } else if (event.dataTransfer.files.length > 0) {
-                                chooseMediaFiles(event.dataTransfer.files);
-                              }
-                            }}
-                            className={`overflow-hidden rounded-xl border bg-white shadow-sm transition duration-150 ${draggedMediaIndex === index ? 'scale-[0.98] opacity-40' : ''} ${mediaDropIndex === index && draggedMediaIndex !== index ? 'border-red-500 ring-4 ring-red-100' : 'border-slate-200'} ${draft.media.length > 1 ? 'cursor-grab active:cursor-grabbing' : ''}`}
-                          >
-                            <div className="relative aspect-square bg-slate-200">
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="flex shrink-0 -space-x-2">
+                        {draft.media.slice(0, 4).map((media, index) => {
+                          const previewUrl = media.kind === 'saved' ? assetUrl(media.path) : media.previewUrl;
+                          const isVideo = media.kind === 'saved'
+                            ? isVideoPath(media.path)
+                            : mediaFileType(media.file) === 'video';
+                          return (
+                            <div key={media.kind === 'saved' ? `saved-${media.path}` : media.previewUrl} className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg border-2 border-white bg-slate-200" title={`Selected media ${index + 1}`}>
                               {isVideo
-                                ? <video src={previewUrl} controls draggable={false} className="h-full w-full object-contain" />
-                                : <div role="img" aria-label={`Photo ${index + 1} preview`} className="h-full w-full bg-contain bg-center bg-no-repeat" style={{ backgroundImage: `url("${previewUrl}")` }} />}
-                              <span className="absolute left-2 top-2 rounded-full bg-slate-950/75 px-2 py-0.5 text-[10px] font-bold text-white">{index + 1}</span>
-                              {draft.media.length > 1 && <span className="absolute right-2 top-2 rounded-full bg-slate-950/75 px-2 py-1 text-[10px] font-bold text-white">Drag to reorder</span>}
+                                ? <video src={previewUrl} muted className="h-full w-full object-cover" />
+                                : <div role="img" aria-label={`Selected photo ${index + 1}`} className="h-full w-full bg-cover bg-center" style={{ backgroundImage: `url("${previewUrl}")` }} />}
                             </div>
-                            {media.kind === 'new' && <p className="truncate px-2 pt-2 text-center text-[10px] font-medium text-slate-600">{media.file.name}</p>}
-                            <div className="flex items-center justify-between px-2 py-2">
-                              <div className="flex gap-1">
-                                <button
-                                  type="button"
-                                  disabled={index === 0 || saving}
-                                  onClick={() => moveMedia(index, index - 1)}
-                                  className="rounded p-1 text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30"
-                                  aria-label={`Move media ${index + 1} earlier`}
-                                ><ChevronUp className="h-4 w-4" /></button>
-                                <button
-                                  type="button"
-                                  disabled={index === draft.media.length - 1 || saving}
-                                  onClick={() => moveMedia(index, index + 1)}
-                                  className="rounded p-1 text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30"
-                                  aria-label={`Move media ${index + 1} later`}
-                                ><ChevronDown className="h-4 w-4" /></button>
-                              </div>
-                              <button type="button" disabled={saving} onClick={() => removeMedia(media)} className="flex items-center gap-1 rounded px-2 py-1 text-[10px] font-bold text-rose-700 disabled:opacity-50"><X className="h-3.5 w-3.5" /> Remove</button>
-                            </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
+                        {draft.media.length > 4 && <span className="flex h-10 w-10 items-center justify-center rounded-lg border-2 border-white bg-slate-100 text-[10px] font-bold text-slate-600">+{draft.media.length - 4}</span>}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-slate-800">{draft.media.length} item{draft.media.length === 1 ? '' : 's'} selected</p>
+                        <p className="mt-1 text-[11px] font-normal text-slate-500">Set the image order used in your post carousel.</p>
+                      </div>
                     </div>
-                  </>
+                    <button
+                      type="button"
+                      onClick={openMediaOrganizer}
+                      disabled={saving}
+                      className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      <ArrowUpDown className="h-4 w-4" />
+                      Arrange {draft.media.length} item{draft.media.length === 1 ? '' : 's'}
+                    </button>
+                  </div>
                 )}
               </div>
-              <span className="mt-1 block font-normal text-slate-400">Images: JPG, PNG, WEBP, GIF (each under 10 MB). Video: MP4, MOV, WEBM (one video only, up to 100 MB).</span>
+              {mediaError && <p role="alert" className="mt-2 rounded-lg border border-rose-200 bg-rose-50 p-2.5 text-xs font-semibold text-rose-800">{mediaError}</p>}
+              <span className="mt-1 block font-normal text-slate-400">Images and videos can be up to 3 GB each. Attach multiple images or one video. Meta may enforce smaller limits when publishing.</span>
             </div>
             {draft.reviewer_note && <p className="rounded-xl border border-amber-100 bg-amber-50 p-3 text-xs text-amber-900 sm:col-span-2">Reviewer note: {draft.reviewer_note}</p>}
           </div>
@@ -852,6 +820,100 @@ export default function SocialMediaPage() {
           </div>
         </form>
       </div>}
+      {draft && mediaOrganizerOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-slate-950/70 p-4">
+          <section role="dialog" aria-modal="true" aria-labelledby="media-organizer-title" className="my-auto w-full max-w-5xl rounded-2xl bg-white p-5 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 id="media-organizer-title" className="text-lg font-black text-slate-950">Arrange post media</h2>
+                <p className="mt-1 text-sm text-slate-600">Drag the images to set their order. The first item becomes the cover image.</p>
+              </div>
+              <button type="button" onClick={closeMediaOrganizer} aria-label="Close media organizer" className="rounded-lg p-2 text-slate-500 hover:bg-slate-100">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="mt-4 grid max-h-[65vh] grid-cols-2 gap-3 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-3 sm:grid-cols-3 lg:grid-cols-4">
+              {draft.media.map((media, index) => {
+                const previewUrl = media.kind === 'saved' ? assetUrl(media.path) : media.previewUrl;
+                const isVideo = media.kind === 'saved'
+                  ? isVideoPath(media.path)
+                  : mediaFileType(media.file) === 'video';
+                const key = media.kind === 'saved' ? `saved-${media.path}` : media.previewUrl;
+                return (
+                  <div
+                    key={key}
+                    draggable={draft.media.length > 1 && !saving}
+                    onDragStart={(event) => {
+                      setDraggedMediaIndex(index);
+                      setMediaDropIndex(null);
+                      event.dataTransfer.effectAllowed = 'move';
+                      event.dataTransfer.setData('application/x-social-media-index', String(index));
+                    }}
+                    onDragEnd={() => {
+                      setDraggedMediaIndex(null);
+                      setMediaDropIndex(null);
+                    }}
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      const isReordering = event.dataTransfer.types.includes('application/x-social-media-index');
+                      event.dataTransfer.dropEffect = isReordering ? 'move' : 'none';
+                      setMediaDropIndex(isReordering ? index : null);
+                    }}
+                    onDragLeave={(event) => {
+                      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                        setMediaDropIndex((current) => current === index ? null : current);
+                      }
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      setDraggedMediaIndex(null);
+                      setMediaDropIndex(null);
+                      const rawSourceIndex = event.dataTransfer.getData('application/x-social-media-index');
+                      const sourceIndex = Number(rawSourceIndex);
+                      if (rawSourceIndex !== '' && Number.isInteger(sourceIndex)) {
+                        moveMedia(sourceIndex, index);
+                      }
+                    }}
+                    className={`overflow-hidden rounded-xl border bg-white shadow-sm transition duration-150 ${draggedMediaIndex === index ? 'scale-[0.98] opacity-40' : ''} ${mediaDropIndex === index && draggedMediaIndex !== index ? 'border-red-500 ring-4 ring-red-100' : 'border-slate-200'} ${draft.media.length > 1 ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                  >
+                    <div className="relative aspect-square bg-slate-200">
+                      {isVideo
+                        ? <video src={previewUrl} controls draggable={false} className="h-full w-full object-contain" />
+                        : <div role="img" aria-label={`Photo ${index + 1} preview`} className="h-full w-full bg-contain bg-center bg-no-repeat" style={{ backgroundImage: `url("${previewUrl}")` }} />}
+                      <span className="absolute left-2 top-2 rounded-full bg-slate-950/75 px-2 py-0.5 text-[10px] font-bold text-white">{index + 1}</span>
+                      {draft.media.length > 1 && <span className="absolute right-2 top-2 rounded-full bg-slate-950/75 px-2 py-1 text-[10px] font-bold text-white">Drag to reorder</span>}
+                    </div>
+                    {media.kind === 'new' && <p className="truncate px-2 pt-2 text-center text-[10px] font-medium text-slate-600">{media.file.name}</p>}
+                    <div className="flex items-center justify-between px-2 py-2">
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          disabled={index === 0 || saving}
+                          onClick={() => moveMedia(index, index - 1)}
+                          className="rounded p-1 text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30"
+                          aria-label={`Move media ${index + 1} earlier`}
+                        ><ChevronUp className="h-4 w-4" /></button>
+                        <button
+                          type="button"
+                          disabled={index === draft.media.length - 1 || saving}
+                          onClick={() => moveMedia(index, index + 1)}
+                          className="rounded p-1 text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30"
+                          aria-label={`Move media ${index + 1} later`}
+                        ><ChevronDown className="h-4 w-4" /></button>
+                      </div>
+                      <button type="button" disabled={saving} onClick={() => removeMedia(media)} className="flex items-center gap-1 rounded px-2 py-1 text-[10px] font-bold text-rose-700 disabled:opacity-50"><X className="h-3.5 w-3.5" /> Remove</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-xs text-slate-500">{draft.media.length} item{draft.media.length === 1 ? '' : 's'} · order is saved with the post.</p>
+              <button type="button" onClick={closeMediaOrganizer} className="rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-bold text-white">Done</button>
+            </div>
+          </section>
+        </div>
+      )}
     </main>
   );
 }

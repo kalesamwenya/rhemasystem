@@ -3,11 +3,13 @@
 import React, { useState } from 'react';
 import { ChevronDown, User, Settings, LogOut, Terminal } from 'lucide-react';
 import Link from 'next/link';
+import { assetUrl } from '@/lib/api';
 
 interface AdminData {
   name: string;
   role: string;
   email: string;
+  avatar?: string;
 }
 
 interface AdminUserDropdownProps {
@@ -40,8 +42,13 @@ export default function AdminUserDropdown({ isOpen, onToggle, admin, onSignOut }
         onClick={onToggle}
         className={`flex items-center gap-2 p-1.5 rounded-xl hover:bg-slate-50 transition-all border border-transparent ${isOpen ? 'bg-slate-50 border-slate-200' : ''}`}
       >
-        <div className="h-8 w-8 rounded-xl bg-slate-900 text-white font-black text-xs flex items-center justify-center uppercase">
-          {admin.name.charAt(0)}
+        <div
+          className="flex h-8 w-8 items-center justify-center rounded-xl bg-slate-900 text-xs font-black uppercase text-white"
+          role="img"
+          aria-label={`${admin.name} avatar`}
+          style={admin.avatar ? { backgroundImage: `url("${assetUrl(admin.avatar)}")`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
+        >
+          {admin.avatar ? '' : admin.name.charAt(0)}
         </div>
         <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
@@ -55,7 +62,7 @@ export default function AdminUserDropdown({ isOpen, onToggle, admin, onSignOut }
           </div>
           
           <Link href="/admin/profile" className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50">
-            <User className="h-4 w-4" /> Account Management
+            <User className="h-4 w-4" /> My account &amp; settings
           </Link>
           {isOwnerOrAdministrator && <>
             <Link href="/admin/settings" className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50">
