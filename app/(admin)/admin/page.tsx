@@ -36,7 +36,7 @@ const metricDefinitions: Record<string, Array<{ label: string; icon: typeof User
   ],
   support: [
     { label: 'Help desk requests', icon: LifeBuoy, load: () => api.helpDesk.list() },
-    { label: 'Contact messages', icon: Activity, load: () => api.chatbot.contactMessages() },
+    { label: 'Contact messages', icon: Activity, load: () => api.contactMessages.list() },
   ],
   operations: [
     { label: 'Operational tasks', icon: CheckSquare, load: () => api.tasks.list() },

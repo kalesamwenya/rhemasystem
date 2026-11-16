@@ -126,7 +126,7 @@ export default function CommunicationsPage() {
       const [studentResult, applicantResult, contactResult, followupResult] = await Promise.allSettled([
         api.students.adminRoster() as Promise<{ data?: Array<{ student_id: string; name: string; class: string; email?: string; phone?: string }>; warnings?: string[] }>,
         api.admissions.list() as Promise<{ data?: Array<{ id: string; applicant_name: string; applicant_email: string; applicant_phone?: string; program?: string; student_id?: string | null }> }>,
-        api.chatbot.contactMessages() as Promise<{ data?: Array<{ id: number; name: string; email: string; phone?: string; enquiry?: string; page_path?: string }> }>,
+        api.contactMessages.list() as Promise<{ data?: Array<{ id: number; name: string; email: string; phone?: string; enquiry?: string; page_path?: string }> }>,
         api.students.communicationFollowups() as Promise<{ data?: Array<{ student_id: string; name: string; class: string; reasons: string[] }> }>,
       ]);
       const errors: Partial<Record<AudienceId, string>> = {};

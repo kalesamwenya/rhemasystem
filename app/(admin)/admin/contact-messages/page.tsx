@@ -16,12 +16,36 @@ import {
   Send,
   X,
 } from 'lucide-react';
-import type { ChatbotLead } from '@/components/admin/chatbot/types';
-import { displayChatbotDate } from '@/components/admin/chatbot/types';
 import { api } from '@/lib/api';
 
-type MessageFilter = 'all' | ChatbotLead['status'];
+type ContactMessageStatus = 'new' | 'contacted' | 'closed';
+type ContactMessageReply = {
+  id: number;
+  lead_id: number;
+  admin_id: number;
+  admin_name: string;
+  reply_text: string;
+  delivery_status: 'pending' | 'sent' | 'failed';
+  created_at: string;
+};
+type ContactMessage = {
+  id: number;
+  name: string;
+  email: string;
+  phone: string;
+  enquiry: string;
+  page_path: string;
+  status: ContactMessageStatus;
+  created_at: string;
+  replies: ContactMessageReply[];
+};
+type MessageFilter = 'all' | ContactMessageStatus;
 type SortOrder = 'newest' | 'oldest' | 'name';
+
+function displayMessageDate(value: string): string {
+  const date = new Date(value.replace(' ', 'T'));
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
 
 function getSubject(enquiry: string): string {
   const match = enquiry.match(/^Subject:\s*(.+)$/m);
@@ -36,14 +60,14 @@ function getInitials(name: string): string {
   return name.trim().split(/\s+/).slice(0, 2).map((part) => part[0] ?? '').join('').toUpperCase() || '?';
 }
 
-function statusStyle(status: ChatbotLead['status']): string {
+function statusStyle(status: ContactMessageStatus): string {
   if (status === 'new') return 'bg-blue-50 text-blue-700 ring-blue-200';
   if (status === 'contacted') return 'bg-amber-50 text-amber-700 ring-amber-200';
   return 'bg-slate-100 text-slate-600 ring-slate-200';
 }
 
 export default function ContactMessagesPage() {
-  const [messages, setMessages] = useState<ChatbotLead[]>([]);
+  const [messages, setMessages] = useState<ContactMessage[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -59,7 +83,7 @@ export default function ContactMessagesPage() {
     if (showLoading) setLoading(true);
     setError('');
     try {
-      const response = await api.chatbot.contactMessages() as { data?: ChatbotLead[] };
+      const response = await api.contactMessages.list() as { data?: ContactMessage[] };
       if (!Array.isArray(response.data)) throw new Error('The contact messages endpoint returned invalid data.');
       setMessages(response.data);
       setSelectedId((current) => current ?? response.data?.[0]?.id ?? null);
@@ -104,13 +128,13 @@ export default function ContactMessagesPage() {
     ? null
     : visibleMessages.find((message) => message.id === selectedId) ?? visibleMessages[0] ?? null;
 
-  const updateStatus = async (status: ChatbotLead['status']) => {
+  const updateStatus = async (status: ContactMessageStatus) => {
     if (!selectedMessage || updatingStatus) return;
     setUpdatingStatus(true);
     setError('');
     setNotice('');
     try {
-      await api.chatbot.updateLead(selectedMessage.id, status);
+      await api.contactMessages.updateStatus(selectedMessage.id, status);
       setMessages((current) => current.map((message) => message.id === selectedMessage.id ? { ...message, status } : message));
       setNotice(`Message marked ${status}.`);
     } catch (cause) {
@@ -127,7 +151,7 @@ export default function ContactMessagesPage() {
     setError('');
     setNotice('');
     try {
-      await api.chatbot.replyToLead(selectedMessage.id, reply.trim());
+      await api.contactMessages.reply(selectedMessage.id, reply.trim());
       setReply('');
       setNotice('Email reply sent and saved to the conversation.');
       await loadMessages(false);
@@ -210,7 +234,7 @@ export default function ContactMessagesPage() {
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center justify-between gap-2">
                       <span className={`truncate text-sm ${message.status === 'new' ? 'font-black text-slate-950' : 'font-bold text-slate-800'}`}>{message.name}</span>
-                      <span className="shrink-0 text-[10px] text-slate-400">{displayChatbotDate(message.created_at)}</span>
+                      <span className="shrink-0 text-[10px] text-slate-400">{displayMessageDate(message.created_at)}</span>
                     </span>
                     <span className="mt-1 block truncate text-xs font-semibold text-slate-700">{getSubject(message.enquiry)}</span>
                     <span className="mt-1 block truncate text-xs text-slate-500">{getMessage(message.enquiry)}</span>
@@ -240,18 +264,18 @@ export default function ContactMessagesPage() {
                 <label className="flex items-center gap-2 text-xs font-bold text-slate-600">
                   {updatingStatus && <LoaderCircle size={14} className="animate-spin" />}
                   <span className="sr-only">Message status</span>
-                  <select disabled={updatingStatus} value={selectedMessage.status} onChange={(event) => void updateStatus(event.target.value as ChatbotLead['status'])} className={`rounded-lg px-3 py-2 text-xs font-bold capitalize ring-1 ring-inset outline-none disabled:opacity-60 ${statusStyle(selectedMessage.status)}`}>
+                  <select disabled={updatingStatus} value={selectedMessage.status} onChange={(event) => void updateStatus(event.target.value as ContactMessageStatus)} className={`rounded-lg px-3 py-2 text-xs font-bold capitalize ring-1 ring-inset outline-none disabled:opacity-60 ${statusStyle(selectedMessage.status)}`}>
                     <option value="new">New</option><option value="contacted">Contacted</option><option value="closed">Closed</option>
                   </select>
                 </label>
               </header>
 
               <div className="flex-1 space-y-5 overflow-y-auto bg-slate-50/60 px-4 py-6 sm:px-8">
-                <div className="mx-auto max-w-3xl text-center text-[10px] font-semibold uppercase tracking-wider text-slate-400">{displayChatbotDate(selectedMessage.created_at)}</div>
+                <div className="mx-auto max-w-3xl text-center text-[10px] font-semibold uppercase tracking-wider text-slate-400">{displayMessageDate(selectedMessage.created_at)}</div>
                 <article className="max-w-2xl rounded-2xl rounded-tl-sm border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                     <div><p className="text-sm font-black text-slate-900">{selectedMessage.name}</p><p className="text-xs text-slate-500">{selectedMessage.email}</p></div>
-                    <span className="text-[10px] text-slate-400">{displayChatbotDate(selectedMessage.created_at)}</span>
+                    <span className="text-[10px] text-slate-400">{displayMessageDate(selectedMessage.created_at)}</span>
                   </div>
                   <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700">{getMessage(selectedMessage.enquiry)}</p>
                   {selectedMessage.phone && <a href={`tel:${selectedMessage.phone}`} className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-red-700"><Phone size={13} />{selectedMessage.phone}</a>}
@@ -260,8 +284,8 @@ export default function ContactMessagesPage() {
                 {(selectedMessage.replies ?? []).map((item) => (
                   <article key={item.id} className="ml-auto max-w-2xl rounded-2xl rounded-tr-sm border border-blue-100 bg-blue-50 p-4 shadow-sm sm:p-5">
                     <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-sm font-black text-slate-900">{item.admin_name} <span className="font-medium text-slate-500">· Rhema team</span></p>
-                      <span className="flex items-center gap-1.5 text-[10px] text-slate-500"><CheckCircle2 size={13} className={item.delivery_status === 'sent' ? 'text-emerald-600' : item.delivery_status === 'failed' ? 'text-red-600' : 'text-amber-600'} />{item.delivery_status} · {displayChatbotDate(item.created_at)}</span>
+                      <p className="text-sm font-black text-slate-900">{item.admin_name} <span className="font-medium text-slate-500">· Emit Academy team</span></p>
+                      <span className="flex items-center gap-1.5 text-[10px] text-slate-500"><CheckCircle2 size={13} className={item.delivery_status === 'sent' ? 'text-emerald-600' : item.delivery_status === 'failed' ? 'text-red-600' : 'text-amber-600'} />{item.delivery_status} · {displayMessageDate(item.created_at)}</span>
                     </div>
                     <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700">{item.reply_text}</p>
                   </article>
