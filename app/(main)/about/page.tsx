@@ -71,7 +71,7 @@ export default function AboutPage() {
           aria-label={content.hero_image ? content.story_title : undefined}
           style={content.hero_image ? { backgroundImage: `url("${assetUrl(content.hero_image)}")` } : undefined}
         >
-          {!content.hero_image && <div className="flex min-h-72 items-end p-7 text-white sm:min-h-96 sm:p-9"><p className="max-w-sm text-2xl font-black sm:text-3xl">Rhema Zambia<br />Bible Training Center</p></div>}
+          {!content.hero_image && <div className="flex min-h-72 items-end p-7 text-white sm:min-h-96 sm:p-9"><p className="max-w-sm text-2xl font-black sm:text-3xl">Emit Academy</p></div>}
         </div>
         <div>
           <p className="text-[11px] font-black uppercase tracking-[0.2em] text-blue-800">We build the future</p>

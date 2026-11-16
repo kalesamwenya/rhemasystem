@@ -48,7 +48,7 @@ export default function VerifyProfilePage() {
     <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-10">
       <section className="w-full max-w-2xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl">
         <header className="bg-slate-950 px-7 py-7 text-white sm:px-10">
-          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-amber-400">Rhema Bible School</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-amber-400">Emit Academy</p>
           <h1 className="mt-2 text-2xl font-black">Student profile verification</h1>
           <p className="mt-2 text-xs text-slate-300">Independent confirmation from the school student register.</p>
         </header>
@@ -58,7 +58,7 @@ export default function VerifyProfilePage() {
           <div className="p-7 sm:p-10">
             <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-800">
               <CheckCircle2 className="h-6 w-6 shrink-0" />
-              <div><p className="text-sm font-black uppercase tracking-wide">Profile verified</p><p className="mt-1 text-xs">This is an active student record held by Rhema Bible School.</p></div>
+              <div><p className="text-sm font-black uppercase tracking-wide">Profile verified</p><p className="mt-1 text-xs">This is an active student record held by Emit Academy.</p></div>
             </div>
             <dl className="mt-7 divide-y divide-slate-100 text-sm">
               <div className="flex justify-between gap-5 py-3"><dt className="text-slate-500">Student</dt><dd className="text-right font-bold text-slate-900">{profile.name}</dd></div>
@@ -77,7 +77,7 @@ export default function VerifyProfilePage() {
             <p>{error || 'This student profile could not be verified.'}</p>
           </div>
         )}
-        <footer className="border-t border-slate-100 px-7 py-4 text-center text-[10px] text-slate-400 sm:px-10">Rhema Bible School · Official student register verification</footer>
+        <footer className="border-t border-slate-100 px-7 py-4 text-center text-[10px] text-slate-400 sm:px-10">Emit Academy · Official student register verification</footer>
       </section>
     </main>
   );

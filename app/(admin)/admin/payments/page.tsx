@@ -1020,7 +1020,7 @@ export default function AdminPaymentsPage() {
                       <article key={receipt.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
                         <div className="min-w-0 space-y-0.5">
                           <div className="flex items-center gap-2"><span className="truncate font-mono text-[11px] font-bold text-slate-900">{receipt.reference}</span><span className="rounded border border-emerald-100 bg-emerald-50 px-1 py-0.5 text-[9px] font-bold text-emerald-700">Verified</span></div>
-                          <p className="text-[10px] font-medium text-slate-400">{new Date(receipt.created_at).toLocaleString()} via <span className="font-semibold text-slate-600">{receipt.gateway || 'Rhema Bible School'}</span></p>
+                          <p className="text-[10px] font-medium text-slate-400">{new Date(receipt.created_at).toLocaleString()} via <span className="font-semibold text-slate-600">{receipt.gateway || 'Emit Academy'}</span></p>
                           <p className="truncate text-[10px] text-slate-500">{receipt.paid_for}</p>
                         </div>
                         <div className="shrink-0 text-right">

@@ -10,7 +10,7 @@ export async function generateMetadata({
   return publicPageMetadata(
     `/events/${encodeURIComponent(id)}`,
     "Event Details",
-    "Event details, registration information and updates from Rhema Zambia Bible Training Center.",
+    "Event details, registration information and updates from Emit Academy.",
   );
 }
 

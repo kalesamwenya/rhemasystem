@@ -205,13 +205,13 @@ function drawStudentIdCard(
   context.restore();
 
   const accent = context.createLinearGradient(0, 0, width, 0);
-  accent.addColorStop(0, '#172554');
-  accent.addColorStop(0.55, '#1d4ed8');
-  accent.addColorStop(1, '#f59e0b');
+  accent.addColorStop(0, '#c8102e');
+  accent.addColorStop(0.55, '#003da5');
+  accent.addColorStop(1, '#f2b544');
   context.fillStyle = accent;
   context.fillRect(0, 0, width, mm(1.3));
 
-  const title = 'RHEMA BIBLE TRAINING COLLEGE';
+  const title = 'EMIT ACADEMY';
   context.font = `900 ${cardFontPixels(7)}px Arial, sans-serif`;
   const logoSize = mm(8);
   const headerGap = mm(1.5);
@@ -220,12 +220,12 @@ function drawStudentIdCard(
   drawContainedImage(context, logo, headerX, mm(7.5), logoSize, logoSize);
   context.textAlign = 'left';
   context.textBaseline = 'middle';
-  context.fillStyle = '#172554';
+  context.fillStyle = '#003da5';
   context.fillText(title, headerX + logoSize + headerGap, mm(11.5));
 
   const contentCenterX = mm(CARD_SIDE_PADDING_MM + (CARD_CONTENT_WIDTH_MM - 22) / 2);
   context.textAlign = 'center';
-  context.fillStyle = '#172554';
+  context.fillStyle = '#003da5';
   context.font = `900 ${cardFontPixels(8)}px Arial, sans-serif`;
   context.fillText(student.name, contentCenterX, mm(21.9), mm(CARD_CONTENT_WIDTH_MM - 22));
   context.drawImage(barcode, contentCenterX - mm(24), mm(24.4), mm(48), mm(9));
