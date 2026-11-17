@@ -20,6 +20,7 @@ type BillingTransaction = {
   gateway_transaction_id?: string | null;
   receipt_token?: string | null;
   receipt_path?: string | null;
+  invoice_path?: string | null;
   created_at: string;
   liability_type?: 'tuition' | 'missed_audio' | 'assignment' | 'quiz' | 'exam' | 'other_penalty' | null;
   liability_charge_id?: number | null;
@@ -53,6 +54,7 @@ type StudentActivityRequest = {
   charge_id: number | null;
   invoice_reference: string | null;
   invoice_number: string | null;
+  has_invoice: boolean;
   activity_url: string;
   created_at: string;
 };
@@ -304,7 +306,9 @@ export default function StudentBillingPage() {
         preview = window.open('about:blank', '_blank');
         if (!preview) throw new Error('Allow pop-ups to open the receipt preview.');
       }
-      const pdf = await createPaymentReceiptPdf(paymentReceipt);
+      const pdf = transaction.receipt_path
+        ? await api.students.myPaymentReceiptFile(transaction.id, mode === 'view' ? 'inline' : 'attachment')
+        : await createPaymentReceiptPdf(paymentReceipt);
       if (preview) {
         const url = URL.createObjectURL(pdf);
         preview.location.replace(url);
@@ -331,6 +335,37 @@ export default function StudentBillingPage() {
     } catch (reason) {
       preview?.close();
       setError(reason instanceof Error ? reason.message : 'Unable to prepare or save your payment receipt. Please try again.');
+    } finally {
+      setReceiptAction(null);
+    }
+  };
+
+  const handleInvoice = async (transaction: BillingTransaction, mode: 'view' | 'download') => {
+    if (!transaction.invoice_path) return;
+    setReceiptAction({ id: transaction.id, mode });
+    setError('');
+    let preview: Window | null = null;
+    try {
+      if (mode === 'view') {
+        preview = window.open('about:blank', '_blank');
+        if (!preview) throw new Error('Allow pop-ups to open the invoice PDF.');
+      }
+      const pdf = await api.students.myFinanceInvoiceFile(transaction.id, mode === 'view' ? 'inline' : 'attachment');
+      if (mode === 'view') {
+        const url = URL.createObjectURL(pdf);
+        preview?.location.replace(url);
+        window.setTimeout(() => URL.revokeObjectURL(url), 10 * 60 * 1000);
+      } else {
+        const url = URL.createObjectURL(pdf);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `Rhema-Invoice-${transaction.reference.replace(/[^a-z0-9_-]/gi, '-')}.pdf`;
+        link.click();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+    } catch (reason) {
+      preview?.close();
+      setError(reason instanceof Error ? reason.message : 'Unable to retrieve the saved invoice.');
     } finally {
       setReceiptAction(null);
     }
@@ -423,7 +458,7 @@ export default function StudentBillingPage() {
         {activityRequests.length > 0 && <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-100 p-5"><h2 className="text-base font-black text-slate-950">Activity access requests</h2><p className="mt-1 text-xs text-slate-500">Track Finance invoicing and IT access decisions.</p></div>
           <div className="divide-y divide-slate-100">{activityRequests.map((request) => <article key={request.id} className="flex flex-col gap-2 p-5 sm:flex-row sm:items-center sm:justify-between">
-            <div><p className="font-bold text-slate-900">{request.activity_name}</p><p className="mt-1 text-xs text-slate-500">{request.activity_type} · Requested {new Date(request.created_at).toLocaleDateString()}{request.invoice_number ? ` · ${request.invoice_number}` : request.invoice_reference ? ` · Invoice ${request.invoice_reference}` : ''}</p>{request.amount !== null && <p className="mt-1 text-xs font-semibold text-slate-600">Invoice amount {money(request.amount, request.currency || account.currency)}</p>}{request.charge_id && <button type="button" onClick={() => void viewActivityInvoice(request)} disabled={invoiceLoadingId === request.id} className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-blue-900 hover:underline disabled:opacity-60">{invoiceLoadingId === request.id ? <Loader2 size={13} className="animate-spin" /> : <Eye size={13} />}View invoice</button>}{request.status === 'approved' && <a href={request.activity_url} className="mt-2 ml-4 inline-flex items-center gap-1.5 text-xs font-bold text-blue-900 hover:underline">Open activity<ExternalLink size={13} /></a>}</div>
+            <div><p className="font-bold text-slate-900">{request.activity_name}</p><p className="mt-1 text-xs text-slate-500">{request.activity_type} · Requested {new Date(request.created_at).toLocaleDateString()}{request.invoice_number ? ` · ${request.invoice_number}` : request.invoice_reference ? ` · Invoice ${request.invoice_reference}` : ''}</p>{request.amount !== null && <p className="mt-1 text-xs font-semibold text-slate-600">Invoice amount {money(request.amount, request.currency || account.currency)}</p>}{request.has_invoice && <button type="button" onClick={() => void viewActivityInvoice(request)} disabled={invoiceLoadingId === request.id} className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-blue-900 hover:underline disabled:opacity-60">{invoiceLoadingId === request.id ? <Loader2 size={13} className="animate-spin" /> : <Eye size={13} />}View invoice</button>}{request.status === 'approved' && <a href={request.activity_url} className="mt-2 ml-4 inline-flex items-center gap-1.5 text-xs font-bold text-blue-900 hover:underline">Open activity<ExternalLink size={13} /></a>}</div>
             <span className={`w-fit rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${request.status === 'approved' ? 'bg-emerald-50 text-emerald-700' : request.status === 'rejected' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-800'}`}>{request.status.replace('_', ' ')}</span>
           </article>)}</div>
         </section>}
@@ -445,6 +480,9 @@ export default function StudentBillingPage() {
                 <td className="px-5 py-4 text-right">{transaction.entry_type === 'payment' && transaction.status === 'paid' && transaction.receipt_token ? <div className="inline-flex gap-1.5">
                   <button type="button" onClick={() => void handleReceipt(transaction, 'view')} disabled={receiptAction?.id === transaction.id} className="inline-flex items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[10px] font-black text-slate-700 transition hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60" aria-label={`View PDF receipt for ${transaction.reference}`}>{receiptAction?.id === transaction.id && receiptAction.mode === 'view' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Eye className="h-3.5 w-3.5" />} View</button>
                   <button type="button" onClick={() => void handleReceipt(transaction, 'download')} disabled={receiptAction?.id === transaction.id} className="inline-flex items-center justify-center gap-1 rounded-lg border border-blue-200 bg-white px-2.5 py-2 text-[10px] font-black text-blue-900 transition hover:bg-blue-50 disabled:cursor-wait disabled:opacity-60" aria-label={`Download PDF receipt for ${transaction.reference}`}>{receiptAction?.id === transaction.id && receiptAction.mode === 'download' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />} PDF</button>
+                </div> : transaction.entry_type === 'charge' && transaction.invoice_path ? <div className="inline-flex gap-1.5">
+                  <button type="button" onClick={() => void handleInvoice(transaction, 'view')} disabled={receiptAction?.id === transaction.id} className="inline-flex items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[10px] font-black text-slate-700 transition hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60" aria-label={`View invoice for ${transaction.reference}`}>{receiptAction?.id === transaction.id && receiptAction.mode === 'view' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Eye className="h-3.5 w-3.5" />} Invoice</button>
+                  <button type="button" onClick={() => void handleInvoice(transaction, 'download')} disabled={receiptAction?.id === transaction.id} className="inline-flex items-center justify-center gap-1 rounded-lg border border-blue-200 bg-white px-2.5 py-2 text-[10px] font-black text-blue-900 transition hover:bg-blue-50 disabled:cursor-wait disabled:opacity-60" aria-label={`Download invoice for ${transaction.reference}`}>{receiptAction?.id === transaction.id && receiptAction.mode === 'download' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />} PDF</button>
                 </div> : transaction.entry_type === 'payment' && transaction.status === 'pending' ? <span className="text-[10px] text-slate-400">After confirmation</span> : null}</td>
               </tr>)}</tbody>
             </table>

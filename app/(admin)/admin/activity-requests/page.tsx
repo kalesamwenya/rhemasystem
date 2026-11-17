@@ -113,7 +113,7 @@ export default function ActivityRequestsPage() {
         if (!response.data?.invoice_data) throw new Error('The finance service did not return invoice details.');
         await generateUploadAndEmailInvoice(request.id, response.data.invoice_data);
       }
-      setNotice(action === 'invoice' ? 'Branded invoice uploaded, saved, and emailed to the student.' : response.message || 'Request updated.');
+      setNotice(action === 'invoice' ? 'Branded invoice uploaded, saved, and emailed to the student and Finance.' : response.message || 'Request updated.');
       await loadRequests();
     } catch (reason) {
       if (action === 'invoice') await loadRequests();
@@ -124,7 +124,11 @@ export default function ActivityRequestsPage() {
   }
 
   async function generateUploadAndEmailInvoice(requestId: number, invoice: ActivityRequestInvoiceData) {
-    const pdf = await createActivityRequestInvoicePdf(invoice);
+    const invoiceWithVerification = {
+      ...invoice,
+      verification_url: new URL(`/verify-invoice?reference=${encodeURIComponent(invoice.reference)}`, window.location.origin).toString(),
+    };
+    const pdf = await createActivityRequestInvoicePdf(invoiceWithVerification);
     await api.activityRequests.uploadInvoice(requestId, pdf, `${invoice.invoice_number}.pdf`);
   }
 
@@ -150,9 +154,10 @@ export default function ActivityRequestsPage() {
         currency: request.currency,
         reference: request.invoice_reference,
         portal_url: `${window.location.origin}/student/billing`,
+        verification_url: new URL(`/verify-invoice?reference=${encodeURIComponent(request.invoice_reference)}`, window.location.origin).toString(),
       };
       await generateUploadAndEmailInvoice(request.id, invoice);
-      setNotice('Branded invoice uploaded, saved, and emailed to the student.');
+      setNotice('Branded invoice uploaded, saved, and emailed to the student and Finance.');
       await loadRequests();
     } catch (reason) {
       await loadRequests();

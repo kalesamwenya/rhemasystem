@@ -8,6 +8,8 @@ export type StudentGrade = {
   course_hours?: number;
   scheduled_sessions?: number;
   scheduled_hours?: number;
+  total_sessions?: number;
+  attended_sessions?: number;
   session_count_override?: number | null;
   course_hours_override?: number | null;
   item_name: string;
@@ -37,6 +39,8 @@ export type CourseGradeSummary = {
   course_hours: number;
   scheduled_sessions: number;
   scheduled_hours: number;
+  total_sessions: number;
+  attended_sessions: number;
   session_count_override: number | null;
   course_hours_override: number | null;
   minimum_grade: number;
@@ -125,6 +129,8 @@ export function summarizeCourseGrades(grades: StudentGrade[]): CourseGradeSummar
       course_hours: Number(firstGrade.course_hours ?? 0),
       scheduled_sessions: Number(firstGrade.scheduled_sessions ?? firstGrade.course_sessions ?? 0),
       scheduled_hours: Number(firstGrade.scheduled_hours ?? firstGrade.course_hours ?? 0),
+      total_sessions: Number(firstGrade.total_sessions ?? firstGrade.course_sessions ?? 0),
+      attended_sessions: Number(firstGrade.attended_sessions ?? 0),
       session_count_override: firstGrade.session_count_override ?? null,
       course_hours_override: firstGrade.course_hours_override ?? null,
       minimum_grade: total?.minimum_grade ?? 0,

@@ -12,6 +12,7 @@ import {
   Download,
   Eye,
   FileSpreadsheet,
+  FileText,
   Loader2,
   Printer,
   Receipt,
@@ -25,7 +26,8 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { api } from '@/lib/api';
-import { createPaymentReceiptPdf, downloadPaymentReceipt, viewPaymentReceipt, type PaymentReceiptData } from '@/lib/payment-receipt';
+import { createPaymentReceiptPdf, downloadPaymentReceipt, openPaymentReceiptBlob, viewPaymentReceipt, type PaymentReceiptData } from '@/lib/payment-receipt';
+import { createStudentChargeInvoicePdf } from '@/lib/student-finance-invoice';
 import { openFlutterwaveInlineCheckout, type FlutterwaveInlineCheckout } from '@/lib/flutterwave-inline';
 
 type PaymentLedgerRecord = Omit<PaymentReceiptData, 'receipt_token'> & {
@@ -33,6 +35,7 @@ type PaymentLedgerRecord = Omit<PaymentReceiptData, 'receipt_token'> & {
   description: string;
   receipt_token: string | null;
   receipt_path?: string | null;
+  invoice_path?: string | null;
   entry_type: 'charge' | 'payment';
   status: 'posted' | 'pending' | 'paid' | 'failed' | 'void';
   payment_purpose: 'tuition' | 'assessment' | 'liability';
@@ -97,6 +100,25 @@ const appliedPaymentTotal = (records: PaymentLedgerRecord[]) =>
   records.filter((record) => isAccountPayment(record) || isLiabilityPayment(record))
     .reduce((total, record) => total + record.amount, 0);
 
+const isTuitionCharge = (record: PaymentLedgerRecord) =>
+  record.entry_type === 'charge' && (record.liability_type === null || record.liability_type === 'tuition');
+
+const accountOutstanding = (records: PaymentLedgerRecord[]) => {
+  const tuitionCharges = records.filter((record) => record.status === 'posted' && isTuitionCharge(record))
+    .reduce((total, record) => total + record.amount, 0);
+  const tuitionPaid = records.filter(isAccountPayment).reduce((total, record) => total + record.amount, 0);
+  const liabilityDue = records.filter((record) =>
+    record.entry_type === 'charge' && record.status === 'posted' && record.liability_type !== null && record.liability_type !== 'tuition'
+  ).reduce((total, charge) => {
+    const paid = records.filter((payment) =>
+      payment.entry_type === 'payment' && payment.status === 'paid' && payment.payment_purpose === 'liability'
+      && payment.liability_charge_id === charge.id
+    ).reduce((sum, payment) => sum + payment.amount, 0);
+    return total + Math.max(0, charge.amount - paid);
+  }, 0);
+  return Math.max(0, tuitionCharges - tuitionPaid) + liabilityDue;
+};
+
 export default function AdminPaymentsPage() {
   const [records, setRecords] = useState<PaymentLedgerRecord[]>([]);
   const [students, setStudents] = useState<StudentLookup[]>([]);
@@ -114,6 +136,8 @@ export default function AdminPaymentsPage() {
   const [loadingReceipts, setLoadingReceipts] = useState(false);
   const [receiptError, setReceiptError] = useState('');
   const [receiptAction, setReceiptAction] = useState<{ id: number; mode: 'view' | 'download' } | null>(null);
+  const [invoiceActionId, setInvoiceActionId] = useState<number | null>(null);
+  const [documentError, setDocumentError] = useState('');
   const [manualPaymentOpen, setManualPaymentOpen] = useState(false);
   const [studentSearch, setStudentSearch] = useState('');
   const [paymentStudent, setPaymentStudent] = useState<StudentLookup | null>(null);
@@ -277,7 +301,7 @@ export default function AdminPaymentsPage() {
         .filter((record) => record.entry_type === 'payment' && record.status === 'paid')
         .reduce((total, record) => total + record.amount, 0);
       const credited = appliedPaymentTotal(studentRecords);
-      const balance = Math.max(0, invoiced - credited);
+      const balance = accountOutstanding(studentRecords);
       const firstRecord = studentRecords[0];
       return {
         id: studentId,
@@ -346,6 +370,7 @@ export default function AdminPaymentsPage() {
     setSelectedAccount(account);
     setPaymentReceipts([]);
     setReceiptError('');
+    setDocumentError('');
     setLoadingReceipts(true);
     try {
       const [ledgerResponse, receiptsResponse] = await Promise.all([
@@ -358,7 +383,7 @@ export default function AdminPaymentsPage() {
         const invoiced = studentRecords.filter((record) => record.entry_type === 'charge' && record.status === 'posted').reduce((sum, record) => sum + record.amount, 0);
         const paid = studentRecords.filter((record) => record.entry_type === 'payment' && record.status === 'paid').reduce((sum, record) => sum + record.amount, 0);
         const credited = appliedPaymentTotal(studentRecords);
-        const balance = Math.max(0, invoiced - credited);
+        const balance = accountOutstanding(studentRecords);
         setSelectedAccount({
           ...account,
           records: studentRecords,
@@ -388,6 +413,7 @@ export default function AdminPaymentsPage() {
     setPaymentReceipts([]);
     setStatusDrafts({});
     setReceiptError('');
+    setDocumentError('');
     setLoadingReceipts(false);
   };
 
@@ -395,12 +421,64 @@ export default function AdminPaymentsPage() {
     setReceiptAction({ id: receipt.id, mode });
     setReceiptError('');
     try {
-      if (mode === 'view') await viewPaymentReceipt(receipt);
-      else await downloadPaymentReceipt(receipt);
+      const transaction = selectedAccount?.records.find((record) => record.id === receipt.id);
+      if (transaction?.receipt_path) {
+        const file = await api.students.adminPaymentReceiptFile(receipt.id, mode === 'view' ? 'inline' : 'attachment') as Blob;
+        openPaymentReceiptBlob(file, mode, receipt.reference);
+      } else if (mode === 'view') {
+        await viewPaymentReceipt(receipt);
+      } else {
+        await downloadPaymentReceipt(receipt);
+      }
     } catch (reason) {
       setReceiptError(reason instanceof Error ? reason.message : 'Unable to download this payment receipt.');
     } finally {
       setReceiptAction(null);
+    }
+  };
+
+  const handleChargeInvoice = async (charge: PaymentLedgerRecord) => {
+    if (!selectedAccount || invoiceActionId !== null) return;
+    setInvoiceActionId(charge.id);
+    setDocumentError('');
+    try {
+      const pdf = await createStudentChargeInvoicePdf({
+        student_name: selectedAccount.name,
+        student_id: selectedAccount.id,
+        cohort: selectedAccount.cohort,
+        description: charge.description,
+        term: charge.term,
+        amount: charge.amount,
+        currency: charge.currency,
+        reference: charge.reference,
+        created_at: charge.created_at,
+        verification_url: new URL(`/verify-invoice?reference=${encodeURIComponent(charge.reference)}`, window.location.origin).toString(),
+      });
+      const response = await api.students.uploadFinanceInvoice(
+        charge.id,
+        pdf,
+        `Rhema-Invoice-${charge.reference.replace(/[^a-z0-9_-]/gi, '-')}.pdf`,
+      ) as { message?: string; data?: { path?: string } };
+      setRecords((current) => current.map((record) => record.id === charge.id
+        ? { ...record, invoice_path: response.data?.path || record.invoice_path }
+        : record));
+      setSelectedAccount((current) => current ? {
+        ...current,
+        records: current.records.map((record) => record.id === charge.id
+          ? { ...record, invoice_path: response.data?.path || record.invoice_path }
+          : record),
+      } : current);
+      const url = URL.createObjectURL(pdf);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Rhema-Invoice-${charge.reference.replace(/[^a-z0-9_-]/gi, '-')}.pdf`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setNotice(response.message || 'Invoice saved and emailed to the student and Finance.');
+    } catch (reason) {
+      setDocumentError(reason instanceof Error ? reason.message : 'Unable to generate this charge invoice.');
+    } finally {
+      setInvoiceActionId(null);
     }
   };
 
@@ -593,7 +671,7 @@ export default function AdminPaymentsPage() {
         const invoiced = updatedRecords.filter((record) => record.entry_type === 'charge' && record.status === 'posted').reduce((sum, record) => sum + record.amount, 0);
         const paid = updatedRecords.filter((record) => record.entry_type === 'payment' && record.status === 'paid').reduce((sum, record) => sum + record.amount, 0);
         const credited = appliedPaymentTotal(updatedRecords);
-        const balance = Math.max(0, invoiced - credited);
+        const balance = accountOutstanding(updatedRecords);
         return {
           ...current,
           records: updatedRecords,
@@ -814,7 +892,7 @@ export default function AdminPaymentsPage() {
                 {pagedAccounts.map((account) => (
                   <tr key={account.id} className="transition-colors hover:bg-slate-50/60">
                     <td className="px-4 py-3.5 font-mono text-[11px] font-bold tracking-wider text-slate-900">{account.id}</td>
-                    <td className="px-4 py-3.5 font-bold text-slate-800">{account.name}</td>
+                    <td className="px-4 py-3.5 font-bold text-slate-800"><button type="button" onClick={() => void openStatement(account)} className="text-left hover:text-blue-800 hover:underline">{account.name}</button></td>
                     <td className="px-4 py-3.5 font-semibold text-slate-500">{account.cohort || '—'}</td>
                     <td className="px-4 py-3.5"><span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${getStatusBadge(account.status)}`}>{account.status}</span></td>
                     <td className="px-4 py-3.5 font-mono font-bold text-slate-800">{formatMoney(account.invoiced, account.currency)}</td>
@@ -953,25 +1031,59 @@ export default function AdminPaymentsPage() {
                   </div>
                   <span className={`inline-block rounded-full px-2 py-0.5 text-[9px] font-bold ${getStatusBadge(selectedAccount.status)}`}>{selectedAccount.status}</span>
                 </div>
-                <div className="space-y-1.5 text-xs">
+                {(() => {
+                  const charges = selectedAccount.records.filter((record) => record.entry_type === 'charge' && record.status === 'posted');
+                  const tuitionCharges = charges.filter(isTuitionCharge).reduce((sum, charge) => sum + charge.amount, 0);
+                  const tuitionPaid = selectedAccount.records.filter(isAccountPayment).reduce((sum, payment) => sum + payment.amount, 0);
+                  const tuitionDue = Math.max(0, tuitionCharges - tuitionPaid);
+                  const liabilityBalances = charges.filter((charge) => !isTuitionCharge(charge)).map((charge) => {
+                    const relatedPayments = selectedAccount.records.filter((payment) =>
+                      payment.entry_type === 'payment' && payment.payment_purpose === 'liability'
+                      && payment.liability_charge_id === charge.id
+                    );
+                    const paid = relatedPayments.filter((payment) => payment.status === 'paid').reduce((sum, payment) => sum + payment.amount, 0);
+                    const pending = relatedPayments.filter((payment) => payment.status === 'pending').reduce((sum, payment) => sum + payment.amount, 0);
+                    return { charge, paid, pending, due: Math.max(0, charge.amount - paid) };
+                  });
+                  const liabilitiesDue = liabilityBalances.reduce((sum, item) => sum + item.due, 0);
+                  const totalDue = tuitionDue + liabilitiesDue;
+                  return (
+                    <>
+                      <div className="grid gap-2 sm:grid-cols-3">
+                        <div className="rounded-xl bg-slate-50 p-3"><p className="text-[9px] font-bold uppercase text-slate-500">Tuition due</p><p className="mt-1 font-mono text-xs font-black text-slate-900">{formatMoney(tuitionDue, selectedAccount.currency)}</p></div>
+                        <div className="rounded-xl bg-amber-50 p-3"><p className="text-[9px] font-bold uppercase text-amber-800">Liabilities due</p><p className="mt-1 font-mono text-xs font-black text-slate-900">{formatMoney(liabilitiesDue, selectedAccount.currency)}</p></div>
+                        <div className="rounded-xl bg-rose-50 p-3"><p className="text-[9px] font-bold uppercase text-rose-700">Total outstanding</p><p className="mt-1 font-mono text-xs font-black text-rose-800">{formatMoney(totalDue, selectedAccount.currency)}</p></div>
+                      </div>
+                      <div className="space-y-1.5 text-xs">
                   <div className="flex justify-between text-[9px] font-bold uppercase tracking-wider text-slate-400"><span>Description Allocation</span><span>Total Amount</span></div>
-                  {selectedAccount.records.filter((record) => record.entry_type === 'charge' && record.status === 'posted').map((charge) => (
+                  {charges.map((charge) => {
+                    const liability = liabilityBalances.find((item) => item.charge.id === charge.id);
+                    return (
                     <div key={charge.id} className="flex justify-between gap-3 border-b border-slate-50 py-2 font-medium text-slate-700 last:border-0">
                       <span className="min-w-0">
                         <span className="mb-1 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-slate-600">{getLiabilityLabel(charge)}</span>
                         <span className="block">{charge.description}</span>
-                        <span className="mt-0.5 block text-[9px] text-slate-400">{new Date(charge.created_at).toLocaleDateString()} · {charge.reference}</span>
+                        <span className="mt-0.5 block text-[9px] text-slate-400">{new Date(charge.created_at).toLocaleDateString()} · {charge.term || 'No fee period'} · {charge.reference}</span>
+                        {liability && <span className="mt-1 block text-[9px] text-slate-500">Paid {formatMoney(liability.paid, charge.currency)} · Pending {formatMoney(liability.pending, charge.currency)} · Due {formatMoney(liability.due, charge.currency)}</span>}
+                        <button type="button" onClick={() => void handleChargeInvoice(charge)} disabled={invoiceActionId !== null} className="mt-2 inline-flex items-center gap-1 rounded-lg border border-blue-200 px-2 py-1 text-[9px] font-bold text-blue-900 hover:bg-blue-50 disabled:opacity-50">
+                          {invoiceActionId === charge.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileText className="h-3 w-3" />}Generate & email invoice
+                        </button>
                       </span>
                       <span className="shrink-0 font-mono font-bold">{formatMoney(charge.amount, charge.currency)}</span>
                     </div>
-                  ))}
-                  {!selectedAccount.records.some((record) => record.entry_type === 'charge' && record.status === 'posted') && <p className="py-1 text-slate-500">No posted liabilities.</p>}
+                    );
+                  })}
+                  {!charges.length && <p className="py-1 text-slate-500">No posted charges or liabilities.</p>}
+                  {documentError && <p role="alert" className="rounded-lg bg-red-50 p-2 text-[10px] font-semibold text-red-800">{documentError}</p>}
                   <div className="space-y-1 border-t border-slate-100 pt-2 font-bold">
                     <div className="flex justify-between text-[11px] text-slate-500"><span>Gross Invoiced Balance:</span><span className="font-mono">{formatMoney(selectedAccount.invoiced, selectedAccount.currency)}</span></div>
                     <div className="flex justify-between text-[11px] text-emerald-600"><span>Account Payments Applied:</span><span className="font-mono">− {formatMoney(selectedAccount.credited, selectedAccount.currency)}</span></div>
-                    <div className="flex justify-between border-t border-dashed border-slate-200 pt-2 text-xs text-slate-900"><span>Net Arrears Outstanding:</span><span className="font-mono font-black text-rose-600">{formatMoney(selectedAccount.balance, selectedAccount.currency)}</span></div>
+                    <div className="flex justify-between border-t border-dashed border-slate-200 pt-2 text-xs text-slate-900"><span>Net Arrears Outstanding:</span><span className="font-mono font-black text-rose-600">{formatMoney(totalDue, selectedAccount.currency)}</span></div>
                   </div>
                 </div>
+                    </>
+                  );
+                })()}
               </section>
 
               <section className="space-y-3">
@@ -988,6 +1100,8 @@ export default function AdminPaymentsPage() {
                             <p className="truncate font-mono text-[10px] font-bold text-slate-900">{transaction.reference}</p>
                             <p className="mt-0.5 truncate text-[10px] text-slate-600">{transaction.description}</p>
                             <p className="mt-1 text-[9px] text-slate-400">{new Date(transaction.created_at).toLocaleString()} · {formatMoney(transaction.amount, transaction.currency)}</p>
+                            <p className="mt-1 text-[9px] font-bold uppercase text-slate-500">{transaction.entry_type} · {transaction.status}</p>
+                            <p className="mt-1 text-[9px] text-slate-500">{transaction.gateway || 'Payment method unavailable'}{transaction.gateway_transaction_id ? ` · Provider ref ${transaction.gateway_transaction_id}` : ''}</p>
                           </div>
                           <span className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold uppercase text-slate-600">{transaction.payment_purpose}</span>
                         </div>

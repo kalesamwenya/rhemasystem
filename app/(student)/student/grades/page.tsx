@@ -4,10 +4,10 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ArrowRight, Download, Eye, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
-import { exportBrandedPdf } from '@/lib/branded-pdf';
-import { calculateGpa, formatGrade, summarizeCourseGrades, summarizeGrades, type StudentGrade } from '@/lib/student-grades';
+import { exportAcademicTranscript } from '@/lib/academic-transcript';
+import { calculateGpa, summarizeCourseGrades, summarizeGrades, type StudentGrade } from '@/lib/student-grades';
 
-type GradesResponse = { data: StudentGrade[]; transcript_published?: boolean };
+type GradesResponse = { data: StudentGrade[]; transcript_published?: boolean; transcript_serial?: string | null };
 
 export default function StudentGradesPage() {
   const [grades, setGrades] = useState<StudentGrade[]>([]);
@@ -15,6 +15,7 @@ export default function StudentGradesPage() {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState<'view' | 'download' | null>(null);
   const [transcriptPublished, setTranscriptPublished] = useState(false);
+  const [transcriptSerial, setTranscriptSerial] = useState<string | null>(null);
   const overallSummary = summarizeGrades(grades);
   const courseSummaries = summarizeCourseGrades(grades);
   const levelOneGpa = calculateGpa(courseSummaries, 1);
@@ -25,38 +26,9 @@ export default function StudentGradesPage() {
     setExporting(mode);
     setError('');
     try {
-      await exportBrandedPdf(async () => {
-        const response = await api.students.myProfile() as { data: { student: { name: string; student_id: string; class: string } } };
-        const student = response.data.student;
-        const courses = Array.from(new Set(grades.map((grade) => grade.course_name)));
-        return {
-          title: 'Academic Transcript',
-          subtitle: 'Published gradebook results and cumulative activity grades for enrolled courses',
-          fileName: `Rhema-Transcript-${student.student_id}`,
-          student: { name: student.name, id: student.student_id, cohort: student.class },
-          sections: [
-            {
-              title: 'Cumulative activity grade',
-              columns: ['Activities graded', 'Cumulative grade', 'Percentage'],
-              rows: [[
-                `${overallSummary.gradedActivityCount} of ${overallSummary.activityCount}`,
-                overallSummary.possible > 0 ? `${formatGrade(overallSummary.earned)} / ${formatGrade(overallSummary.possible)}` : 'Pending',
-                overallSummary.percentage === null ? 'Pending' : `${overallSummary.percentage.toFixed(1)}%`,
-              ]],
-            },
-            ...courses.map((courseName) => ({
-            title: courseName,
-            columns: ['Assessment', 'Type', 'Grade', 'Maximum'],
-            rows: grades.filter((grade) => grade.course_name === courseName).map((grade) => [
-              grade.item_name || 'Course total',
-              grade.item_module || grade.item_type,
-              grade.grade === null ? 'Pending' : String(grade.grade),
-              String(grade.maximum_grade),
-            ]),
-            })),
-          ],
-        };
-      }, mode);
+      if (!transcriptSerial) throw new Error('The transcript has no verification serial. Contact the academic department.');
+      const response = await api.students.myProfile() as { data: { student: { name: string; student_id: string; class: string } } };
+      await exportAcademicTranscript(response.data.student, grades, transcriptSerial, mode);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to prepare your transcript PDF.');
     } finally {
@@ -71,6 +43,7 @@ export default function StudentGradesPage() {
         if (active) {
           setGrades(response.data);
           setTranscriptPublished(response.transcript_published === true);
+          setTranscriptSerial(response.transcript_serial ?? null);
         }
       })
       .catch((reason: unknown) => {

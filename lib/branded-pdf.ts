@@ -57,7 +57,7 @@ function renderSection(section: BrandedPdfSection): string {
   return `<section><h2>${escapeHtml(section.title)}</h2>${fields}${table}</section>`;
 }
 
-async function createPdfBlob(data: BrandedPdfDocument): Promise<Blob> {
+export async function createBrandedPdfBlob(data: BrandedPdfDocument): Promise<Blob> {
   const [{ default: html2pdf }, verificationCodes] = await Promise.all([
     import('html2pdf.js'),
     Promise.all((data.verifications || []).map(async (verification) => ({
@@ -121,7 +121,7 @@ export async function exportBrandedPdf(
 
   try {
     const data = await buildDocument();
-    const blob = await createPdfBlob(data);
+    const blob = await createBrandedPdfBlob(data);
     if (preview) {
       const url = URL.createObjectURL(blob);
       preview.location.replace(url);

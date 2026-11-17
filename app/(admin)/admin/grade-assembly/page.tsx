@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BookOpen, Loader2, Printer, Save, Search } from 'lucide-react';
 import { api } from '@/lib/api';
-import AcademicTranscriptPrint from '@/components/grades/AcademicTranscriptPrint';
+import { exportAcademicTranscript } from '@/lib/academic-transcript';
 import {
   calculateGpa,
   summarizeCourseGrades,
@@ -16,6 +16,7 @@ type GradeResponse = {
   message?: string;
   transcript_published?: boolean;
   transcript_generated_at?: string | null;
+  transcript_serial?: string | null;
 };
 type RosterResponse = { data?: Student[]; message?: string };
 type CourseHoursForm = { sessions: string; hours: string };
@@ -36,6 +37,8 @@ export default function GradeAssemblyPage() {
   const [publishingTranscript, setPublishingTranscript] = useState(false);
   const [transcriptPublished, setTranscriptPublished] = useState(false);
   const [transcriptGeneratedAt, setTranscriptGeneratedAt] = useState<string | null>(null);
+  const [transcriptSerial, setTranscriptSerial] = useState<string | null>(null);
+  const [exportingTranscript, setExportingTranscript] = useState(false);
   const [courseTotals, setCourseTotals] = useState<Record<string, CourseHoursForm>>({});
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -57,17 +60,8 @@ export default function GradeAssemblyPage() {
   }, []);
 
   useEffect(() => {
-    if (!selectedStudentId) {
-      setGrades([]);
-      setCourseTotals({});
-      setTranscriptPublished(false);
-      setTranscriptGeneratedAt(null);
-      return;
-    }
+    if (!selectedStudentId) return;
     let active = true;
-    setLoadingGrades(true);
-    setError('');
-    setNotice('');
     (api.students.adminGrades(selectedStudentId) as Promise<GradeResponse>)
       .then((response) => {
         if (!Array.isArray(response.data)) throw new Error(response.message ?? 'Student grades were not returned.');
@@ -75,6 +69,7 @@ export default function GradeAssemblyPage() {
         setGrades(response.data);
         setTranscriptPublished(response.transcript_published === true);
         setTranscriptGeneratedAt(response.transcript_generated_at ?? null);
+        setTranscriptSerial(response.transcript_serial ?? null);
         const courses = summarizeCourseGrades(response.data);
         setCourseTotals(Object.fromEntries(courses.map((course) => {
           const courseGrades = response.data?.filter((grade) => grade.course_id === course.course_id) ?? [];
@@ -160,12 +155,13 @@ export default function GradeAssemblyPage() {
       const response = await api.students.setTranscriptPublication({
         student_id: selectedStudent.student_id,
         published,
-      }) as { success?: boolean; message?: string; published?: boolean };
+      }) as { success?: boolean; message?: string; published?: boolean; serial_number?: string | null; generated_at?: string | null };
       if (!response.success || response.published !== published) {
         throw new Error(response.message ?? 'Unable to update transcript availability.');
       }
       setTranscriptPublished(published);
-      setTranscriptGeneratedAt(published ? new Date().toISOString() : null);
+      setTranscriptGeneratedAt(published ? response.generated_at || new Date().toISOString() : null);
+      setTranscriptSerial(published ? response.serial_number || null : null);
       setNotice(response.message ?? (published
         ? 'Transcript generated and made available to the student.'
         : 'Transcript is no longer available to the student.'));
@@ -173,6 +169,22 @@ export default function GradeAssemblyPage() {
       setError(messageOf(cause, 'Unable to update transcript availability.'));
     } finally {
       setPublishingTranscript(false);
+    }
+  };
+
+  const exportTranscript = async () => {
+    if (!selectedStudent || !transcriptSerial) {
+      setError('Generate and publish this transcript to assign its verification serial before printing.');
+      return;
+    }
+    setExportingTranscript(true);
+    setError('');
+    try {
+      await exportAcademicTranscript(selectedStudent, grades, transcriptSerial, 'view');
+    } catch (cause) {
+      setError(messageOf(cause, 'Unable to prepare the transcript PDF.'));
+    } finally {
+      setExportingTranscript(false);
     }
   };
 
@@ -200,7 +212,20 @@ export default function GradeAssemblyPage() {
         </select>
         <label className="md:col-span-2">
           <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">Student</span>
-          <select value={selectedStudentId} onChange={(event) => setSelectedStudentId(event.target.value)} disabled={loadingRoster} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-800">
+          <select value={selectedStudentId} onChange={(event) => {
+            const studentId = event.target.value;
+            setSelectedStudentId(studentId);
+            setLoadingGrades(Boolean(studentId));
+            setError('');
+            setNotice('');
+            if (!studentId) {
+              setGrades([]);
+              setCourseTotals({});
+              setTranscriptPublished(false);
+              setTranscriptGeneratedAt(null);
+              setTranscriptSerial(null);
+            }
+          }} disabled={loadingRoster} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-800">
             <option value="">{loadingRoster ? 'Loading students…' : 'Select a student'}</option>
             {visibleStudents.map((student) => <option key={student.student_id} value={student.student_id}>{student.name} · {student.student_id} · {student.class}</option>)}
           </select>
@@ -222,8 +247,8 @@ export default function GradeAssemblyPage() {
                 {transcriptPublished ? 'Regenerate transcript' : 'Generate for student'}
               </button>
               {transcriptPublished && <button type="button" onClick={() => void setTranscriptPublication(false)} disabled={publishingTranscript} className="rounded-xl border border-red-200 bg-white px-4 py-3 text-sm font-bold text-red-800 hover:bg-red-50 disabled:opacity-60">Remove student access</button>}
-              <button type="button" onClick={() => window.print()} className="inline-flex items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm font-bold text-blue-900 hover:bg-blue-50">
-                <Printer className="h-4 w-4" /> Print transcript
+              <button type="button" onClick={() => void exportTranscript()} disabled={!transcriptSerial || exportingTranscript} className="inline-flex items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm font-bold text-blue-900 hover:bg-blue-50 disabled:opacity-50">
+                {exportingTranscript ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />} Print transcript
               </button>
             </div>
           </div>
@@ -286,7 +311,6 @@ export default function GradeAssemblyPage() {
             <BookOpen className="mt-0.5 h-4 w-4 shrink-0" />
             A 4.0 scale is used: A 80–100 (4.0), B 70–79.99 (3.0), C 60–69.99 (2.0), D 50–59.99 (1.0), and F below 50 (0.0). Each published course total contributes equally to GPA. Blank workload values use scheduled totals.
           </p>
-          <AcademicTranscriptPrint student={selectedStudent} grades={grades} />
         </>
       ) : selectedStudent && !error ? (
         <div className="rounded-xl border border-slate-200 bg-white p-8 text-center">
