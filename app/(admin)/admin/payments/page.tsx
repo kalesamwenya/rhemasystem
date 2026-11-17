@@ -11,13 +11,11 @@ import {
   CreditCard,
   Download,
   Eye,
-  FileSpreadsheet,
   FileText,
   Loader2,
   Printer,
   Receipt,
   Search,
-  Send,
   TrendingUp,
   Wallet,
   X,
@@ -26,7 +24,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { api } from '@/lib/api';
-import { createPaymentReceiptPdf, downloadPaymentReceipt, openPaymentReceiptBlob, viewPaymentReceipt, type PaymentReceiptData } from '@/lib/payment-receipt';
+import { createPaymentReceiptPdf, type PaymentReceiptData } from '@/lib/payment-receipt';
 import { createStudentChargeInvoicePdf } from '@/lib/student-finance-invoice';
 import { openFlutterwaveInlineCheckout, type FlutterwaveInlineCheckout } from '@/lib/flutterwave-inline';
 
@@ -49,6 +47,21 @@ type PaymentLedgerResponse = { data: PaymentLedgerRecord[] };
 type StudentLookup = { student_id: string; name: string; email?: string; class?: string; account_status?: string };
 type StudentsResponse = { data: StudentLookup[] };
 type PaymentReceiptsResponse = { data: (PaymentReceiptData & { id: number })[] };
+const paymentReceiptFromLedger = (record: PaymentLedgerRecord): PaymentReceiptData & { id: number } => ({
+  id: record.id,
+  student_name: record.student_name,
+  student_id: record.student_id,
+  cohort: record.cohort,
+  paid_for: record.description,
+  term: record.term,
+  amount: record.amount,
+  currency: record.currency,
+  reference: record.reference,
+  gateway: record.gateway,
+  gateway_transaction_id: record.gateway_transaction_id,
+  created_at: record.created_at,
+  receipt_token: record.receipt_token || '',
+});
 type PaymentAccount = {
   id: string;
   name: string;
@@ -72,22 +85,15 @@ type PaymentAlert = {
 const formatMoney = (amount: number, currency: string) =>
   new Intl.NumberFormat('en-ZM', { style: 'currency', currency, maximumFractionDigits: 2 }).format(amount);
 
+const formatRecordClassification = (record: PaymentLedgerRecord) =>
+  [record.payment_purpose, record.liability_type, record.assessment_type, record.term].filter(Boolean).join(' · ') || '—';
+
 const getStatusBadge = (status: PaymentAccount['status']) => {
   switch (status) {
     case 'Settled': return 'border-emerald-100 bg-emerald-50 text-emerald-700';
     case 'Partial Payment': return 'border-amber-100 bg-amber-50 text-amber-700';
     default: return 'border-rose-100 bg-rose-50 text-rose-700';
   }
-};
-
-const getLiabilityLabel = (record: PaymentLedgerRecord) => {
-  const type = record.liability_type;
-  if (type === 'missed_audio') return 'Missed class audio';
-  if (type === 'assignment') return 'Missed assignment';
-  if (type === 'quiz') return 'Missed quiz';
-  if (type === 'exam') return 'Missed exam';
-  if (type === 'tuition' || record.description.toLowerCase().includes('tuition')) return 'Tuition / school fees';
-  return 'Other penalty / charge';
 };
 
 const isAccountPayment = (record: PaymentLedgerRecord) =>
@@ -131,7 +137,21 @@ export default function AdminPaymentsPage() {
   const [cohortFilter, setCohortFilter] = useState('All');
   const [sortBy, setSortBy] = useState<'name' | 'balance' | 'paid'>('name');
   const [page, setPage] = useState(1);
+  const [financeView, setFinanceView] = useState<'records' | 'accounts'>('accounts');
+  const [selectedLedgerStudentId, setSelectedLedgerStudentId] = useState('');
+  const [ledgerSearch, setLedgerSearch] = useState('');
+  const [ledgerTypeFilter, setLedgerTypeFilter] = useState<'all' | PaymentLedgerRecord['entry_type']>('all');
+  const [ledgerStatusFilter, setLedgerStatusFilter] = useState<'all' | PaymentLedgerRecord['status']>('all');
+  const [ledgerSortBy, setLedgerSortBy] = useState<'newest' | 'oldest' | 'status'>('newest');
+  const [ledgerPage, setLedgerPage] = useState(1);
+  const [ledgerRowsPerPage, setLedgerRowsPerPage] = useState(15);
   const [selectedAccount, setSelectedAccount] = useState<PaymentAccount | null>(null);
+  const [statementSearch, setStatementSearch] = useState('');
+  const [statementTypeFilter, setStatementTypeFilter] = useState<'all' | PaymentLedgerRecord['entry_type']>('all');
+  const [statementStatusFilter, setStatementStatusFilter] = useState<'all' | PaymentLedgerRecord['status']>('all');
+  const [statementSortBy, setStatementSortBy] = useState<'newest' | 'oldest' | 'description' | 'status'>('newest');
+  const [statementPage, setStatementPage] = useState(1);
+  const [statementRowsPerPage, setStatementRowsPerPage] = useState(10);
   const [paymentReceipts, setPaymentReceipts] = useState<(PaymentReceiptData & { id: number })[]>([]);
   const [loadingReceipts, setLoadingReceipts] = useState(false);
   const [receiptError, setReceiptError] = useState('');
@@ -322,6 +342,11 @@ export default function AdminPaymentsPage() {
     () => Array.from(new Set(accounts.map((account) => account.cohort).filter(Boolean))).sort(),
     [accounts],
   );
+  const selectedLedgerAccount = accounts.find((account) => account.id === selectedLedgerStudentId) ?? null;
+  const selectedStudentLedgerRecords = useMemo(
+    () => selectedLedgerStudentId ? records.filter((record) => record.student_id === selectedLedgerStudentId) : [],
+    [records, selectedLedgerStudentId],
+  );
   const filteredAccounts = useMemo(() => accounts
     .filter((account) => statusFilter === 'All' || account.status === statusFilter)
     .filter((account) => cohortFilter === 'All' || account.cohort === cohortFilter)
@@ -331,6 +356,65 @@ export default function AdminPaymentsPage() {
       : sortBy === 'paid'
         ? right.paid - left.paid
         : left.name.localeCompare(right.name)), [accounts, cohortFilter, search, sortBy, statusFilter, students]);
+  const filteredLedgerRecords = useMemo(() => {
+    const query = ledgerSearch.trim().toLowerCase();
+    return selectedStudentLedgerRecords
+      .filter((record) => ledgerTypeFilter === 'all' || record.entry_type === ledgerTypeFilter)
+      .filter((record) => ledgerStatusFilter === 'all' || record.status === ledgerStatusFilter)
+      .filter((record) => !query || [
+        record.description,
+        record.reference,
+        record.payment_purpose,
+        record.liability_type,
+        record.assessment_type,
+        record.term,
+        record.gateway,
+        record.gateway_transaction_id,
+        record.amount,
+        record.currency,
+      ].some((value) => String(value ?? '').toLowerCase().includes(query)))
+      .sort((left, right) => {
+        if (ledgerSortBy === 'oldest') return new Date(left.created_at).getTime() - new Date(right.created_at).getTime();
+        if (ledgerSortBy === 'status') return left.status.localeCompare(right.status);
+        return new Date(right.created_at).getTime() - new Date(left.created_at).getTime();
+      });
+  }, [ledgerSearch, ledgerSortBy, ledgerStatusFilter, ledgerTypeFilter, selectedStudentLedgerRecords]);
+  const ledgerPageCount = Math.max(1, Math.ceil(filteredLedgerRecords.length / ledgerRowsPerPage));
+  const visibleLedgerPage = Math.min(ledgerPage, ledgerPageCount);
+  const pagedLedgerRecords = filteredLedgerRecords.slice(
+    (visibleLedgerPage - 1) * ledgerRowsPerPage,
+    visibleLedgerPage * ledgerRowsPerPage,
+  );
+  const filteredStatementRecords = useMemo(() => {
+    const query = statementSearch.trim().toLowerCase();
+    return [...(selectedAccount?.records ?? [])]
+      .filter((record) => statementTypeFilter === 'all' || record.entry_type === statementTypeFilter)
+      .filter((record) => statementStatusFilter === 'all' || record.status === statementStatusFilter)
+      .filter((record) => !query || [
+        record.description,
+        record.reference,
+        record.payment_purpose,
+        record.liability_type,
+        record.assessment_type,
+        record.term,
+        record.gateway,
+        record.gateway_transaction_id,
+        record.amount,
+        record.currency,
+      ].some((value) => String(value ?? '').toLowerCase().includes(query)))
+      .sort((left, right) => {
+        if (statementSortBy === 'oldest') return new Date(left.created_at).getTime() - new Date(right.created_at).getTime();
+        if (statementSortBy === 'description') return left.description.localeCompare(right.description);
+        if (statementSortBy === 'status') return left.status.localeCompare(right.status);
+        return new Date(right.created_at).getTime() - new Date(left.created_at).getTime();
+      });
+  }, [selectedAccount, statementSearch, statementSortBy, statementStatusFilter, statementTypeFilter]);
+  const statementPageCount = Math.max(1, Math.ceil(filteredStatementRecords.length / statementRowsPerPage));
+  const visibleStatementPage = Math.min(statementPage, statementPageCount);
+  const pagedStatementRecords = filteredStatementRecords.slice(
+    (visibleStatementPage - 1) * statementRowsPerPage,
+    visibleStatementPage * statementRowsPerPage,
+  );
   const pageCount = Math.max(1, Math.ceil(filteredAccounts.length / pageSize));
   const visiblePage = Math.min(page, pageCount);
   const pagedAccounts = filteredAccounts.slice((visiblePage - 1) * pageSize, visiblePage * pageSize);
@@ -368,6 +452,11 @@ export default function AdminPaymentsPage() {
   const openStatement = async (account: PaymentAccount) => {
     const requestId = ++receiptRequestId.current;
     setSelectedAccount(account);
+    setStatementSearch('');
+    setStatementTypeFilter('all');
+    setStatementStatusFilter('all');
+    setStatementSortBy('newest');
+    setStatementPage(1);
     setPaymentReceipts([]);
     setReceiptError('');
     setDocumentError('');
@@ -417,20 +506,260 @@ export default function AdminPaymentsPage() {
     setLoadingReceipts(false);
   };
 
+  const openPaymentForSelectedAccount = () => {
+    if (!selectedAccount) return;
+    const student = students.find((item) => item.student_id === selectedAccount.id) ?? {
+      student_id: selectedAccount.id,
+      name: selectedAccount.name,
+      class: selectedAccount.cohort,
+    };
+    setPaymentStudent(student);
+    setStudentSearch(`${student.name} · ${student.student_id}`);
+    setPaymentPurpose('tuition');
+    setPaymentDescription(`Tuition payment (${student.class || 'student account'})`);
+    setPaymentAmount('');
+    setPaymentMethod('flutterwave');
+    setExternalReference('');
+    setError('');
+    setNotice('');
+    setManualPaymentOpen(true);
+  };
+
+  const downloadStatementRecords = () => {
+    if (!selectedAccount) return;
+    const quoteCsv = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+    const records = [...selectedAccount.records].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    const rows = [
+      ['Date', 'Student ID', 'Student', 'Cohort', 'Record type', 'Description', 'Purpose', 'Liability type', 'Assessment type', 'Term', 'Amount', 'Currency', 'Status', 'Reference', 'Payment method', 'Provider transaction reference', 'Related charge ID', 'Receipt available'],
+      ...records.map((record) => [
+        new Date(record.created_at).toISOString(),
+        selectedAccount.id,
+        selectedAccount.name,
+        selectedAccount.cohort,
+        record.entry_type,
+        record.description,
+        record.payment_purpose,
+        record.liability_type,
+        record.assessment_type,
+        record.term,
+        record.amount,
+        record.currency,
+        record.status,
+        record.reference,
+        record.gateway,
+        record.gateway_transaction_id,
+        record.liability_charge_id,
+        record.receipt_path || paymentReceipts.some((receipt) => receipt.id === record.id) ? 'Yes' : 'No',
+      ]),
+    ];
+    const csv = `\uFEFF${rows.map((row) => row.map(quoteCsv).join(',')).join('\r\n')}`;
+    const file = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(file);
+    const link = document.createElement('a');
+    const safeStudentId = selectedAccount.id.replace(/[^a-z0-9_-]/gi, '-');
+    link.href = url;
+    link.download = `Rhema-Financial-Records-${safeStudentId}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const printStatementRecords = () => {
+    if (!selectedAccount) return;
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      setError('Allow pop-ups to print this financial statement.');
+      return;
+    }
+    const escapeHtml = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, (character) => {
+      switch (character) {
+        case '&': return '&amp;';
+        case '<': return '&lt;';
+        case '>': return '&gt;';
+        case '"': return '&quot;';
+        case "'": return '&#39;';
+        default: return character;
+      }
+    });
+    const records = [...selectedAccount.records].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    const tableRows = records.map((record) => `
+      <tr>
+        <td>${escapeHtml(new Date(record.created_at).toLocaleString())}</td>
+        <td>${escapeHtml(record.entry_type)}</td>
+        <td>${escapeHtml(record.description)}</td>
+        <td>${escapeHtml(formatRecordClassification(record))}</td>
+        <td>${escapeHtml(record.reference)}</td>
+        <td>${escapeHtml(formatMoney(record.amount, record.currency))}</td>
+        <td>${escapeHtml(record.status)}</td>
+        <td>${escapeHtml(record.gateway || '—')}</td>
+        <td>${escapeHtml(record.gateway_transaction_id || '—')}</td>
+        <td>${record.receipt_path || paymentReceipts.some((receipt) => receipt.id === record.id) ? 'Available' : '—'}</td>
+      </tr>`).join('');
+    printWindow.opener = null;
+    printWindow.document.open();
+    printWindow.document.write(`<!doctype html>
+      <html><head><meta charset="utf-8"><title>Financial statement — ${escapeHtml(selectedAccount.id)}</title>
+      <style>
+        @page { size: landscape; margin: 12mm; }
+        body { color: #172033; font: 11px Arial, sans-serif; }
+        h1 { margin: 0 0 4px; font-size: 20px; }
+        p { margin: 3px 0; color: #475569; }
+        table { width: 100%; margin-top: 18px; border-collapse: collapse; }
+        th, td { padding: 7px 6px; border: 1px solid #cbd5e1; text-align: left; vertical-align: top; }
+        th { background: #f1f5f9; font-size: 9px; text-transform: uppercase; }
+        td { overflow-wrap: anywhere; }
+      </style></head><body>
+      <h1>Student financial statement</h1>
+      <p><strong>${escapeHtml(selectedAccount.name)}</strong> · Student ID ${escapeHtml(selectedAccount.id)} · ${escapeHtml(selectedAccount.cohort || 'Cohort unavailable')}</p>
+      <p>Generated ${escapeHtml(new Date().toLocaleString())} · ${records.length} ledger records</p>
+      <table><thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Purpose / classification</th><th>Reference</th><th>Amount</th><th>Status</th><th>Payment method</th><th>Provider reference</th><th>Receipt</th></tr></thead>
+      <tbody>${tableRows || '<tr><td colspan="10">No financial records.</td></tr>'}</tbody></table>
+      </body></html>`);
+    printWindow.document.close();
+    printWindow.focus();
+    window.setTimeout(() => printWindow.print(), 250);
+  };
+
+  const downloadAllLedgerRecords = () => {
+    if (!selectedLedgerAccount) return;
+    const quoteCsv = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+    const rows = [
+      ['Date', 'Student ID', 'Student', 'Cohort', 'Record type', 'Description', 'Purpose', 'Liability type', 'Assessment type', 'Term', 'Amount', 'Currency', 'Status', 'Reference', 'Payment method', 'Provider transaction reference', 'Related charge ID', 'Receipt available'],
+      ...selectedStudentLedgerRecords.map((record) => [
+        new Date(record.created_at).toISOString(),
+        record.student_id,
+        record.student_name,
+        record.cohort,
+        record.entry_type,
+        record.description,
+        record.payment_purpose,
+        record.liability_type,
+        record.assessment_type,
+        record.term,
+        record.amount,
+        record.currency,
+        record.status,
+        record.reference,
+        record.gateway,
+        record.gateway_transaction_id,
+        record.liability_charge_id,
+        record.receipt_path || record.receipt_token ? 'Yes' : 'No',
+      ]),
+    ];
+    const csv = `\uFEFF${rows.map((row) => row.map(quoteCsv).join(',')).join('\r\n')}`;
+    const file = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(file);
+    const link = document.createElement('a');
+    link.href = url;
+    const safeStudentId = selectedLedgerAccount.id.replace(/[^a-z0-9_-]/gi, '-');
+    link.download = `Rhema-Financial-Records-${safeStudentId}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const printAllLedgerRecords = () => {
+    if (!selectedLedgerAccount) return;
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      setError('Allow pop-ups to print this student’s financial records.');
+      return;
+    }
+    const escapeHtml = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, (character) => {
+      switch (character) {
+        case '&': return '&amp;';
+        case '<': return '&lt;';
+        case '>': return '&gt;';
+        case '"': return '&quot;';
+        case "'": return '&#39;';
+        default: return character;
+      }
+    });
+    const sortedRecords = [...selectedStudentLedgerRecords].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    const tableRows = sortedRecords.map((record) => `
+      <tr>
+        <td>${escapeHtml(new Date(record.created_at).toLocaleString())}</td>
+        <td>${escapeHtml(record.student_name)}<br>${escapeHtml(record.student_id)}</td>
+        <td>${escapeHtml(record.cohort || '—')}</td>
+        <td>${escapeHtml(record.entry_type)}<br>${escapeHtml(record.description)}</td>
+        <td>${escapeHtml([record.payment_purpose, record.liability_type, record.assessment_type, record.term].filter(Boolean).join(' · ') || '—')}</td>
+        <td>${escapeHtml(record.reference)}</td>
+        <td>${escapeHtml(formatMoney(record.amount, record.currency))}</td>
+        <td>${escapeHtml(record.status)}</td>
+        <td>${escapeHtml(record.gateway || '—')}<br>${escapeHtml(record.gateway_transaction_id || '')}</td>
+      </tr>`).join('');
+    printWindow.opener = null;
+    printWindow.document.open();
+    printWindow.document.write(`<!doctype html>
+      <html><head><meta charset="utf-8"><title>Financial records — ${escapeHtml(selectedLedgerAccount.id)}</title>
+      <style>
+        @page { size: landscape; margin: 12mm; }
+        body { color: #172033; font: 10px Arial, sans-serif; }
+        h1 { margin: 0 0 6px; font-size: 20px; }
+        p { margin: 3px 0; color: #475569; }
+        table { width: 100%; margin-top: 16px; border-collapse: collapse; }
+        th, td { padding: 6px; border: 1px solid #cbd5e1; text-align: left; vertical-align: top; }
+        th { background: #f1f5f9; font-size: 9px; text-transform: uppercase; }
+        td { overflow-wrap: anywhere; }
+      </style></head><body>
+      <h1>Student financial records</h1>
+      <p><strong>${escapeHtml(selectedLedgerAccount.name)}</strong> · Student ID ${escapeHtml(selectedLedgerAccount.id)} · ${escapeHtml(selectedLedgerAccount.cohort || 'Cohort unavailable')}</p>
+      <p>Generated ${escapeHtml(new Date().toLocaleString())} · ${selectedStudentLedgerRecords.length} records</p>
+      <table><thead><tr><th>Date</th><th>Student</th><th>Cohort</th><th>Record</th><th>Purpose / classification</th><th>Reference</th><th>Amount</th><th>Status</th><th>Payment method / provider reference</th></tr></thead>
+      <tbody>${tableRows || '<tr><td colspan="9">No financial records.</td></tr>'}</tbody></table>
+      </body></html>`);
+    printWindow.document.close();
+    printWindow.focus();
+    window.setTimeout(() => printWindow.print(), 250);
+  };
+
   const handleReceipt = async (receipt: PaymentReceiptData & { id: number }, mode: 'view' | 'download') => {
     setReceiptAction({ id: receipt.id, mode });
     setReceiptError('');
+    const receiptWindow = window.open('about:blank', '_blank');
+    if (!receiptWindow) {
+      setReceiptAction(null);
+      setReceiptError(`Allow pop-ups to ${mode === 'view' ? 'view' : 'download'} the payment receipt.`);
+      return;
+    }
+    receiptWindow.opener = null;
     try {
-      const transaction = selectedAccount?.records.find((record) => record.id === receipt.id);
-      if (transaction?.receipt_path) {
-        const file = await api.students.adminPaymentReceiptFile(receipt.id, mode === 'view' ? 'inline' : 'attachment') as Blob;
-        openPaymentReceiptBlob(file, mode, receipt.reference);
-      } else if (mode === 'view') {
-        await viewPaymentReceipt(receipt);
-      } else {
-        await downloadPaymentReceipt(receipt);
+      const transaction = selectedAccount?.records.find((record) => record.id === receipt.id)
+        ?? selectedStudentLedgerRecords.find((record) => record.id === receipt.id)
+        ?? records.find((record) => record.id === receipt.id);
+      if (!transaction) throw new Error('The payment record could not be found.');
+
+      let savedTransaction = transaction;
+      if (!savedTransaction.receipt_path) {
+        if (savedTransaction.status !== 'paid' || !savedTransaction.receipt_token) {
+          throw new Error('A saved receipt is not available for this payment.');
+        }
+        const pdf = await createPaymentReceiptPdf(receipt);
+        const formData = new FormData();
+        formData.append('payment_id', String(savedTransaction.id));
+        formData.append('status', 'paid');
+        formData.append('receipt_token', savedTransaction.receipt_token);
+        formData.append('receipt_file', pdf, `Rhema-Receipt-${savedTransaction.reference.replace(/[^a-z0-9_-]/gi, '-')}.pdf`);
+        const response = await api.students.updateAdminPaymentStatus(formData) as {
+          data: PaymentLedgerRecord;
+          message: string;
+        };
+        savedTransaction = response.data;
+        if (!savedTransaction.receipt_path) throw new Error('The receipt was generated but was not saved to the payment record.');
+        setRecords((current) => current.map((record) => record.id === savedTransaction.id ? savedTransaction : record));
+        setSelectedAccount((current) => current ? {
+          ...current,
+          records: current.records.map((record) => record.id === savedTransaction.id ? savedTransaction : record),
+        } : current);
       }
+      receiptWindow.location.replace(api.students.adminPaymentReceiptUrl(
+        savedTransaction.id,
+        mode === 'view' ? 'inline' : 'attachment',
+      ));
     } catch (reason) {
+      receiptWindow.close();
       setReceiptError(reason instanceof Error ? reason.message : 'Unable to download this payment receipt.');
     } finally {
       setReceiptAction(null);
@@ -438,14 +767,17 @@ export default function AdminPaymentsPage() {
   };
 
   const handleChargeInvoice = async (charge: PaymentLedgerRecord) => {
-    if (!selectedAccount || invoiceActionId !== null) return;
+    const account = selectedAccount?.id === charge.student_id
+      ? selectedAccount
+      : accounts.find((item) => item.id === charge.student_id);
+    if (!account || invoiceActionId !== null) return;
     setInvoiceActionId(charge.id);
     setDocumentError('');
     try {
       const pdf = await createStudentChargeInvoicePdf({
-        student_name: selectedAccount.name,
-        student_id: selectedAccount.id,
-        cohort: selectedAccount.cohort,
+        student_name: account.name,
+        student_id: account.id,
+        cohort: account.cohort,
         description: charge.description,
         term: charge.term,
         amount: charge.amount,
@@ -464,22 +796,31 @@ export default function AdminPaymentsPage() {
         : record));
       setSelectedAccount((current) => current ? {
         ...current,
-        records: current.records.map((record) => record.id === charge.id
-          ? { ...record, invoice_path: response.data?.path || record.invoice_path }
-          : record),
+        records: current.id === charge.student_id
+          ? current.records.map((record) => record.id === charge.id
+            ? { ...record, invoice_path: response.data?.path || record.invoice_path }
+            : record)
+          : current.records,
       } : current);
-      const url = URL.createObjectURL(pdf);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `Rhema-Invoice-${charge.reference.replace(/[^a-z0-9_-]/gi, '-')}.pdf`;
-      link.click();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
       setNotice(response.message || 'Invoice saved and emailed to the student and Finance.');
     } catch (reason) {
       setDocumentError(reason instanceof Error ? reason.message : 'Unable to generate this charge invoice.');
     } finally {
       setInvoiceActionId(null);
     }
+  };
+
+  const handleInvoiceFile = (charge: PaymentLedgerRecord, mode: 'view' | 'download') => {
+    setDocumentError('');
+    const invoiceWindow = window.open(
+      api.students.adminFinanceInvoiceUrl(charge.id, mode === 'view' ? 'inline' : 'attachment'),
+      '_blank',
+    );
+    if (!invoiceWindow) {
+      setDocumentError(`Allow pop-ups to ${mode === 'view' ? 'view' : 'download'} the saved invoice.`);
+      return;
+    }
+    invoiceWindow.opener = null;
   };
 
   const handleCreatePayment = async (event: FormEvent<HTMLFormElement>) => {
@@ -556,6 +897,7 @@ export default function AdminPaymentsPage() {
             setStudentSearch('');
             setPaymentAmount('');
             setPaymentDescription('');
+            if (selectedAccount) void openStatement(selectedAccount);
             setNotice(receiptResult.message || 'Flutterwave payment verified and receipt attached to the student account.');
             setPaymentAlert({
               tone: 'success',
@@ -626,6 +968,7 @@ export default function AdminPaymentsPage() {
       setManualPaymentOpen(false);
       setPaymentStudent(null);
       setStudentSearch('');
+      if (selectedAccount) void openStatement(selectedAccount);
       setNotice(response.message || 'Manual payment recorded. Its receipt PDF is attached to the transaction.');
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to start or record this student payment.');
@@ -842,6 +1185,208 @@ export default function AdminPaymentsPage() {
         </article>
       </section>
 
+      <section className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-4" aria-label="Finance record views">
+        <div role="tablist" aria-label="Finance records view" className="flex flex-wrap gap-2">
+          <button type="button" role="tab" aria-selected={financeView === 'records'} onClick={() => setFinanceView('records')} className={`inline-flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-bold transition ${financeView === 'records' ? 'bg-blue-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}>
+            <Receipt className="h-4 w-4" />Student financial records <span className={`rounded-full px-2 py-0.5 text-xs ${financeView === 'records' ? 'bg-white/15 text-white' : 'bg-slate-100 text-slate-600'}`}>{records.length.toLocaleString()}</span>
+          </button>
+          <button type="button" role="tab" aria-selected={financeView === 'accounts'} onClick={() => setFinanceView('accounts')} className={`inline-flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-bold transition ${financeView === 'accounts' ? 'bg-blue-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}>
+            <UserRound className="h-4 w-4" />Student accounts <span className={`rounded-full px-2 py-0.5 text-xs ${financeView === 'accounts' ? 'bg-white/15 text-white' : 'bg-slate-100 text-slate-600'}`}>{accounts.length.toLocaleString()}</span>
+          </button>
+        </div>
+      </section>
+
+      {financeView === 'records' && (
+        <section aria-labelledby="all-financial-records-title" className="fixed inset-0 z-[40] flex h-[100dvh] w-full flex-col bg-slate-50">
+          <header className="border-b border-slate-200 bg-white px-5 py-5 sm:px-8 sm:py-6">
+            <div className="mx-auto w-full max-w-screen-2xl">
+              <button type="button" onClick={() => setFinanceView('accounts')} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm font-bold text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"><ChevronLeft className="h-4 w-4" />Back to finance</button>
+              <div className="mt-4 flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-800">Finance / Student statement</p>
+                  <h1 id="all-financial-records-title" className="mt-2 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">Student financial records</h1>
+                  <p className="mt-2 text-sm text-slate-600">{selectedLedgerAccount ? `${selectedLedgerAccount.name} · Student ID ${selectedLedgerAccount.id}` : 'Select a student to view their financial records'}</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={() => {
+                    setManualPaymentOpen(true);
+                    setError('');
+                    setNotice('');
+                    setStudentSearch('');
+                    setPaymentStudent(null);
+                    setPaymentPurpose('tuition');
+                    setPaymentDescription('');
+                    setPaymentAmount('');
+                    setPaymentMethod('flutterwave');
+                    setExternalReference('');
+                  }} className="inline-flex items-center gap-2 rounded-xl bg-blue-900 px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-blue-800"><Plus className="h-4 w-4" />Record payment</button>
+                  <button type="button" onClick={downloadAllLedgerRecords} disabled={loading || !selectedLedgerAccount || selectedStudentLedgerRecords.length === 0} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"><Download className="h-4 w-4" />Download student records</button>
+                  <button type="button" onClick={printAllLedgerRecords} disabled={loading || !selectedLedgerAccount || selectedStudentLedgerRecords.length === 0} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"><Printer className="h-4 w-4" />Print student records</button>
+                </div>
+              </div>
+            </div>
+          </header>
+          <div className="mx-auto w-full max-w-screen-2xl flex-1 overflow-y-auto p-5 sm:p-8">
+            <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm" aria-label="Selected student financial records">
+              <header className="border-b border-slate-100 px-5 py-5 sm:px-7">
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <p className="text-sm text-slate-600">{selectedLedgerAccount ? `Charges and payments for ${selectedLedgerAccount.name}.` : 'Choose a student to see only their charges and payments.'}</p>
+              </div>
+              <span className="rounded-full bg-slate-100 px-3 py-1.5 text-sm font-bold text-slate-700">{filteredLedgerRecords.length.toLocaleString()} matching records</span>
+            </div>
+          </header>
+          {(documentError || receiptError) && (
+            <p role="alert" className="mx-5 mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 sm:mx-6">
+              {documentError || receiptError}
+            </p>
+          )}
+          <div className="grid gap-3 border-b border-slate-100 p-5 sm:grid-cols-2 sm:p-6 xl:grid-cols-[minmax(240px,1fr)_repeat(4,minmax(145px,180px))]">
+            <label className="block">
+              <span className="sr-only">Select student financial records</span>
+              <select value={selectedLedgerStudentId} onChange={(event) => {
+                setSelectedLedgerStudentId(event.target.value);
+                setLedgerSearch('');
+                setLedgerTypeFilter('all');
+                setLedgerStatusFilter('all');
+                setLedgerPage(1);
+                setDocumentError('');
+                setReceiptError('');
+              }} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
+                <option value="">Select a student</option>
+                {accounts.map((account) => <option key={account.id} value={account.id}>{account.name} · {account.id}</option>)}
+              </select>
+            </label>
+            <label className="relative block">
+              <span className="sr-only">Search selected student financial records</span>
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input type="search" value={ledgerSearch} onChange={(event) => { setLedgerSearch(event.target.value); setLedgerPage(1); }} placeholder="Search reference or description…" disabled={!selectedLedgerStudentId} className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50" />
+            </label>
+            <label className="block">
+              <span className="sr-only">Filter records by type</span>
+              <select value={ledgerTypeFilter} onChange={(event) => { setLedgerTypeFilter(event.target.value as typeof ledgerTypeFilter); setLedgerPage(1); }} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
+                <option value="all">All record types</option><option value="charge">Charges</option><option value="payment">Payments</option>
+              </select>
+            </label>
+            <label className="block">
+              <span className="sr-only">Filter records by status</span>
+              <select value={ledgerStatusFilter} onChange={(event) => { setLedgerStatusFilter(event.target.value as typeof ledgerStatusFilter); setLedgerPage(1); }} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
+                <option value="all">All statuses</option><option value="posted">Posted</option><option value="pending">Pending</option><option value="paid">Paid</option><option value="failed">Failed</option><option value="void">Void</option>
+              </select>
+            </label>
+            <label className="block">
+              <span className="sr-only">Sort selected student financial records</span>
+              <select value={ledgerSortBy} onChange={(event) => { setLedgerSortBy(event.target.value as typeof ledgerSortBy); setLedgerPage(1); }} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
+                <option value="newest">Sort: Newest first</option><option value="oldest">Sort: Oldest first</option><option value="status">Sort: Status</option>
+              </select>
+            </label>
+            <label className="flex items-center gap-2 text-sm font-medium text-slate-500 sm:col-span-2 xl:col-span-5">
+              Rows per page
+              <select value={ledgerRowsPerPage} onChange={(event) => { setLedgerRowsPerPage(Number(event.target.value)); setLedgerPage(1); }} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
+                <option value={15}>15</option><option value={25}>25</option><option value={50}>50</option>
+              </select>
+            </label>
+          </div>
+          {loading ? (
+            <div className="flex min-h-56 items-center justify-center gap-3 text-sm font-semibold text-slate-500"><Loader2 className="h-5 w-5 animate-spin" />Loading financial records…</div>
+          ) : !selectedLedgerStudentId ? (
+            <div className="px-6 py-12 text-center">
+              <p className="text-sm font-semibold text-slate-700">Select a student to view their financial records.</p>
+            </div>
+          ) : pagedLedgerRecords.length ? (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1180px] border-collapse text-left text-sm">
+                <thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                  <tr><th className="px-4 py-3.5">Date</th><th className="px-4 py-3.5">Record</th><th className="px-4 py-3.5">Reference</th><th className="px-4 py-3.5">Amount</th><th className="px-4 py-3.5">Status</th><th className="px-4 py-3.5">Payment channel</th><th className="px-4 py-3.5">Documents</th><th className="px-4 py-3.5">Statement</th></tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-700">
+                  {pagedLedgerRecords.map((record) => {
+                    const account = accounts.find((item) => item.id === record.student_id);
+                    const receipt = paymentReceipts.find((item) => item.id === record.id)
+                      ?? (record.entry_type === 'payment' && record.status === 'paid' && (record.receipt_token || record.receipt_path)
+                        ? paymentReceiptFromLedger(record)
+                        : null);
+                    const selectedStatus = statusDrafts[record.id] ?? record.status;
+                    const needsReceipt = selectedStatus === 'paid' && !record.receipt_path;
+                    const canSaveStatus = selectedStatus !== record.status || needsReceipt;
+                    return (
+                      <tr key={`${record.entry_type}-${record.id}`} className="align-top transition-colors hover:bg-slate-50/70">
+                        <td className="whitespace-nowrap px-4 py-4 text-xs text-slate-500">{new Date(record.created_at).toLocaleString()}</td>
+                        <td className="min-w-[230px] px-4 py-4">
+                          <span className={`inline-flex rounded-full px-2 py-1 text-[10px] font-bold uppercase ${record.entry_type === 'charge' ? 'bg-amber-50 text-amber-800' : 'bg-blue-50 text-blue-800'}`}>{record.entry_type}</span>
+                          <p className="mt-2 font-semibold leading-5 text-slate-950">{record.description}</p>
+                          <p className="mt-1 text-xs text-slate-500">{formatRecordClassification(record)}</p>
+                        </td>
+                        <td className="max-w-[180px] break-all px-4 py-4 font-mono text-xs">{record.reference}</td>
+                        <td className="whitespace-nowrap px-4 py-4 font-mono text-sm font-bold text-slate-950">{formatMoney(record.amount, record.currency)}</td>
+                        <td className="min-w-[150px] px-4 py-4">
+                          <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${record.status === 'paid' || record.status === 'posted' ? 'bg-emerald-50 text-emerald-700' : record.status === 'pending' ? 'bg-amber-50 text-amber-800' : 'bg-slate-100 text-slate-600'}`}>{record.status}</span>
+                          {record.entry_type === 'payment' && (
+                            <div className="mt-3 space-y-2">
+                              <label className="sr-only" htmlFor={`ledger-transaction-status-${record.id}`}>Update transaction status</label>
+                              <select id={`ledger-transaction-status-${record.id}`} value={selectedStatus} onChange={(event) => setStatusDrafts((current) => ({ ...current, [record.id]: event.target.value as PaymentLedgerRecord['status'] }))} disabled={updatingPaymentId === record.id} className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-slate-700">
+                                <option value="posted">Posted</option><option value="pending">Pending</option><option value="paid">Paid</option><option value="failed">Failed</option><option value="void">Void</option>
+                              </select>
+                              {canSaveStatus && <button type="button" onClick={() => void handlePaymentStatusUpdate(record, selectedStatus)} disabled={updatingPaymentId !== null} className="w-full rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">{updatingPaymentId === record.id ? 'Saving…' : 'Save status'}</button>}
+                            </div>
+                          )}
+                        </td>
+                        <td className="min-w-[150px] px-4 py-4 text-xs text-slate-600">{record.gateway || '—'}{record.gateway_transaction_id && <span className="mt-1 block break-all font-mono text-[10px] text-slate-500">{record.gateway_transaction_id}</span>}</td>
+                        <td className="min-w-[170px] px-4 py-4">
+                          {record.entry_type === 'charge' ? record.invoice_path ? (
+                            <div className="flex flex-wrap gap-1.5">
+                              <button type="button" onClick={() => handleInvoiceFile(record, 'view')} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50" aria-label={`View invoice for ${record.reference}`}>
+                                <Eye className="h-3.5 w-3.5" />View
+                              </button>
+                              <button type="button" onClick={() => handleInvoiceFile(record, 'download')} className="inline-flex items-center gap-1 rounded-lg border border-blue-200 px-2.5 py-2 text-xs font-semibold text-blue-900 hover:bg-blue-50" aria-label={`Download invoice for ${record.reference}`}>
+                                <Download className="h-3.5 w-3.5" />PDF
+                              </button>
+                            </div>
+                          ) : record.status === 'posted' ? (
+                            <button type="button" onClick={() => void handleChargeInvoice(record)} disabled={invoiceActionId !== null} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 px-2.5 py-2 text-xs font-semibold text-blue-900 hover:bg-blue-50 disabled:opacity-50" aria-label={`Create invoice for ${record.reference}`}>
+                              {invoiceActionId === record.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}Create invoice
+                            </button>
+                          ) : <span className="text-xs text-slate-400">No invoice</span> : receipt ? (
+                            <div className="flex flex-wrap gap-1.5">
+                              <button type="button" onClick={() => void handleReceipt(receipt, 'view')} disabled={receiptAction?.id === receipt.id} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50" aria-label={`View receipt for ${record.reference}`}>
+                                {receiptAction?.id === receipt.id && receiptAction.mode === 'view' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Eye className="h-3.5 w-3.5" />}View
+                              </button>
+                              <button type="button" onClick={() => void handleReceipt(receipt, 'download')} disabled={receiptAction?.id === receipt.id} className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 px-2.5 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-50 disabled:opacity-50" aria-label={`Download receipt for ${record.reference}`}>
+                                {receiptAction?.id === receipt.id && receiptAction.mode === 'download' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}PDF
+                              </button>
+                            </div>
+                          ) : <span className="text-xs text-slate-400">{record.status === 'pending' ? 'After payment' : 'No receipt'}</span>}
+                        </td>
+                        <td className="px-4 py-4"><button type="button" disabled={!account} onClick={() => account && void openStatement(account)} className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg border border-blue-200 px-2.5 py-2 text-xs font-semibold text-blue-900 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50">Open <ArrowUpRight className="h-3.5 w-3.5" /></button></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="px-6 py-12 text-center">
+              <p className="text-sm font-semibold text-slate-700">{selectedStudentLedgerRecords.length ? 'No financial records match these filters.' : 'No financial records are available for this student.'}</p>
+              {selectedStudentLedgerRecords.length > 0 && <button type="button" onClick={() => { setLedgerSearch(''); setLedgerTypeFilter('all'); setLedgerStatusFilter('all'); setLedgerPage(1); }} className="mt-3 text-sm font-bold text-blue-800 hover:underline">Clear filters</button>}
+            </div>
+          )}
+          {filteredLedgerRecords.length > 0 && (
+            <footer className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 px-5 py-4 sm:px-6">
+              <p className="text-sm text-slate-500">Showing {(visibleLedgerPage - 1) * ledgerRowsPerPage + 1}–{Math.min(visibleLedgerPage * ledgerRowsPerPage, filteredLedgerRecords.length)} of {filteredLedgerRecords.length} matching records</p>
+              <div className="flex items-center gap-3">
+                <button type="button" disabled={visibleLedgerPage <= 1} onClick={() => setLedgerPage((current) => Math.max(1, current - 1))} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">Previous</button>
+                <span className="whitespace-nowrap text-sm font-semibold text-slate-600">Page {visibleLedgerPage} of {ledgerPageCount}</span>
+                <button type="button" disabled={visibleLedgerPage >= ledgerPageCount} onClick={() => setLedgerPage((current) => Math.min(ledgerPageCount, current + 1))} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">Next</button>
+              </div>
+            </footer>
+          )}
+            </section>
+          </div>
+        </section>
+      )}
+
+      {financeView === 'accounts' && (
+        <>
       <section className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm md:flex-row md:items-center md:justify-between">
         <label className="relative w-full max-w-md">
           <span className="sr-only">Search student accounts</span>
@@ -864,7 +1409,6 @@ export default function AdminPaymentsPage() {
             <option value="balance">Sort: Outstanding</option>
             <option value="paid">Sort: Paid amount</option>
           </select>
-          <span aria-label="Export unavailable" title="Export is not available yet" className="rounded-xl border border-slate-200 bg-white p-2 text-slate-400"><FileSpreadsheet className="h-4 w-4" /></span>
         </div>
       </section>
 
@@ -920,6 +1464,8 @@ export default function AdminPaymentsPage() {
           </div>
         </footer>
       </section>
+        </>
+      )}
 
       {manualPaymentOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => {
@@ -1015,25 +1561,36 @@ export default function AdminPaymentsPage() {
       )}
 
       {selectedAccount && (
-        <>
-          <button type="button" aria-label="Close statement" className="fixed inset-0 z-40 cursor-default bg-slate-900/40 backdrop-blur-[2px]" onClick={closeStatement} />
-          <aside aria-label={`Statement folder for ${selectedAccount.name}`} className="fixed inset-y-0 right-0 z-50 flex w-full max-w-[400px] flex-col border-l border-slate-200 bg-slate-50 shadow-2xl">
-            <header className="flex items-center justify-between border-b border-slate-200/80 bg-white p-4">
-              <div className="flex items-center gap-2"><Receipt className="h-4 w-4 text-slate-500" /><h2 className="text-xs font-black uppercase tracking-wider text-slate-900">Statement Folder: {selectedAccount.id}</h2></div>
-              <button type="button" onClick={closeStatement} aria-label="Close statement" className="rounded-lg border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50"><X className="h-3.5 w-3.5" /></button>
-            </header>
-            <div className="flex-1 space-y-6 overflow-y-auto p-5">
-              <section className="space-y-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
-                <div className="flex items-start justify-between border-b border-slate-100 pb-3">
+        <section aria-label={`Financial record for ${selectedAccount.name}`} className="fixed inset-0 z-[50] flex h-[100dvh] w-full flex-col bg-slate-50">
+            <header className="border-b border-slate-200 bg-white px-5 py-6 sm:px-8 sm:py-7">
+              <div className="mx-auto flex w-full max-w-screen-2xl flex-col gap-6">
+                <button type="button" onClick={closeStatement} aria-label={financeView === 'accounts' ? 'Back to student accounts' : 'Back to all financial records'} className="inline-flex w-fit items-center gap-1 rounded-lg px-2 py-1 text-sm font-bold text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"><ChevronLeft className="h-4 w-4" />{financeView === 'accounts' ? 'Back to student accounts' : 'Back to all records'}</button>
+                <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
                   <div>
-                    <h3 className="text-sm font-black tracking-tight text-slate-900">{selectedAccount.name}</h3>
-                    <span className="mt-1 inline-block rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-600">{selectedAccount.cohort || 'Cohort unavailable'} · Current term</span>
+                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-800">Finance / Student statement</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-3">
+                      <h1 className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">Financial record</h1>
+                      <span className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${getStatusBadge(selectedAccount.status)}`}>{selectedAccount.status}</span>
+                    </div>
+                    <p className="mt-2 text-sm text-slate-600">{selectedAccount.name} <span className="px-1 text-slate-300">·</span> Student ID {selectedAccount.id}</p>
+                    <p className="mt-1 text-xs text-slate-500">{selectedAccount.cohort || 'Cohort unavailable'} <span className="px-1 text-slate-300">·</span> Current term</p>
                   </div>
-                  <span className={`inline-block rounded-full px-2 py-0.5 text-[9px] font-bold ${getStatusBadge(selectedAccount.status)}`}>{selectedAccount.status}</span>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={openPaymentForSelectedAccount} className="inline-flex items-center gap-2 rounded-xl bg-blue-900 px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-blue-800"><CreditCard className="h-4 w-4" />Create payment</button>
+                    <button type="button" onClick={downloadStatementRecords} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50"><Download className="h-4 w-4" />Download CSV</button>
+                    <button type="button" onClick={printStatementRecords} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50"><Printer className="h-4 w-4" />Print all</button>
+                  </div>
                 </div>
+              </div>
+            </header>
+            <div className="mx-auto grid w-full max-w-screen-2xl flex-1 grid-cols-1 content-start gap-8 overflow-y-auto p-5 sm:p-8 xl:grid-cols-2">
+              {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-800 xl:col-span-2">{error}</div>}
+              {notice && <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-800 xl:col-span-2">{notice}</div>}
+              <section className="space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8 xl:col-span-2" aria-label="Account balance summary">
                 {(() => {
-                  const charges = selectedAccount.records.filter((record) => record.entry_type === 'charge' && record.status === 'posted');
-                  const tuitionCharges = charges.filter(isTuitionCharge).reduce((sum, charge) => sum + charge.amount, 0);
+                  const charges = selectedAccount.records.filter((record) => record.entry_type === 'charge');
+                  const postedCharges = charges.filter((record) => record.status === 'posted');
+                  const tuitionCharges = postedCharges.filter(isTuitionCharge).reduce((sum, charge) => sum + charge.amount, 0);
                   const tuitionPaid = selectedAccount.records.filter(isAccountPayment).reduce((sum, payment) => sum + payment.amount, 0);
                   const tuitionDue = Math.max(0, tuitionCharges - tuitionPaid);
                   const liabilityBalances = charges.filter((charge) => !isTuitionCharge(charge)).map((charge) => {
@@ -1043,125 +1600,187 @@ export default function AdminPaymentsPage() {
                     );
                     const paid = relatedPayments.filter((payment) => payment.status === 'paid').reduce((sum, payment) => sum + payment.amount, 0);
                     const pending = relatedPayments.filter((payment) => payment.status === 'pending').reduce((sum, payment) => sum + payment.amount, 0);
-                    return { charge, paid, pending, due: Math.max(0, charge.amount - paid) };
+                    return { charge, paid, pending, due: charge.status === 'posted' ? Math.max(0, charge.amount - paid) : 0 };
                   });
                   const liabilitiesDue = liabilityBalances.reduce((sum, item) => sum + item.due, 0);
                   const totalDue = tuitionDue + liabilitiesDue;
                   return (
-                    <>
-                      <div className="grid gap-2 sm:grid-cols-3">
-                        <div className="rounded-xl bg-slate-50 p-3"><p className="text-[9px] font-bold uppercase text-slate-500">Tuition due</p><p className="mt-1 font-mono text-xs font-black text-slate-900">{formatMoney(tuitionDue, selectedAccount.currency)}</p></div>
-                        <div className="rounded-xl bg-amber-50 p-3"><p className="text-[9px] font-bold uppercase text-amber-800">Liabilities due</p><p className="mt-1 font-mono text-xs font-black text-slate-900">{formatMoney(liabilitiesDue, selectedAccount.currency)}</p></div>
-                        <div className="rounded-xl bg-rose-50 p-3"><p className="text-[9px] font-bold uppercase text-rose-700">Total outstanding</p><p className="mt-1 font-mono text-xs font-black text-rose-800">{formatMoney(totalDue, selectedAccount.currency)}</p></div>
-                      </div>
-                      <div className="space-y-1.5 text-xs">
-                  <div className="flex justify-between text-[9px] font-bold uppercase tracking-wider text-slate-400"><span>Description Allocation</span><span>Total Amount</span></div>
-                  {charges.map((charge) => {
-                    const liability = liabilityBalances.find((item) => item.charge.id === charge.id);
-                    return (
-                    <div key={charge.id} className="flex justify-between gap-3 border-b border-slate-50 py-2 font-medium text-slate-700 last:border-0">
-                      <span className="min-w-0">
-                        <span className="mb-1 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-slate-600">{getLiabilityLabel(charge)}</span>
-                        <span className="block">{charge.description}</span>
-                        <span className="mt-0.5 block text-[9px] text-slate-400">{new Date(charge.created_at).toLocaleDateString()} · {charge.term || 'No fee period'} · {charge.reference}</span>
-                        {liability && <span className="mt-1 block text-[9px] text-slate-500">Paid {formatMoney(liability.paid, charge.currency)} · Pending {formatMoney(liability.pending, charge.currency)} · Due {formatMoney(liability.due, charge.currency)}</span>}
-                        <button type="button" onClick={() => void handleChargeInvoice(charge)} disabled={invoiceActionId !== null} className="mt-2 inline-flex items-center gap-1 rounded-lg border border-blue-200 px-2 py-1 text-[9px] font-bold text-blue-900 hover:bg-blue-50 disabled:opacity-50">
-                          {invoiceActionId === charge.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileText className="h-3 w-3" />}Generate & email invoice
-                        </button>
-                      </span>
-                      <span className="shrink-0 font-mono font-bold">{formatMoney(charge.amount, charge.currency)}</span>
+                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                      <div className="rounded-2xl border border-slate-100 bg-slate-50 p-5"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Tuition due</p><p className="mt-3 text-xl font-black text-slate-950">{formatMoney(tuitionDue, selectedAccount.currency)}</p></div>
+                      <div className="rounded-2xl border border-amber-100 bg-amber-50 p-5"><p className="text-xs font-bold uppercase tracking-wide text-amber-800">Liabilities due</p><p className="mt-3 text-xl font-black text-slate-950">{formatMoney(liabilitiesDue, selectedAccount.currency)}</p></div>
+                      <div className="rounded-2xl border border-rose-100 bg-rose-50 p-5"><p className="text-xs font-bold uppercase tracking-wide text-rose-700">Total outstanding</p><p className="mt-3 text-xl font-black text-rose-800">{formatMoney(totalDue, selectedAccount.currency)}</p></div>
+                      <div className="rounded-2xl border border-slate-100 bg-white p-5"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Posted charges</p><p className="mt-3 text-lg font-black text-slate-950">{formatMoney(selectedAccount.invoiced, selectedAccount.currency)}</p><p className="mt-2 text-xs text-slate-500">{postedCharges.length.toLocaleString()} posted charges</p></div>
+                      <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-5"><p className="text-xs font-bold uppercase tracking-wide text-emerald-800">Payments applied</p><p className="mt-3 text-lg font-black text-slate-950">{formatMoney(selectedAccount.credited, selectedAccount.currency)}</p><p className="mt-2 text-xs text-slate-500">Confirmed funds credited to the account</p></div>
+                      <div className="rounded-2xl border border-slate-100 bg-white p-5"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Ledger entries</p><p className="mt-3 text-lg font-black text-slate-950">{selectedAccount.records.length.toLocaleString()}</p><p className="mt-2 text-xs text-slate-500">{charges.length.toLocaleString()} charge records, including non-posted entries</p></div>
                     </div>
-                    );
-                  })}
-                  {!charges.length && <p className="py-1 text-slate-500">No posted charges or liabilities.</p>}
-                  {documentError && <p role="alert" className="rounded-lg bg-red-50 p-2 text-[10px] font-semibold text-red-800">{documentError}</p>}
-                  <div className="space-y-1 border-t border-slate-100 pt-2 font-bold">
-                    <div className="flex justify-between text-[11px] text-slate-500"><span>Gross Invoiced Balance:</span><span className="font-mono">{formatMoney(selectedAccount.invoiced, selectedAccount.currency)}</span></div>
-                    <div className="flex justify-between text-[11px] text-emerald-600"><span>Account Payments Applied:</span><span className="font-mono">− {formatMoney(selectedAccount.credited, selectedAccount.currency)}</span></div>
-                    <div className="flex justify-between border-t border-dashed border-slate-200 pt-2 text-xs text-slate-900"><span>Net Arrears Outstanding:</span><span className="font-mono font-black text-rose-600">{formatMoney(totalDue, selectedAccount.currency)}</span></div>
-                  </div>
-                </div>
-                    </>
                   );
                 })()}
+                {documentError && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800">{documentError}</p>}
               </section>
 
-              <section className="space-y-3">
-                <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Payment transactions &amp; status</h3>
-                {selectedAccount.records.filter((record) => record.entry_type === 'payment').length ? (
-                  selectedAccount.records.filter((record) => record.entry_type === 'payment').map((transaction) => {
-                    const selectedStatus = statusDrafts[transaction.id] ?? transaction.status;
-                    const needsReceipt = selectedStatus === 'paid' && !transaction.receipt_path;
-                    const canSave = selectedStatus !== transaction.status || needsReceipt;
-                    return (
-                      <article key={transaction.id} className="space-y-2 rounded-xl border border-slate-200 bg-white p-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="truncate font-mono text-[10px] font-bold text-slate-900">{transaction.reference}</p>
-                            <p className="mt-0.5 truncate text-[10px] text-slate-600">{transaction.description}</p>
-                            <p className="mt-1 text-[9px] text-slate-400">{new Date(transaction.created_at).toLocaleString()} · {formatMoney(transaction.amount, transaction.currency)}</p>
-                            <p className="mt-1 text-[9px] font-bold uppercase text-slate-500">{transaction.entry_type} · {transaction.status}</p>
-                            <p className="mt-1 text-[9px] text-slate-500">{transaction.gateway || 'Payment method unavailable'}{transaction.gateway_transaction_id ? ` · Provider ref ${transaction.gateway_transaction_id}` : ''}</p>
-                          </div>
-                          <span className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold uppercase text-slate-600">{transaction.payment_purpose}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <label className="sr-only" htmlFor={`transaction-status-${transaction.id}`}>Update transaction status</label>
-                          <select id={`transaction-status-${transaction.id}`} value={selectedStatus} onChange={(event) => setStatusDrafts((current) => ({ ...current, [transaction.id]: event.target.value as PaymentLedgerRecord['status'] }))} disabled={updatingPaymentId === transaction.id} className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2 py-2 text-[10px] font-bold text-slate-700">
-                            <option value="posted">Posted</option><option value="pending">Pending</option><option value="paid">Paid</option><option value="failed">Failed</option><option value="void">Void</option>
-                          </select>
-                          <button type="button" onClick={() => void handlePaymentStatusUpdate(transaction, selectedStatus)} disabled={!canSave || updatingPaymentId !== null} className="rounded-lg bg-slate-900 px-3 py-2 text-[9px] font-black uppercase text-white disabled:cursor-not-allowed disabled:opacity-40">
-                            {updatingPaymentId === transaction.id ? 'Saving…' : canSave ? 'Save status' : 'Saved'}
-                          </button>
-                        </div>
-                        {transaction.status === 'paid' && transaction.receipt_path && <p className="text-[9px] font-semibold text-emerald-700">Receipt PDF is attached to this transaction.</p>}
-                      </article>
-                    );
-                  })
-                ) : <div className="rounded-xl border border-slate-200 bg-white p-4 text-center text-xs font-semibold text-slate-500">No payment transactions have been recorded.</div>}
-              </section>
-
-              <section className="space-y-3">
-                <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Confirmed Payment Receipts</h3>
-                {receiptError && paymentReceipts.length > 0 && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-800">{receiptError}</div>}
-                {loadingReceipts ? (
-                  <div className="rounded-xl border border-slate-200 bg-white p-5 text-center text-xs font-semibold text-slate-500"><Loader2 className="mr-2 inline h-4 w-4 animate-spin" />Loading confirmed receipts...</div>
-                ) : receiptError ? (
-                  <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-xs text-red-800">{receiptError}</div>
-                ) : paymentReceipts.length ? (
-                  <div className="space-y-2.5">
-                    {paymentReceipts.map((receipt) => (
-                      <article key={receipt.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-                        <div className="min-w-0 space-y-0.5">
-                          <div className="flex items-center gap-2"><span className="truncate font-mono text-[11px] font-bold text-slate-900">{receipt.reference}</span><span className="rounded border border-emerald-100 bg-emerald-50 px-1 py-0.5 text-[9px] font-bold text-emerald-700">Verified</span></div>
-                          <p className="text-[10px] font-medium text-slate-400">{new Date(receipt.created_at).toLocaleString()} via <span className="font-semibold text-slate-600">{receipt.gateway || 'Emit Academy'}</span></p>
-                          <p className="truncate text-[10px] text-slate-500">{receipt.paid_for}</p>
-                        </div>
-                        <div className="shrink-0 text-right">
-                          <p className="font-mono text-xs font-black text-emerald-700">{formatMoney(receipt.amount, receipt.currency)}</p>
-                          <div className="mt-1 flex flex-wrap justify-end gap-1">
-                            <button type="button" onClick={() => void handleReceipt(receipt, 'view')} disabled={receiptAction?.id === receipt.id} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-[10px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
-                              {receiptAction?.id === receipt.id && receiptAction.mode === 'view' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Eye className="h-3 w-3" />}View
-                            </button>
-                            <button type="button" onClick={() => void handleReceipt(receipt, 'download')} disabled={receiptAction?.id === receipt.id} className="inline-flex items-center gap-1 rounded-lg border border-blue-200 px-2 py-1 text-[10px] font-bold text-blue-900 hover:bg-blue-50 disabled:opacity-50">
-                              {receiptAction?.id === receipt.id && receiptAction.mode === 'download' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}PDF
-                            </button>
-                          </div>
-                        </div>
-                      </article>
-                    ))}
+              <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm xl:col-span-2" aria-label="All financial ledger records">
+                <header className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 px-6 py-5 sm:px-7">
+                  <div>
+                    <h3 className="text-lg font-black text-slate-950">Complete financial ledger</h3>
+                    <p className="mt-1.5 text-sm text-slate-500">Review charges and payment transactions, update payment status, and access invoices or receipts.</p>
+                  </div>
+                  <span className="rounded-full bg-slate-100 px-3 py-1.5 text-sm font-bold text-slate-700">{selectedAccount.records.length.toLocaleString()} records</span>
+                </header>
+                {receiptError && <p role="alert" className="mx-6 mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 sm:mx-7">{receiptError}</p>}
+                <div className="grid gap-3 border-b border-slate-100 p-5 sm:grid-cols-2 sm:p-6 xl:grid-cols-[minmax(240px,1fr)_repeat(3,minmax(150px,190px))]">
+                  <label className="relative block">
+                    <span className="sr-only">Search financial records</span>
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="search"
+                      value={statementSearch}
+                      onChange={(event) => { setStatementSearch(event.target.value); setStatementPage(1); }}
+                      placeholder="Search description, reference, amount…"
+                      className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="sr-only">Filter by record type</span>
+                    <select value={statementTypeFilter} onChange={(event) => { setStatementTypeFilter(event.target.value as typeof statementTypeFilter); setStatementPage(1); }} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
+                      <option value="all">All record types</option>
+                      <option value="charge">Charges</option>
+                      <option value="payment">Payments</option>
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="sr-only">Filter by payment status</span>
+                    <select value={statementStatusFilter} onChange={(event) => { setStatementStatusFilter(event.target.value as typeof statementStatusFilter); setStatementPage(1); }} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
+                      <option value="all">All statuses</option>
+                      <option value="posted">Posted</option>
+                      <option value="pending">Pending</option>
+                      <option value="paid">Paid</option>
+                      <option value="failed">Failed</option>
+                      <option value="void">Void</option>
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="sr-only">Sort financial records</span>
+                    <select value={statementSortBy} onChange={(event) => { setStatementSortBy(event.target.value as typeof statementSortBy); setStatementPage(1); }} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
+                      <option value="newest">Sort: Newest first</option>
+                      <option value="oldest">Sort: Oldest first</option>
+                      <option value="description">Sort: Description A–Z</option>
+                      <option value="status">Sort: Status</option>
+                    </select>
+                  </label>
+                  <label className="flex items-center gap-2 text-sm font-medium text-slate-500 sm:col-span-2 xl:col-span-4">
+                    Rows per page
+                    <select value={statementRowsPerPage} onChange={(event) => { setStatementRowsPerPage(Number(event.target.value)); setStatementPage(1); }} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
+                      <option value={10}>10</option>
+                      <option value={25}>25</option>
+                      <option value={50}>50</option>
+                    </select>
+                  </label>
+                </div>
+                {filteredStatementRecords.length ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[1250px] border-collapse text-left text-sm">
+                      <thead className="bg-slate-50 text-[11px] font-black uppercase tracking-wider text-slate-500">
+                        <tr>
+                          <th className="px-5 py-4">Date</th>
+                          <th className="px-5 py-4">Financial record</th>
+                          <th className="px-5 py-4">Reference</th>
+                          <th className="px-5 py-4">Amount</th>
+                          <th className="px-5 py-4">Status</th>
+                          <th className="px-5 py-4">Payment method / provider reference</th>
+                          <th className="px-5 py-4">Documents</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-slate-700">
+                        {pagedStatementRecords.map((record) => {
+                          const receipt = paymentReceipts.find((item) => item.id === record.id);
+                          const selectedStatus = statusDrafts[record.id] ?? record.status;
+                          const needsReceipt = record.entry_type === 'payment' && selectedStatus === 'paid' && !record.receipt_path;
+                          const canSaveStatus = selectedStatus !== record.status || needsReceipt;
+                          return (
+                            <tr key={`${record.entry_type}-${record.id}`} className="align-top transition-colors hover:bg-slate-50/70">
+                              <td className="whitespace-nowrap px-5 py-5 text-xs text-slate-500">{new Date(record.created_at).toLocaleString()}</td>
+                              <td className="min-w-[260px] px-5 py-5">
+                                <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${record.entry_type === 'charge' ? 'bg-amber-50 text-amber-800' : 'bg-blue-50 text-blue-800'}`}>{record.entry_type}</span>
+                                <p className="mt-2 font-semibold leading-6 text-slate-950">{record.description}</p>
+                                <p className="mt-1.5 text-xs text-slate-500">{record.payment_purpose} · {record.liability_type || record.assessment_type || record.term || '—'}</p>
+                              </td>
+                              <td className="max-w-[220px] break-all px-5 py-5 font-mono text-xs">{record.reference}</td>
+                              <td className="whitespace-nowrap px-5 py-5 font-mono text-sm font-bold text-slate-950">{formatMoney(record.amount, record.currency)}</td>
+                              <td className="min-w-[180px] px-5 py-5">
+                                <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-bold uppercase">{record.status}</span>
+                                {record.entry_type === 'payment' && (
+                                  <div className="mt-3 space-y-2">
+                                    <label className="sr-only" htmlFor={`transaction-status-${record.id}`}>Update transaction status</label>
+                                    <select id={`transaction-status-${record.id}`} value={selectedStatus} onChange={(event) => setStatusDrafts((current) => ({ ...current, [record.id]: event.target.value as PaymentLedgerRecord['status'] }))} disabled={updatingPaymentId === record.id} className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-slate-700">
+                                      <option value="posted">Posted</option><option value="pending">Pending</option><option value="paid">Paid</option><option value="failed">Failed</option><option value="void">Void</option>
+                                    </select>
+                                    {canSaveStatus && <button type="button" onClick={() => void handlePaymentStatusUpdate(record, selectedStatus)} disabled={updatingPaymentId !== null} className="w-full rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
+                                      {updatingPaymentId === record.id ? 'Saving…' : 'Save status'}
+                                    </button>}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="min-w-[200px] px-5 py-5 text-xs text-slate-600">{record.gateway || '—'}{record.gateway_transaction_id && <span className="mt-1.5 block break-all font-mono text-[11px] text-slate-500">{record.gateway_transaction_id}</span>}</td>
+                              <td className="min-w-[170px] px-5 py-5">
+                                {record.entry_type === 'charge' ? record.invoice_path ? (
+                                  <div className="flex flex-wrap gap-2">
+                                    <button type="button" onClick={() => handleInvoiceFile(record, 'view')} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
+                                      <Eye className="h-4 w-4" />View
+                                    </button>
+                                    <button type="button" onClick={() => handleInvoiceFile(record, 'download')} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 px-3 py-2 text-xs font-bold text-blue-900 hover:bg-blue-50">
+                                      <Download className="h-4 w-4" />PDF
+                                    </button>
+                                  </div>
+                                ) : record.status === 'posted' ? (
+                                  <button type="button" onClick={() => void handleChargeInvoice(record)} disabled={invoiceActionId !== null} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 px-3 py-2 text-xs font-bold text-blue-900 hover:bg-blue-50 disabled:opacity-50">
+                                    {invoiceActionId === record.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}Create invoice
+                                  </button>
+                                ) : <span className="text-xs text-slate-400">No invoice</span> : receipt ? (
+                                  <div className="flex flex-wrap gap-2">
+                                    <button type="button" onClick={() => void handleReceipt(receipt, 'view')} disabled={receiptAction?.id === receipt.id} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+                                      {receiptAction?.id === receipt.id && receiptAction.mode === 'view' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}View
+                                    </button>
+                                    <button type="button" onClick={() => void handleReceipt(receipt, 'download')} disabled={receiptAction?.id === receipt.id} className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 px-3 py-2 text-xs font-bold text-emerald-800 hover:bg-emerald-50 disabled:opacity-50">
+                                      {receiptAction?.id === receipt.id && receiptAction.mode === 'download' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}PDF
+                                    </button>
+                                  </div>
+                                ) : loadingReceipts && record.status === 'paid' ? <span className="text-xs text-slate-400">Loading receipt…</span> : <span className="text-xs text-slate-400">No receipt</span>}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 ) : (
-                  <div className="rounded-xl border border-slate-200 bg-white p-4 text-center text-xs font-semibold text-slate-500">No confirmed payment receipts are available for this student.</div>
+                  <div className="px-6 py-12 text-center">
+                    <p className="text-sm font-semibold text-slate-700">{selectedAccount.records.length ? 'No records match these filters.' : 'No financial records are available for this account.'}</p>
+                    {selectedAccount.records.length > 0 && <button type="button" onClick={() => { setStatementSearch(''); setStatementTypeFilter('all'); setStatementStatusFilter('all'); setStatementPage(1); }} className="mt-3 text-sm font-bold text-blue-800 hover:underline">Clear filters</button>}
+                  </div>
+                )}
+                {filteredStatementRecords.length > 0 && (
+                  <footer className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 px-5 py-4 sm:px-6">
+                    <p className="text-sm text-slate-500">
+                      Showing {(visibleStatementPage - 1) * statementRowsPerPage + 1}–{Math.min(visibleStatementPage * statementRowsPerPage, filteredStatementRecords.length)} of {filteredStatementRecords.length} matching records
+                      {filteredStatementRecords.length !== selectedAccount.records.length && ` · ${selectedAccount.records.length} total`}
+                    </p>
+                    <div className="flex items-center gap-3">
+                      <button type="button" disabled={visibleStatementPage <= 1} onClick={() => setStatementPage((current) => Math.max(1, current - 1))} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">Previous</button>
+                      <span className="whitespace-nowrap text-sm font-semibold text-slate-600">Page {visibleStatementPage} of {statementPageCount}</span>
+                      <button type="button" disabled={visibleStatementPage >= statementPageCount} onClick={() => setStatementPage((current) => Math.min(statementPageCount, current + 1))} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">Next</button>
+                    </div>
+                  </footer>
                 )}
               </section>
             </div>
-            <footer className="grid grid-cols-2 gap-3 border-t border-slate-200/80 bg-white p-4">
-              <button type="button" onClick={() => window.print()} className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-50"><Printer className="h-3.5 w-3.5" />Print Statement</button>
-              <button type="button" disabled title="Email dispatch is not configured" className="inline-flex cursor-not-allowed items-center justify-center gap-1.5 rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white opacity-60"><Send className="h-3.5 w-3.5" />Dispatch via Email</button>
+            <footer className="mx-auto flex w-full max-w-screen-2xl flex-wrap items-center justify-between gap-4 border-t border-slate-200 bg-white px-5 py-4 sm:px-8">
+              <p className="text-sm text-slate-500">Complete statement · {selectedAccount.records.length.toLocaleString()} ledger records</p>
+              <div className="flex flex-wrap gap-3">
+                <button type="button" onClick={downloadStatementRecords} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50"><Download className="h-4 w-4" />Download all records</button>
+                <button type="button" onClick={printStatementRecords} className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-slate-800"><Printer className="h-4 w-4" />Print all records</button>
+              </div>
             </footer>
-          </aside>
-        </>
+        </section>
       )}
     </main>
   );

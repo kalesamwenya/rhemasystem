@@ -1,7 +1,8 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import { Activity, CalendarDays, CheckSquare, CircleDollarSign, GraduationCap, LifeBuoy, RefreshCw, Users } from 'lucide-react';
+import { Activity, ArrowUpRight, Banknote, CalendarDays, CheckSquare, CircleDollarSign, FileSpreadsheet, GraduationCap, LifeBuoy, RefreshCw, Users, Wallet } from 'lucide-react';
 import { CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { api } from '@/lib/api';
 import { isMediaOrItDepartment } from '@/lib/admin-access';
@@ -21,10 +22,28 @@ interface Metric {
   records: Record<string, unknown>[];
 }
 
+function formatFinancialTotal(records: Record<string, unknown>[], include: (record: Record<string, unknown>) => boolean): string {
+  const totals = new Map<string, number>();
+  records.filter(include).forEach((record) => {
+    const amount = Number(record.amount);
+    const currency = typeof record.currency === 'string' && record.currency ? record.currency : 'ZMW';
+    if (Number.isFinite(amount)) totals.set(currency, (totals.get(currency) ?? 0) + amount);
+  });
+  if (!totals.size) return new Intl.NumberFormat('en-ZM', { style: 'currency', currency: 'ZMW' }).format(0);
+  return [...totals.entries()].map(([currency, amount]) => {
+    try {
+      return new Intl.NumberFormat('en-ZM', { style: 'currency', currency, maximumFractionDigits: 2 }).format(amount);
+    } catch {
+      return `${currency} ${amount.toFixed(2)}`;
+    }
+  }).join(' · ');
+}
+
 const metricDefinitions: Record<string, Array<{ label: string; icon: typeof Users; load: () => Promise<unknown> }>> = {
   finance: [
-    { label: 'Student payment records', icon: CircleDollarSign, load: () => api.students.adminPaymentLedger() },
-    { label: 'Store purchases', icon: Activity, load: () => api.purchases.list() },
+    { label: 'Student finance ledger', icon: CircleDollarSign, load: () => api.students.adminPaymentLedger() },
+    { label: 'Budget allocations', icon: FileSpreadsheet, load: () => api.finance.budgets() },
+    { label: 'Expenditure records', icon: Banknote, load: () => api.finance.expenditures() },
   ],
   registrar: [
     { label: 'Student records', icon: Users, load: () => api.students.adminRoster() },
@@ -164,10 +183,62 @@ export default function AdminDashboard() {
   const isMediaItAdmin = profile
     ? profile.admin_role.toLowerCase() === 'it' || isMediaOrItDepartment(profile.department)
     : false;
-  const title = isMediaItAdmin
-    ? 'Media & IT Dashboard'
-    : department === 'director' ? 'Director Dashboard' : department ? `${departmentTitles[department]} Dashboard` : 'Administrator Dashboard';
   const availableMetrics = metrics.filter((metric) => metric.value !== null);
+  const studentLedger = metrics.find((metric) => metric.label === 'Student finance ledger')?.records ?? [];
+  const budgetRecords = metrics.find((metric) => metric.label === 'Budget allocations')?.records ?? [];
+  const expenditureRecords = metrics.find((metric) => metric.label === 'Expenditure records')?.records ?? [];
+  const financeLinks = [
+    { label: 'Student accounts & payment ledger', href: '/admin/payments', icon: CircleDollarSign },
+    { label: 'Financial reports', href: '/admin/financials', icon: Activity },
+    { label: 'Budgets', href: '/admin/budgets', icon: FileSpreadsheet },
+    { label: 'Expenditures', href: '/admin/expenditures', icon: Banknote },
+    { label: 'Activity access requests', href: '/admin/activity-requests', icon: Wallet },
+    { label: 'Store purchases', href: '/admin/store/purchases', icon: ArrowUpRight },
+  ];
+  const financeSummaries = [
+    {
+      label: 'Confirmed payments',
+      value: formatFinancialTotal(studentLedger, (record) => record.entry_type === 'payment' && record.status === 'paid'),
+      detail: 'Verified student payments in the ledger',
+      icon: CircleDollarSign,
+      source: metrics.find((metric) => metric.label === 'Student finance ledger'),
+    },
+    {
+      label: 'Posted charges',
+      value: formatFinancialTotal(studentLedger, (record) => record.entry_type === 'charge' && record.status === 'posted'),
+      detail: 'Student charges recorded as posted',
+      icon: Activity,
+      source: metrics.find((metric) => metric.label === 'Student finance ledger'),
+    },
+    {
+      label: 'Payments awaiting confirmation',
+      value: formatFinancialTotal(studentLedger, (record) => record.entry_type === 'payment' && record.status === 'pending'),
+      detail: `${studentLedger.filter((record) => record.entry_type === 'payment' && record.status === 'pending').length.toLocaleString()} pending ledger transactions`,
+      icon: Wallet,
+      source: metrics.find((metric) => metric.label === 'Student finance ledger'),
+    },
+    {
+      label: 'Active budget allocations',
+      value: formatFinancialTotal(budgetRecords, (record) => record.status === 'active'),
+      detail: `${budgetRecords.filter((record) => record.status === 'active').length.toLocaleString()} active budgets`,
+      icon: FileSpreadsheet,
+      source: metrics.find((metric) => metric.label === 'Budget allocations'),
+    },
+    {
+      label: 'Pending expenditures',
+      value: formatFinancialTotal(expenditureRecords, (record) => record.status === 'pending'),
+      detail: `${expenditureRecords.filter((record) => record.status === 'pending').length.toLocaleString()} awaiting review`,
+      icon: Banknote,
+      source: metrics.find((metric) => metric.label === 'Expenditure records'),
+    },
+    {
+      label: 'Paid expenditures',
+      value: formatFinancialTotal(expenditureRecords, (record) => record.status === 'paid'),
+      detail: `${expenditureRecords.filter((record) => record.status === 'paid').length.toLocaleString()} recorded as paid`,
+      icon: CircleDollarSign,
+      source: metrics.find((metric) => metric.label === 'Expenditure records'),
+    },
+  ];
   const monthlyActivity = getMonthlyActivity(availableMetrics);
   const hasMonthlyActivity = availableMetrics.some((metric) => metric.records.some((record) => {
     const timestamp = record.created_at ?? record.createdAt;
@@ -230,7 +301,66 @@ export default function AdminDashboard() {
 
           {department && (
             <>
-              {isMediaItAdmin ? (
+              {department === 'finance' ? (
+                <section aria-label="Finance department dashboard" className="space-y-8">
+                  <header className="flex flex-wrap items-end justify-between gap-6 rounded-2xl border border-slate-200 bg-white p-7 shadow-sm sm:p-8">
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-[0.18em] text-red-700">Finance department</p>
+                      <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">Financial overview</h1>
+                      <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">Student collections, posted charges, budget allocations, and expenditure activity.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void loadDashboard()}
+                      disabled={loading}
+                      className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-wait disabled:opacity-70"
+                    >
+                      <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                      Refresh finances
+                    </button>
+                  </header>
+                  <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+                    {financeSummaries.map((summary) => {
+                      const Icon = summary.icon;
+                      return (
+                        <article key={summary.label} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-7">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-bold text-slate-600">{summary.label}</p>
+                              {loading ? (
+                                <div className="mt-4 h-8 w-36 animate-pulse rounded bg-slate-100" />
+                              ) : summary.source?.error ? (
+                                <p className="mt-2 text-sm font-bold text-amber-800">Unavailable</p>
+                              ) : (
+                                <p className="mt-3 text-2xl font-black tracking-tight text-slate-950">{summary.value}</p>
+                              )}
+                            </div>
+                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-rose-800"><Icon className="h-5 w-5" /></span>
+                          </div>
+                          <p className="mt-3 text-sm leading-5 text-slate-500">{summary.source?.error || summary.detail}</p>
+                        </article>
+                      );
+                    })}
+                  </div>
+                  <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8" aria-label="Finance workspace links">
+                    <div className="mb-6">
+                      <h2 className="text-lg font-black text-slate-900">Finance workspaces</h2>
+                      <p className="mt-2 text-sm leading-6 text-slate-500">Open the detailed records and workflows for follow-up and reconciliation.</p>
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                      {financeLinks.map((item) => {
+                        const Icon = item.icon;
+                        return (
+                          <Link key={item.href} href={item.href} className="flex min-h-16 items-center justify-between gap-4 rounded-xl border border-slate-200 px-5 py-4 text-sm font-bold text-slate-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-900">
+                            <span className="flex items-center gap-3"><Icon className="h-5 w-5 shrink-0" />{item.label}</span>
+                            <ArrowUpRight className="h-4 w-4 shrink-0" />
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </section>
+                </section>
+              ) : isMediaItAdmin ? (
                 <section aria-label="Department summaries" className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                   <div className="border-b border-slate-100 px-5 py-3">
                     <h2 className="text-sm font-bold text-slate-900">Workspace summary</h2>
@@ -285,7 +415,7 @@ export default function AdminDashboard() {
                 </section>
               )}
 
-              {!isMediaItAdmin && <section aria-label="Live dashboard charts" className="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
+              {!isMediaItAdmin && department !== 'finance' && <section aria-label="Live dashboard charts" className="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
                 <article className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
                   <div className="flex items-start justify-between gap-3">
                     <div>
