@@ -716,6 +716,7 @@ export default function AdminPaymentsPage() {
   };
 
   const handleReceipt = async (receipt: PaymentReceiptData & { id: number }, mode: 'view' | 'download') => {
+    if (receiptAction) return;
     setReceiptAction({ id: receipt.id, mode });
     setReceiptError('');
     const receiptWindow = window.open('about:blank', '_blank');
@@ -730,30 +731,30 @@ export default function AdminPaymentsPage() {
         ?? selectedStudentLedgerRecords.find((record) => record.id === receipt.id)
         ?? records.find((record) => record.id === receipt.id);
       if (!transaction) throw new Error('The payment record could not be found.');
-
-      let savedTransaction = transaction;
-      if (!savedTransaction.receipt_path) {
-        if (savedTransaction.status !== 'paid' || !savedTransaction.receipt_token) {
-          throw new Error('A saved receipt is not available for this payment.');
-        }
-        const pdf = await createPaymentReceiptPdf(receipt);
-        const formData = new FormData();
-        formData.append('payment_id', String(savedTransaction.id));
-        formData.append('status', 'paid');
-        formData.append('receipt_token', savedTransaction.receipt_token);
-        formData.append('receipt_file', pdf, `Rhema-Receipt-${savedTransaction.reference.replace(/[^a-z0-9_-]/gi, '-')}.pdf`);
-        const response = await api.students.updateAdminPaymentStatus(formData) as {
-          data: PaymentLedgerRecord;
-          message: string;
-        };
-        savedTransaction = response.data;
-        if (!savedTransaction.receipt_path) throw new Error('The receipt was generated but was not saved to the payment record.');
-        setRecords((current) => current.map((record) => record.id === savedTransaction.id ? savedTransaction : record));
-        setSelectedAccount((current) => current ? {
-          ...current,
-          records: current.records.map((record) => record.id === savedTransaction.id ? savedTransaction : record),
-        } : current);
+      if (transaction.status !== 'paid' || !transaction.receipt_token) {
+        throw new Error('A verified payment is required to generate its receipt.');
       }
+
+      const pdf = await createPaymentReceiptPdf({
+        ...receipt,
+        receipt_token: transaction.receipt_token,
+      });
+      const formData = new FormData();
+      formData.append('payment_id', String(transaction.id));
+      formData.append('status', 'paid');
+      formData.append('receipt_token', transaction.receipt_token);
+      formData.append('receipt_file', pdf, `Rhema-Receipt-${transaction.reference.replace(/[^a-z0-9_-]/gi, '-')}.pdf`);
+      const response = await api.students.updateAdminPaymentStatus(formData) as {
+        data: PaymentLedgerRecord;
+        message: string;
+      };
+      const savedTransaction = response.data;
+      if (!savedTransaction.receipt_path) throw new Error('The receipt was generated but was not saved to the payment record.');
+      setRecords((current) => current.map((record) => record.id === savedTransaction.id ? savedTransaction : record));
+      setSelectedAccount((current) => current ? {
+        ...current,
+        records: current.records.map((record) => record.id === savedTransaction.id ? savedTransaction : record),
+      } : current);
       receiptWindow.location.replace(api.students.adminPaymentReceiptUrl(
         savedTransaction.id,
         mode === 'view' ? 'inline' : 'attachment',

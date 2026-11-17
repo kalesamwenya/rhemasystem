@@ -87,7 +87,7 @@ export async function createPaymentReceiptPdf(payment: PaymentReceiptData): Prom
   const transactionDate = escapeHtml(new Date(payment.created_at).toLocaleString());
   const amountPaid = escapeHtml(money(payment.amount, payment.currency));
   const qrImageData = qrCanvas.toDataURL('image/png');
-  receipt.style.cssText = 'position:fixed;left:0;top:0;z-index:2147483647;width:760px;opacity:0;pointer-events:none;background:#fff;color:#0f172a;font-family:Arial,sans-serif;';
+  receipt.style.cssText = 'position:fixed;left:-10000px;top:0;width:760px;background:#fff;color:#0f172a;font-family:Arial,sans-serif;';
   receipt.innerHTML = `
     <div style="position:relative;overflow:hidden;padding:52px 54px 44px;border:1px solid #dbe3ef;">
       <div style="position:absolute;top:38%;left:8%;z-index:0;color:rgba(30,58,138,.055);font-size:116px;font-weight:900;letter-spacing:12px;transform:rotate(-28deg);">PAID</div>
@@ -127,8 +127,9 @@ export async function createPaymentReceiptPdf(payment: PaymentReceiptData): Prom
         onclone: (clonedDocument: Document) => {
           const clonedReceipt = clonedDocument.getElementById(receiptSourceId);
           if (!clonedReceipt) throw new Error('The receipt could not be prepared for PDF rendering.');
-          clonedReceipt.style.opacity = '1';
-          clonedReceipt.style.zIndex = '1';
+          clonedReceipt.style.position = 'static';
+          clonedReceipt.style.left = 'auto';
+          clonedReceipt.style.top = 'auto';
         },
       },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
@@ -228,6 +229,8 @@ export async function createOrderPaymentReceiptPdf(payment: OrderPaymentReceiptD
       <td style="text-align:right">${item.amount === undefined ? '' : escapeHtml(money(item.amount, payment.currency))}</td>
     </tr>`).join('');
   const receipt = document.createElement('div');
+  const receiptSourceId = `rhema-order-payment-receipt-${crypto.randomUUID()}`;
+  receipt.id = receiptSourceId;
   receipt.style.cssText = 'position:fixed;left:-10000px;top:0;width:760px;background:#fff;color:#0f172a;font-family:Arial,sans-serif;';
   receipt.innerHTML = `
     <article style="position:relative;min-height:1000px;overflow:hidden;padding:48px 52px;border:1px solid #dbe3ef">
@@ -254,7 +257,18 @@ export async function createOrderPaymentReceiptPdf(payment: OrderPaymentReceiptD
     const pdf = await html2pdf().set({
       margin: 8,
       image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+      html2canvas: {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        onclone: (clonedDocument: Document) => {
+          const clonedReceipt = clonedDocument.getElementById(receiptSourceId);
+          if (!clonedReceipt) throw new Error('The receipt could not be prepared for PDF rendering.');
+          clonedReceipt.style.position = 'static';
+          clonedReceipt.style.left = 'auto';
+          clonedReceipt.style.top = 'auto';
+        },
+      },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
     }).from(receipt).outputPdf('blob');
     if (!(pdf instanceof Blob)) throw new Error('The receipt PDF generator returned an invalid document.');
