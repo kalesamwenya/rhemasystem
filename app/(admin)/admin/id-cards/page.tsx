@@ -657,7 +657,7 @@ export default function StudentIdCardsPage() {
       setSavedPdfUrl(pdfUrl);
       const downloadLink = document.createElement('a');
       downloadLink.href = pdfUrl;
-      downloadLink.download = `Rhema-ID-${student.student_id.replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`;
+      downloadLink.download = `Emit-Academy-ID-${student.student_id.replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`;
       document.body.appendChild(downloadLink);
       try {
         downloadLink.click();
@@ -993,7 +993,7 @@ export default function StudentIdCardsPage() {
                     <Printer className="h-4 w-4" />
                     Open PDF to print
                   </a>
-                  <a href={savedPdfUrl} download={`Rhema-ID-${student.student_id}.pdf`} className="inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-800 hover:bg-slate-50">
+                  <a href={savedPdfUrl} download={`Emit-Academy-ID-${student.student_id}.pdf`} className="inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-800 hover:bg-slate-50">
                     <Download className="h-4 w-4" />
                     Download PDF
                   </a>

@@ -990,7 +990,7 @@ export default function AttendanceDashboardPage() {
       await exportBrandedPdf(() => ({
         title: 'Student Attendance Report',
         subtitle: `Attendance summary · ${reportScopeLabel}`,
-        fileName: `Rhema-Attendance-Report-${selectedRecord.id}-${reportingPeriod}`,
+        fileName: `Emit-Academy-Attendance-Report-${selectedRecord.id}-${reportingPeriod}`,
         student: { name: selectedRecord.name, id: selectedRecord.id, cohort: selectedRecord.cohort },
         sections: [
           {
@@ -1040,7 +1040,7 @@ export default function AttendanceDashboardPage() {
         ? {
           title: 'Student Attendance Report',
           subtitle: `Attendance summary by student and course · ${reportScopeLabel}`,
-          fileName: `Rhema-Student-Attendance-Report-${reportingPeriod}`,
+          fileName: `Emit-Academy-Student-Attendance-Report-${reportingPeriod}`,
           sections: [{
             title: 'Student attendance',
             columns: ['Student ID', 'Student', 'Cohort', 'Course', 'Attended', 'Sessions', 'Rate', 'Status'],
@@ -1051,7 +1051,7 @@ export default function AttendanceDashboardPage() {
           ? {
             title: 'Course Attendance Report',
             subtitle: `Attendance performance by course · ${reportScopeLabel}`,
-            fileName: `Rhema-Course-Attendance-Report-${reportingPeriod}`,
+            fileName: `Emit-Academy-Course-Attendance-Report-${reportingPeriod}`,
             sections: [{
               title: 'Course attendance',
               columns: ['Course', 'Title', 'Cohort', 'Sessions', 'Present', 'Absent', 'Rate'],
@@ -1061,7 +1061,7 @@ export default function AttendanceDashboardPage() {
           : {
             title: 'Cohort Attendance Report',
             subtitle: `Attendance performance by cohort · ${reportScopeLabel}`,
-            fileName: `Rhema-Cohort-Attendance-Report-${reportingPeriod}`,
+            fileName: `Emit-Academy-Cohort-Attendance-Report-${reportingPeriod}`,
             sections: [{
               title: 'Cohort attendance',
               columns: ['Cohort', 'Students', 'Average attendance', 'Present', 'Absent', 'At risk'],
@@ -1084,7 +1084,7 @@ export default function AttendanceDashboardPage() {
       await exportBrandedPdf(() => ({
         title: `${selectedCourseReport.title} Attendance Report`,
         subtitle: `${selectedCourseReport.code} · Cohort ${selectedCourseReport.cohort} · ${reportScopeLabel}`,
-        fileName: `Rhema-Course-${selectedCourseReport.code}-${reportingPeriod}`,
+        fileName: `Emit-Academy-Course-${selectedCourseReport.code}-${reportingPeriod}`,
         sections: [{
           title: 'Student attendance performance',
           columns: ['Student ID', 'Student', 'Cohort', 'Attended', 'Missed', 'Total', 'Rate', 'Status'],
@@ -1115,7 +1115,7 @@ export default function AttendanceDashboardPage() {
       await exportBrandedPdf(() => ({
         title: `Cohort ${selectedCohortReport.cohort} Attendance Report`,
         subtitle: `Course and student performance · ${reportScopeLabel}`,
-        fileName: `Rhema-Cohort-${selectedCohortReport.cohort}-${reportingPeriod}`,
+        fileName: `Emit-Academy-Cohort-${selectedCohortReport.cohort}-${reportingPeriod}`,
         sections: [
           {
             title: 'Course performance',

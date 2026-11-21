@@ -267,7 +267,7 @@ export default function AdminPaymentsPage() {
         formData.append('payment_id', String(verifiedPayment.id));
         formData.append('status', 'paid');
         formData.append('receipt_token', verifiedPayment.receipt_token);
-        formData.append('receipt_file', receiptPdf, `Rhema-Receipt-${verifiedPayment.reference}.pdf`);
+        formData.append('receipt_file', receiptPdf, `Emit-Academy-Receipt-${verifiedPayment.reference}.pdf`);
         const updated = await api.students.updateAdminPaymentStatus(formData) as { message: string };
         if (active) {
           const latest = await api.students.adminPaymentLedger() as PaymentLedgerResponse;
@@ -743,7 +743,7 @@ export default function AdminPaymentsPage() {
       formData.append('payment_id', String(transaction.id));
       formData.append('status', 'paid');
       formData.append('receipt_token', transaction.receipt_token);
-      formData.append('receipt_file', pdf, `Rhema-Receipt-${transaction.reference.replace(/[^a-z0-9_-]/gi, '-')}.pdf`);
+      formData.append('receipt_file', pdf, `Emit-Academy-Receipt-${transaction.reference.replace(/[^a-z0-9_-]/gi, '-')}.pdf`);
       const response = await api.students.updateAdminPaymentStatus(formData) as {
         data: PaymentLedgerRecord;
         message: string;
@@ -790,7 +790,7 @@ export default function AdminPaymentsPage() {
       const response = await api.students.uploadFinanceInvoice(
         charge.id,
         pdf,
-        `Rhema-Invoice-${charge.reference.replace(/[^a-z0-9_-]/gi, '-')}.pdf`,
+        `Emit-Academy-Invoice-${charge.reference.replace(/[^a-z0-9_-]/gi, '-')}.pdf`,
       ) as { message?: string; data?: { path?: string } };
       setRecords((current) => current.map((record) => record.id === charge.id
         ? { ...record, invoice_path: response.data?.path || record.invoice_path }
@@ -889,7 +889,7 @@ export default function AdminPaymentsPage() {
             formData.append('payment_id', String(verifiedPayment.id));
             formData.append('status', 'paid');
             formData.append('receipt_token', verifiedPayment.receipt_token);
-            formData.append('receipt_file', receiptPdf, `Rhema-Receipt-${verifiedPayment.reference}.pdf`);
+            formData.append('receipt_file', receiptPdf, `Emit-Academy-Receipt-${verifiedPayment.reference}.pdf`);
             const receiptResult = await api.students.updateAdminPaymentStatus(formData) as { message?: string };
             const latest = await api.students.adminPaymentLedger() as PaymentLedgerResponse;
             setRecords(latest.data);
@@ -963,7 +963,7 @@ export default function AdminPaymentsPage() {
       formData.append('payment_purpose', paymentPurpose);
       formData.append('reference', reference);
       formData.append('receipt_token', receiptToken);
-      formData.append('receipt_file', pdf, `Rhema-Receipt-${reference}.pdf`);
+      formData.append('receipt_file', pdf, `Emit-Academy-Receipt-${reference}.pdf`);
       const response = await api.students.createAdminManualPayment(formData) as { data: PaymentLedgerRecord; message: string };
       setRecords((current) => [response.data, ...current.filter((record) => record.id !== response.data.id)]);
       setManualPaymentOpen(false);
@@ -1005,7 +1005,7 @@ export default function AdminPaymentsPage() {
         };
         const pdf = await createPaymentReceiptPdf(paymentReceipt);
         formData.append('receipt_token', receiptToken);
-        formData.append('receipt_file', pdf, `Rhema-Receipt-${transaction.reference}.pdf`);
+        formData.append('receipt_file', pdf, `Emit-Academy-Receipt-${transaction.reference}.pdf`);
       }
       const response = await api.students.updateAdminPaymentStatus(formData) as { data: PaymentLedgerRecord; message: string };
       setRecords((current) => current.map((record) => record.id === response.data.id ? response.data : record));

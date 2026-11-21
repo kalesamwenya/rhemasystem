@@ -16,9 +16,13 @@ async function handleRequest(request: Request) {
     const upstreamUrl = new URL("logs/websiteAnalytics.php", `${apiBaseUrl}/`);
     if (request.method === "GET") upstreamUrl.search = new URL(request.url).search;
 
+    const browserOrigin = request.headers.get("origin");
+    const forwardedOrigin = browserOrigin && /^https?:\/\//i.test(browserOrigin)
+      ? browserOrigin
+      : new URL(apiBaseUrl).origin;
     const headers = new Headers({
       Accept: "application/json",
-      Origin: new URL(apiBaseUrl).origin,
+      Origin: forwardedOrigin,
       "X-Request-ID": requestId,
     });
     if (request.method === "GET") {

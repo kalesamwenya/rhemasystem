@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { FileText, RefreshCw, Send, Share2 } from 'lucide-react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { createBrandedPdfBlob } from '@/lib/branded-pdf';
 
 interface SharedReport {
   id: number;
@@ -82,6 +83,13 @@ export default function SharedReportsPage() {
         notifications_created?: number;
       };
       if (!response.report_id) throw new Error('The report was saved without a report reference.');
+      const pdf = await createBrandedPdfBlob({
+        title,
+        subtitle: 'Shared departmental report',
+        fileName: `Emit-Academy-Report-${response.report_id}`,
+        sections: [{ title: 'Report details', fields: [{ label: 'Report number', value: String(response.report_id) }, { label: 'Report content', value: content }] }],
+      });
+      await api.adminReports.uploadPdf(response.report_id, pdf, `Emit-Academy-Report-${response.report_id}.pdf`);
       setTitle('');
       setContent('');
       setSelectedDepartments([]);

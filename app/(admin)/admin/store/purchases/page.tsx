@@ -100,7 +100,7 @@ export default function StorePurchasesPage() {
           await uploadPdfDocument(
             pdf,
             'receipts',
-            `Rhema-Store-Receipt-${selected.purchase_reference}.pdf`,
+            `Emit-Academy-Store-Receipt-${selected.purchase_reference}.pdf`,
             selected.purchase_reference,
             'receipt',
             selected.gateway_transaction_id || '',
@@ -126,7 +126,7 @@ export default function StorePurchasesPage() {
       await uploadPdfDocument(
         pdf,
         'receipts',
-        `Rhema-Store-Receipt-${selected.purchase_reference}.pdf`,
+        `Emit-Academy-Store-Receipt-${selected.purchase_reference}.pdf`,
         selected.purchase_reference,
         'receipt',
         selected.gateway_transaction_id || '',

@@ -52,7 +52,7 @@ export default function VerifyInvoicePage() {
     <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-10">
       <section className="w-full max-w-2xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl">
         <header className="bg-slate-950 px-7 py-7 text-white sm:px-10">
-          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-amber-400">Rhema Bible School</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-amber-400">Emit Academy</p>
           <h1 className="mt-2 text-2xl font-black">Invoice verification</h1>
           <p className="mt-2 text-xs text-slate-300">Independent confirmation from the student finance ledger.</p>
         </header>
@@ -74,7 +74,7 @@ export default function VerifyInvoicePage() {
               </dl>
               <div className="mt-5 flex items-start gap-2 rounded-xl bg-slate-50 p-4 text-[11px] leading-5 text-slate-500">
                 <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-blue-900" />
-                <p>This confirms the invoice record held by Rhema Bible School. It does not confirm that payment has been made.</p>
+                <p>This confirms the invoice record held by Emit Academy. It does not confirm that payment has been made.</p>
               </div>
             </div>
           </div>
@@ -84,7 +84,7 @@ export default function VerifyInvoicePage() {
             <p>{error || 'This invoice could not be verified.'}</p>
           </div>
         )}
-        <footer className="border-t border-slate-100 px-7 py-4 text-center text-[10px] text-slate-400 sm:px-10">Rhema Bible School · Official student finance verification</footer>
+        <footer className="border-t border-slate-100 px-7 py-4 text-center text-[10px] text-slate-400 sm:px-10">Emit Academy · Official student finance verification</footer>
       </section>
     </main>
   );

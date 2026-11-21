@@ -321,7 +321,7 @@ export default function StudentBillingPage() {
           await uploadPdfDocument(
             pdf,
             'receipts',
-            `Rhema-Receipt-${transaction.reference.replace(/[^a-z0-9_-]/gi, '-')}.pdf`,
+            `Emit-Academy-Receipt-${transaction.reference.replace(/[^a-z0-9_-]/gi, '-')}.pdf`,
             transaction.reference,
             'receipt',
             transaction.gateway_transaction_id || '',
@@ -359,7 +359,7 @@ export default function StudentBillingPage() {
         const url = URL.createObjectURL(pdf);
         const link = document.createElement('a');
         link.href = url;
-        link.download = `Rhema-Invoice-${transaction.reference.replace(/[^a-z0-9_-]/gi, '-')}.pdf`;
+        link.download = `Emit-Academy-Invoice-${transaction.reference.replace(/[^a-z0-9_-]/gi, '-')}.pdf`;
         link.click();
         window.setTimeout(() => URL.revokeObjectURL(url), 1000);
       }

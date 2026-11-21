@@ -253,7 +253,7 @@ function StorePageContent() {
             await uploadPdfDocument(
               receipt,
               "receipts",
-              `Rhema-Store-Receipt-${purchaseReference}.pdf`,
+              `Emit-Academy-Store-Receipt-${purchaseReference}.pdf`,
               purchaseReference,
               "receipt",
               transactionId,

@@ -104,7 +104,12 @@ export default function ServiceHoursPage() {
           if (!detector || !videoRef.current) return;
           const codes = await detector.detect(videoRef.current);
           if (codes[0]?.rawValue) {
-            setEntry((current) => ({ ...current, student_id: codes[0].rawValue.trim() }));
+            const studentId = codes[0].rawValue.trim();
+            setEntry((current) => ({
+              ...current,
+              student_id: studentId,
+              cohort: students.find((student) => student.student_id === studentId)?.class || '',
+            }));
             setMessage(`Scanned student ID ${codes[0].rawValue.trim()}.`);
             setScanning(false);
           }
@@ -117,6 +122,8 @@ export default function ServiceHoursPage() {
 
   const selectedStudent = students.find((student) => student.student_id === entry.student_id);
   const reviewStudent = students.find((student) => student.student_id === reviewEntry.student_id);
+  const selectedTerm = terms.find((term) => String(term.term_id) === entry.term_id);
+  const reviewTerm = terms.find((term) => String(term.term_id) === reviewEntry.term_id);
   const filteredRecords = useMemo(() => records.filter((record) => {
     const matchesTerm = !filters.term_id || String(record.term_id) === filters.term_id;
     const matchesCohort = !filters.cohort || record.cohort === filters.cohort;
@@ -138,16 +145,14 @@ export default function ServiceHoursPage() {
 
   const save = async (payload: Record<string, unknown> | Record<string, unknown>[]) => {
     setError(''); setMessage('');
-    try { await api.serviceHours.save(Array.isArray(payload) ? { records: payload } : payload); setMessage('Service hours saved and verified.'); await load(); }
+    try { await api.serviceHours.save(Array.isArray(payload) ? { records: payload } : payload); setMessage('Service hours saved, verified, and the student notified.'); await load(); }
     catch (saveError) { setError(saveError instanceof Error ? saveError.message : 'Unable to save service hours.'); }
   };
 
   const saveSingle = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!scannedFormReady) { setError('Upload and scan the completed form before saving.'); return; }
     if (!selectedStudent) { setError('Choose a valid student ID from the student register.'); return; }
-    if (!entry.cohort) { setError('The student year of study could not be determined.'); return; }
-    if (entry.cohort !== selectedStudent.class) { setError(`Year of study does not match the student register. This student is in ${selectedStudent.class}.`); return; }
+    if (!selectedStudent.class?.trim()) { setError('The student year of study could not be determined from the student register.'); return; }
     const term = terms.find((item) => String(item.term_id) === entry.term_id);
     if (!term) { setError('Select a configured school term.'); return; }
     if (!entry.stamp_date || entry.stamp_date < term.start_date || entry.stamp_date > term.end_date) {
@@ -155,7 +160,13 @@ export default function ServiceHoursPage() {
       return;
     }
     if (!Number.isFinite(Number(entry.hours)) || Number(entry.hours) <= 0) { setError('Enter the total hours for this student and term.'); return; }
-    await save({ ...entry, term_id: Number(entry.term_id), hours: Number(entry.hours), source: 'manual' });
+    await save({
+      ...entry,
+      cohort: selectedStudent.class.trim().toUpperCase(),
+      term_id: Number(entry.term_id),
+      hours: Number(entry.hours),
+      source: 'manual',
+    });
   };
 
   const parseOcrDate = (value: string) => {
@@ -176,11 +187,12 @@ export default function ServiceHoursPage() {
   };
 
   const scanDocuments = async (files: File[]) => {
-    if (!files.length) return;
-    if (files.some((file) => !file.type.startsWith('image/'))) { setError('Upload clear image files for the front and back of the form. PDF OCR is not supported in this browser flow yet.'); return; }
+    if (files.length !== 1) { setError('Upload only the front image of the church service-hours form.'); return; }
+    const [file] = files;
+    if (!file.type.startsWith('image/')) { setError('Upload a clear image of the front of the form. PDF OCR is not supported in this browser flow yet.'); return; }
     setError(''); setMessage(''); setOcrBusy(true); setOcrProgress(0);
-    const imageUrls = files.map((file) => URL.createObjectURL(file));
-    setReviewImage(imageUrls[0]); setReviewText('');
+    const imageUrl = URL.createObjectURL(file);
+    setReviewImage(imageUrl); setReviewText('');
     try {
       const [{ createWorker }, { BrowserMultiFormatReader }] = await Promise.all([
         import('tesseract.js'),
@@ -188,24 +200,18 @@ export default function ServiceHoursPage() {
       ]);
       let barcodeStudentId = '';
       const barcodeReader = new BrowserMultiFormatReader();
-      for (const imageUrl of imageUrls) {
-        try {
-          const barcode = await barcodeReader.decodeFromImageUrl(imageUrl);
-          const value = barcode.getText().trim();
-          if (/^[A-Za-z0-9-]{3,50}$/.test(value)) { barcodeStudentId = value; break; }
-        } catch {
-          // Some forms do not contain a code; OCR remains the fallback.
-        }
+      try {
+        const barcode = await barcodeReader.decodeFromImageUrl(imageUrl);
+        const value = barcode.getText().trim();
+        if (/^[A-Za-z0-9-]{3,50}$/.test(value)) barcodeStudentId = value;
+      } catch {
+        // Some forms do not contain a code; OCR remains the fallback.
       }
       const worker = await createWorker('eng', undefined, { logger: (event) => { if (event.status === 'recognizing text') setOcrProgress(Math.round(event.progress * 100)); } });
-      const texts: string[] = [];
-      for (const [index, file] of files.entries()) {
-        const typedPass = (await worker.recognize(file)).data.text;
-        const enhancedPass = (await worker.recognize(await prepareOcrImage(file))).data.text;
-        texts.push(`--- SIDE ${index + 1} TYPED / ORIGINAL ---\n${typedPass}\n--- SIDE ${index + 1} HANDWRITING / ENHANCED ---\n${enhancedPass}`);
-      }
+      const typedPass = (await worker.recognize(file)).data.text;
+      const enhancedPass = (await worker.recognize(await prepareOcrImage(file))).data.text;
       await worker.terminate();
-      const combinedText = texts.join('\n\n--- SECOND SIDE ---\n\n');
+      const combinedText = `--- FRONT TYPED / ORIGINAL ---\n${typedPass}\n--- FRONT HANDWRITING / ENHANCED ---\n${enhancedPass}`;
       setReviewText(combinedText);
       const extracted = parseOcrEntry(combinedText);
       if (barcodeStudentId) extracted.student_id = barcodeStudentId;
@@ -222,6 +228,12 @@ export default function ServiceHoursPage() {
     event.preventDefault();
     const student = students.find((item) => item.student_id === reviewEntry.student_id);
     if (!student) { setError('The scanned student ID is not in the student register. Correct it before confirming.'); return; }
+    const term = terms.find((item) => String(item.term_id) === reviewEntry.term_id);
+    if (!term) { setError('Select a configured school term.'); return; }
+    if (!reviewEntry.stamp_date || reviewEntry.stamp_date < term.start_date || reviewEntry.stamp_date > term.end_date) {
+      setError(`The church stamp date must fall within Term ${term.term_id} (${term.start_date} to ${term.end_date}).`);
+      return;
+    }
     setEntry({ ...reviewEntry, cohort: student.class });
     setScannedFormReady(true);
     setReviewOpen(false);
@@ -267,25 +279,25 @@ export default function ServiceHoursPage() {
     {scannedStudentConfirmation}
     <header className="flex flex-col gap-4 border-b border-slate-200 pb-5 md:flex-row md:items-end md:justify-between">
       <div><p className="text-[11px] font-black uppercase tracking-[0.22em] text-red-600">Student affairs</p><h1 className="mt-2 text-3xl font-black tracking-tight text-slate-900">Church service hours</h1><p className="mt-1 text-sm text-slate-500">Record each student&apos;s total hours for a term. Verify that the church stamp date falls within the selected term.</p></div>
-      <div className="flex items-center gap-3"><label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-red-700 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white hover:bg-red-800"><FileImage className="h-4 w-4" />Upload front + back<input type="file" accept="image/*" multiple className="sr-only" disabled={ocrBusy} onChange={(event) => { const files = Array.from(event.target.files || []); if (files.length > 2) setError('Select a maximum of two images: the front and back of the form.'); else scanDocuments(files); event.currentTarget.value = ''; }} /></label><Link href="/admin/student-affairs" className="text-xs font-black uppercase tracking-[0.18em] text-slate-500 hover:text-slate-900">Back</Link></div>
+      <div className="flex items-center gap-3"><label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-red-700 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white hover:bg-red-800"><FileImage className="h-4 w-4" />Upload front only<input type="file" accept="image/*" className="sr-only" disabled={ocrBusy} onChange={(event) => { const files = Array.from(event.target.files || []); scanDocuments(files); event.currentTarget.value = ''; }} /></label><Link href="/admin/student-affairs" className="text-xs font-black uppercase tracking-[0.18em] text-slate-500 hover:text-slate-900">Back</Link></div>
     </header>
 
     {(message || error) && <div className={`flex items-center justify-between rounded-xl border p-4 text-sm font-semibold ${error ? 'border-red-200 bg-red-50 text-red-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}><span>{error || message}</span><button onClick={() => { setError(''); setMessage(''); }} aria-label="Dismiss message"><X className="h-4 w-4" /></button></div>}
 
     {ocrBusy && <div className="flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm font-semibold text-blue-800"><Loader2 className="h-4 w-4 animate-spin" />Reading uploaded form{ocrProgress ? `: ${ocrProgress}%` : '...'}</div>}
 
-    {reviewOpen && <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-4"><form onSubmit={confirmScannedEntry} className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"><div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-600">Stamp verification required</p><h2 className="mt-1 text-2xl font-black text-slate-900">Review scanned form</h2><p className="mt-1 text-sm text-slate-500">Check the student, hours total, and church stamp date. The stamp date must fall within the selected term.</p></div><button type="button" onClick={() => setReviewOpen(false)} aria-label="Close scan review"><X className="h-5 w-5" /></button></div><div className="mt-5 grid gap-6 lg:grid-cols-[0.8fr_1.2fr]"><div><img src={reviewImage} alt="Uploaded church service form" className="max-h-[55vh] w-full rounded-xl border border-slate-200 object-contain" /><details className="mt-3 rounded-xl border border-slate-200 p-3"><summary className="cursor-pointer text-xs font-black uppercase tracking-wider text-slate-600"><ScanText className="mr-2 inline h-4 w-4" />View extracted text</summary><pre className="mt-3 max-h-40 overflow-auto whitespace-pre-wrap text-xs text-slate-500">{reviewText}</pre></details></div><div className="grid content-start gap-4 sm:grid-cols-2"><label className="text-xs font-bold text-slate-600">Student ID<input value={reviewEntry.student_id} onChange={(event) => setReviewEntry({ ...reviewEntry, student_id: event.target.value })} required className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" /></label><div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm"><span className="text-xs font-bold text-slate-400">Registered student</span><p className="mt-1 font-black text-slate-900">{reviewStudent ? `${reviewStudent.name} · ${reviewStudent.class}` : 'ID requires correction'}</p></div><label className="text-xs font-bold text-slate-600">School term<select value={reviewEntry.term_id} onChange={(event) => setReviewEntry({ ...reviewEntry, term_id: event.target.value })} required className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"><option value="">Select term</option>{terms.filter((term) => term.term_id >= 1 && term.term_id <= 4).map((term) => <option key={term.term_id} value={term.term_id}>Term {term.term_id}</option>)}</select></label><label className="text-xs font-bold text-slate-600">Date on church stamp<input type="date" value={reviewEntry.stamp_date} onChange={(event) => setReviewEntry({ ...reviewEntry, stamp_date: event.target.value })} required className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" /></label><label className="text-xs font-bold text-slate-600 sm:col-span-2">Total hours for this term<input type="number" min="0.01" step="0.01" value={reviewEntry.hours} onChange={(event) => setReviewEntry({ ...reviewEntry, hours: event.target.value })} required className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" /></label></div></div><div className="mt-6 flex justify-end gap-3 border-t border-slate-200 pt-5"><button type="button" onClick={() => setReviewOpen(false)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-slate-600">Discard</button><button className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white"><CheckCircle2 className="h-4 w-4" />Confirm and continue</button></div></form></div>}
+    {reviewOpen && <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-4"><form onSubmit={confirmScannedEntry} className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"><div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-600">Stamp verification required</p><h2 className="mt-1 text-2xl font-black text-slate-900">Review scanned form</h2><p className="mt-1 text-sm text-slate-500">Check the student, hours total, and church stamp date. The stamp date must fall within the selected term.</p></div><button type="button" onClick={() => setReviewOpen(false)} aria-label="Close scan review"><X className="h-5 w-5" /></button></div><div className="mt-5 grid gap-6 lg:grid-cols-[0.8fr_1.2fr]"><div><img src={reviewImage} alt="Uploaded church service form" className="max-h-[55vh] w-full rounded-xl border border-slate-200 object-contain" /><details className="mt-3 rounded-xl border border-slate-200 p-3"><summary className="cursor-pointer text-xs font-black uppercase tracking-wider text-slate-600"><ScanText className="mr-2 inline h-4 w-4" />View extracted text</summary><pre className="mt-3 max-h-40 overflow-auto whitespace-pre-wrap text-xs text-slate-500">{reviewText}</pre></details></div><div className="grid content-start gap-4 sm:grid-cols-2"><label className="text-xs font-bold text-slate-600">Student ID<input value={reviewEntry.student_id} onChange={(event) => setReviewEntry({ ...reviewEntry, student_id: event.target.value })} required className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" /></label><div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm"><span className="text-xs font-bold text-slate-400">Registered student</span><p className="mt-1 font-black text-slate-900">{reviewStudent ? `${reviewStudent.name} · ${reviewStudent.class}` : 'ID requires correction'}</p></div><label className="text-xs font-bold text-slate-600">School term<select value={reviewEntry.term_id} onChange={(event) => setReviewEntry({ ...reviewEntry, term_id: event.target.value })} required className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"><option value="">Select term</option>{terms.filter((term) => term.term_id >= 1 && term.term_id <= 4).map((term) => <option key={term.term_id} value={term.term_id}>Term {term.term_id}</option>)}</select></label>    <label className="text-xs font-bold text-slate-600">Date on church stamp<input type="date" min={reviewTerm?.start_date || undefined} max={reviewTerm?.end_date || undefined} value={reviewEntry.stamp_date} onChange={(event) => setReviewEntry({ ...reviewEntry, stamp_date: event.target.value })} required className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" /><span className="mt-1 block text-[10px] font-normal text-slate-500">{reviewTerm ? `Must fall within Term ${reviewTerm.term_id}: ${formatDate(reviewTerm.start_date)} to ${formatDate(reviewTerm.end_date)}` : 'Select a school term first.'}</span></label><label className="text-xs font-bold text-slate-600 sm:col-span-2">Total hours for this term<input type="number" min="0.01" step="0.01" value={reviewEntry.hours} onChange={(event) => setReviewEntry({ ...reviewEntry, hours: event.target.value })} required className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" /></label></div></div><div className="mt-6 flex justify-end gap-3 border-t border-slate-200 pt-5"><button type="button" onClick={() => setReviewOpen(false)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-slate-600">Discard</button><button className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white"><CheckCircle2 className="h-4 w-4" />Confirm and continue</button></div></form></div>}
 
     <div className="flex flex-wrap gap-2 border-b border-slate-200"><button onClick={() => setTab('capture')} className={`px-4 py-3 text-xs font-black uppercase tracking-wider ${tab === 'capture' ? 'border-b-2 border-red-600 text-red-700' : 'text-slate-500'}`}><Plus className="mr-2 inline h-4 w-4" />Single capture</button><button onClick={() => setTab('bulk')} className={`px-4 py-3 text-xs font-black uppercase tracking-wider ${tab === 'bulk' ? 'border-b-2 border-red-600 text-red-700' : 'text-slate-500'}`}><Upload className="mr-2 inline h-4 w-4" />Bulk import</button><button onClick={() => setTab('reports')} className={`px-4 py-3 text-xs font-black uppercase tracking-wider ${tab === 'reports' ? 'border-b-2 border-red-600 text-red-700' : 'text-slate-500'}`}><ClipboardList className="mr-2 inline h-4 w-4" />Reports</button></div>
 
     {tab === 'capture' && <form onSubmit={saveSingle} className="grid gap-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:grid-cols-2">
-      <div className="md:col-span-2 flex items-center justify-between"><div><h2 className="text-xl font-black text-slate-900">Record term total</h2><p className="text-xs text-slate-500">Scan the church form to identify the student, total hours, and stamp date; verify the values before saving.</p></div><button type="button" onClick={() => setScanning((current) => !current)} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white"><Camera className="h-4 w-4" />{scanning ? 'Stop scanner' : 'Scan ID'}</button></div>
+      <div className="md:col-span-2 flex items-center justify-between"><div><h2 className="text-xl font-black text-slate-900">Record term total</h2><p className="text-xs text-slate-500">Enter the student and term details manually, or use the optional scanner and form OCR. Saving always notifies the student.</p></div><button type="button" onClick={() => setScanning((current) => !current)} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white"><Camera className="h-4 w-4" />{scanning ? 'Stop scanner' : 'Scan ID'}</button></div>
       {scanning && <div className="md:col-span-2 overflow-hidden rounded-xl bg-slate-950"><video ref={videoRef} className="mx-auto max-h-64 w-full object-contain" muted playsInline /></div>}
-      <label className="text-xs font-bold text-slate-600">Student ID (optional correction)<input value={entry.student_id} onChange={(event) => { setEntry({ ...entry, student_id: event.target.value }); setScannedFormReady(false); }} list="student-ids" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="Only enter if OCR misses the ID" /><datalist id="student-ids">{students.map((student) => <option key={student.student_id} value={student.student_id}>{student.name} ({student.class})</option>)}</datalist></label>
+      <label className="text-xs font-bold text-slate-600">Student ID<input value={entry.student_id} onChange={(event) => setEntry((current) => ({ ...current, student_id: event.target.value, cohort: students.find((student) => student.student_id === event.target.value)?.class || '' }))} list="student-ids" required className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="Select or enter a student ID" /><datalist id="student-ids">{students.map((student) => <option key={student.student_id} value={student.student_id}>{student.name} ({student.class})</option>)}</datalist></label>
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm"><span className="text-xs font-bold text-slate-400">Registered student</span><p className="mt-1 font-black text-slate-900">{selectedStudent ? `${selectedStudent.name} · ${selectedStudent.class}` : 'Enter a valid student ID'}</p></div>
       <div className="md:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-4"><p className="text-xs font-black uppercase tracking-wider text-slate-700">Student identity</p><p className="mt-1 text-sm font-black text-slate-900">{selectedStudent ? `${selectedStudent.name} · ${selectedStudent.class}` : 'Waiting for a valid student ID'}</p><p className="mt-1 text-xs text-slate-500">The student&apos;s year of study is checked against the student register.</p></div>
       <label className="text-xs font-bold text-slate-600">School term<select value={entry.term_id} onChange={(event) => setEntry({ ...entry, term_id: event.target.value })} required className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"><option value="">Select term</option>{terms.filter((term) => term.term_id >= 1 && term.term_id <= 4).map((term) => <option key={term.term_id} value={term.term_id}>Term {term.term_id} · {formatDate(term.start_date)} to {formatDate(term.end_date)}</option>)}</select></label>
-      <label className="text-xs font-bold text-slate-600">Date on church stamp<input type="date" value={entry.stamp_date} onChange={(event) => setEntry({ ...entry, stamp_date: event.target.value })} required className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" /></label>
+      <label className="text-xs font-bold text-slate-600">Date on church stamp<input type="date" min={selectedTerm?.start_date || undefined} max={selectedTerm?.end_date || undefined} value={entry.stamp_date} onChange={(event) => setEntry({ ...entry, stamp_date: event.target.value })} required className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" /><span className="mt-1 block text-[10px] font-normal text-slate-500">{selectedTerm ? `Must fall within Term ${selectedTerm.term_id}: ${formatDate(selectedTerm.start_date)} to ${formatDate(selectedTerm.end_date)}` : 'Select a school term to set the allowed stamp-date range.'}</span></label>
       <label className="text-xs font-bold text-slate-600 md:col-span-2">Total hours for this term<input type="number" min="0.01" step="0.01" value={entry.hours} onChange={(event) => setEntry({ ...entry, hours: event.target.value })} required className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" /></label>
       <button className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-700 px-4 py-3 text-xs font-black uppercase tracking-wider text-white hover:bg-red-800 md:col-span-2"><CheckCircle2 className="h-4 w-4" />Save verified term total</button>
     </form>}

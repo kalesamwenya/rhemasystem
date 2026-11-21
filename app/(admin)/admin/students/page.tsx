@@ -323,7 +323,7 @@ export default function StudentManagementPage() {
         return {
           title: 'Student Profile',
           subtitle: 'Official identity and account record',
-          fileName: `Rhema-Student-Profile-${student.student_id}`,
+          fileName: `Emit-Academy-Student-Profile-${student.student_id}`,
           student: { name: student.name, id: student.student_id, cohort: student.class },
           sections: [
             {

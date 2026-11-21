@@ -15,6 +15,30 @@ export type BrandedPdfDocument = {
   verifications?: BrandedPdfVerification[];
 };
 
+export function openPdfBlob(blob: Blob, mode: 'view' | 'download', fileName: string): void {
+  const url = URL.createObjectURL(blob);
+  if (mode === 'view') {
+    const preview = window.open(url, '_blank');
+    if (!preview) {
+      URL.revokeObjectURL(url);
+      throw new Error('Allow pop-ups to open the PDF preview.');
+    }
+    window.setTimeout(() => URL.revokeObjectURL(url), 10 * 60 * 1000);
+    return;
+  }
+
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName.endsWith('.pdf') ? fileName : `${fileName}.pdf`;
+  document.body.appendChild(link);
+  try {
+    link.click();
+  } finally {
+    link.remove();
+  }
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 const escapeHtml = (value: string) =>
   value.replace(/[&<>"']/g, (character) => ({
     '&': '&amp;',
@@ -76,18 +100,18 @@ export async function createBrandedPdfBlob(data: BrandedPdfDocument): Promise<Bl
   element.style.cssText = 'position:fixed;left:-10000px;top:0;width:794px;background:#fff;color:#0f172a;font-family:Arial,sans-serif;';
   element.innerHTML = `
     <article class="document">
-      <header><div class="brand"><div class="mark">R</div><div><p>RHEMA BIBLE SCHOOL</p><span>Student and Academic Services</span></div></div><div class="doc-type">OFFICIAL DOCUMENT</div></header>
+      <header><div class="brand"><img src="/emit-academy-mark.svg" alt="Emit Academy"><div><p>EMIT ACADEMY</p><span>Learn. Grow. Lead.</span></div></div><div class="doc-type">OFFICIAL DOCUMENT</div></header>
       <div class="title"><div><h1>${escapeHtml(data.title)}</h1><p>${escapeHtml(data.subtitle)}</p></div><span>ISSUED ${escapeHtml(generatedDate)}</span></div>
       ${student}
       ${(data.sections || []).map(renderSection).join('')}
       ${verification}
-      <footer>Rhema Bible School · Official school record · This document was generated electronically.</footer>
+      <footer>Emit Academy · Official school record · This document was generated electronically.</footer>
     </article>
     <style>
       *{box-sizing:border-box}.document{position:relative;padding:42px 48px 34px;border:1px solid #dbe3ef;min-height:1040px}
       header{display:flex;align-items:center;justify-content:space-between;border-bottom:4px solid #1e3a8a;padding-bottom:18px}
-      .brand{display:flex;align-items:center;gap:12px}.mark{display:grid;place-items:center;width:42px;height:42px;border-radius:12px;background:#1e3a8a;color:#fbbf24;font-size:23px;font-weight:900}
-      .brand p{margin:0;color:#1e3a8a;font-size:13px;font-weight:900;letter-spacing:2px}.brand span{display:block;margin-top:5px;color:#64748b;font-size:10px}
+      .brand{display:flex;align-items:center;gap:12px}.brand img{width:42px;height:42px;border-radius:12px;object-fit:contain}
+      .brand p{margin:0;color:#003da5;font-size:13px;font-weight:900;letter-spacing:2px}.brand span{display:block;margin-top:5px;color:#64748b;font-size:10px}
       .doc-type{color:#b7791f;font-size:9px;font-weight:800;letter-spacing:1.5px}
       .title{display:flex;justify-content:space-between;gap:20px;align-items:flex-end;margin:26px 0 20px}.title h1{margin:0;color:#0f172a;font-size:25px}.title p{margin:7px 0 0;color:#64748b;font-size:11px}.title>span{flex:none;color:#94a3b8;font-size:8px;font-weight:700}
       .student{display:flex;gap:18px;align-items:center;padding:13px 15px;margin-bottom:20px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:9px;font-size:10px;color:#475569}.student strong{color:#0f172a;font-size:12px}
@@ -116,27 +140,11 @@ export async function exportBrandedPdf(
   buildDocument: () => BrandedPdfDocument | Promise<BrandedPdfDocument>,
   mode: 'view' | 'download',
 ): Promise<void> {
-  const preview = mode === 'view' ? window.open('about:blank', '_blank') : null;
-  if (mode === 'view' && !preview) throw new Error('Allow pop-ups to open the PDF preview.');
-
   try {
     const data = await buildDocument();
     const blob = await createBrandedPdfBlob(data);
-    if (preview) {
-      const url = URL.createObjectURL(blob);
-      preview.location.replace(url);
-      window.setTimeout(() => URL.revokeObjectURL(url), 10 * 60 * 1000);
-      return;
-    }
-
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = data.fileName.endsWith('.pdf') ? data.fileName : `${data.fileName}.pdf`;
-    link.click();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    openPdfBlob(blob, mode, data.fileName);
   } catch (error) {
-    preview?.close();
     throw error;
   }
 }

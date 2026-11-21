@@ -109,7 +109,7 @@ export default function EventDetailPage() {
                   await uploadPdfDocument(
                     pdf,
                     'receipts',
-                    `Rhema-Event-Receipt-${reference}.pdf`,
+                    `Emit-Academy-Event-Receipt-${reference}.pdf`,
                     reference,
                     'receipt',
                     String(result.transaction_id),

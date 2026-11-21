@@ -82,7 +82,7 @@ export async function createPaymentReceiptPdf(payment: PaymentReceiptData): Prom
   const description = escapeHtml(payment.paid_for);
   const term = escapeHtml(payment.term);
   const reference = escapeHtml(payment.reference);
-  const gateway = escapeHtml(payment.gateway || 'Rhema Bible School');
+  const gateway = escapeHtml(payment.gateway || 'Emit Academy');
   const gatewayTransaction = escapeHtml(payment.gateway_transaction_id || 'Not supplied');
   const transactionDate = escapeHtml(new Date(payment.created_at).toLocaleString());
   const amountPaid = escapeHtml(money(payment.amount, payment.currency));
@@ -93,7 +93,7 @@ export async function createPaymentReceiptPdf(payment: PaymentReceiptData): Prom
       <div style="position:absolute;top:38%;left:8%;z-index:0;color:rgba(30,58,138,.055);font-size:116px;font-weight:900;letter-spacing:12px;transform:rotate(-28deg);">PAID</div>
       <div style="position:relative;z-index:1;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:4px solid #1e3a8a;padding-bottom:22px;">
-          <div><div style="font-size:13px;font-weight:800;letter-spacing:3px;color:#b7791f;text-transform:uppercase;">Rhema Bible School</div><div style="margin-top:8px;font-size:27px;font-weight:800;color:#0f172a;">Official payment receipt</div><div style="margin-top:6px;color:#64748b;font-size:12px;">Student finance · verified payment</div></div>
+          <div><div style="font-size:13px;font-weight:800;letter-spacing:3px;color:#003da5;text-transform:uppercase;">Emit Academy</div><div style="margin-top:6px;font-size:10px;font-weight:800;letter-spacing:2px;color:#c8102e;">LEARN. GROW. LEAD.</div><div style="margin-top:8px;font-size:27px;font-weight:800;color:#0f172a;">Official payment receipt</div><div style="margin-top:6px;color:#64748b;font-size:12px;">Student finance · verified payment</div></div>
           <div style="padding:9px 14px;border-radius:20px;background:#dcfce7;color:#166534;font-size:11px;font-weight:800;letter-spacing:1px;">PAID &amp; VERIFIED</div>
         </div>
         <div style="display:flex;justify-content:space-between;gap:26px;padding:25px 0 20px;">
@@ -109,7 +109,7 @@ export async function createPaymentReceiptPdf(payment: PaymentReceiptData): Prom
           <div style="flex:1;"><div style="font-size:11px;font-weight:800;">Payment method: ${gateway}</div><div style="margin-top:7px;font-size:10px;color:#64748b;">Provider transaction: ${gatewayTransaction}</div><div style="margin-top:18px;font-size:10px;line-height:1.6;color:#64748b;">Scan the QR code or open the link below to independently verify this receipt online. This receipt confirms funds received for the item listed above.</div><a href="${verificationUrlText}" style="display:block;margin-top:8px;color:#1e3a8a;font-size:9px;line-height:1.5;word-break:break-all;text-decoration:underline;">${verificationUrlText}</a></div>
           <div style="width:142px;text-align:center;"><img src="${qrImageData}" alt="Payment verification QR code" style="width:126px;height:126px;"><div style="margin-top:5px;font-size:9px;font-weight:700;color:#475569;">SCAN TO VERIFY</div></div>
         </div>
-        <div style="margin-top:28px;padding-top:13px;border-top:1px solid #e2e8f0;text-align:center;color:#94a3b8;font-size:9px;">Rhema Bible School · This is a computer-generated receipt.</div>
+        <div style="margin-top:28px;padding-top:13px;border-top:1px solid #e2e8f0;text-align:center;color:#94a3b8;font-size:9px;">Emit Academy · This is a computer-generated receipt.</div>
       </div>
     </div>`;
 
@@ -117,7 +117,7 @@ export async function createPaymentReceiptPdf(payment: PaymentReceiptData): Prom
   try {
     const safeReference = payment.reference.replace(/[^a-z0-9_-]/gi, '-');
     const pdf = await html2pdf().set({
-      filename: `Rhema-Receipt-${safeReference}.pdf`,
+      filename: `Emit-Academy-Receipt-${safeReference}.pdf`,
       margin: 8,
       image: { type: 'jpeg', quality: 0.98 },
       html2canvas: {
@@ -186,7 +186,7 @@ export async function uploadVerifiedStudentPaymentReceipt(reference: string, tra
   await uploadPdfDocument(
     pdf,
     'receipts',
-    `Rhema-Receipt-${reference.replace(/[^a-z0-9_-]/gi, '-')}.pdf`,
+    `Emit-Academy-Receipt-${reference.replace(/[^a-z0-9_-]/gi, '-')}.pdf`,
     reference,
     'receipt',
     transaction.gateway_transaction_id || transactionId,
@@ -215,7 +215,7 @@ export async function downloadPaymentReceipt(payment: PaymentReceiptData): Promi
   const link = document.createElement('a');
   const safeReference = payment.reference.replace(/[^a-z0-9_-]/gi, '-');
   link.href = url;
-  link.download = `Rhema-Receipt-${safeReference}.pdf`;
+  link.download = `Emit-Academy-Receipt-${safeReference}.pdf`;
   link.click();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
@@ -237,7 +237,7 @@ export async function createOrderPaymentReceiptPdf(payment: OrderPaymentReceiptD
       <div style="position:absolute;top:40%;left:10%;z-index:0;color:rgba(30,58,138,.05);font-size:112px;font-weight:900;letter-spacing:12px;transform:rotate(-28deg)">PAID</div>
       <div style="position:relative;z-index:1">
         <header style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:4px solid #1e3a8a;padding-bottom:20px">
-          <div><p style="margin:0;color:#1e3a8a;font-size:13px;font-weight:900;letter-spacing:2px">RHEMA BIBLE SCHOOL</p><h1 style="margin:10px 0 0;font-size:27px">Official payment receipt</h1><p style="margin:6px 0 0;color:#64748b;font-size:12px">${escapeHtml(payment.paid_for)}</p></div>
+          <div><p style="margin:0;color:#003da5;font-size:13px;font-weight:900;letter-spacing:2px">EMIT ACADEMY</p><p style="margin:5px 0 0;color:#c8102e;font-size:8px;font-weight:900;letter-spacing:1.5px">LEARN. GROW. LEAD.</p><h1 style="margin:10px 0 0;font-size:27px">Official payment receipt</h1><p style="margin:6px 0 0;color:#64748b;font-size:12px">${escapeHtml(payment.paid_for)}</p></div>
           <span style="padding:9px 13px;border-radius:20px;background:#dcfce7;color:#166534;font-size:10px;font-weight:900;letter-spacing:1px">PAID &amp; VERIFIED</span>
         </header>
         <section style="display:grid;grid-template-columns:1fr 1fr;gap:28px;padding:24px 0">
@@ -247,9 +247,9 @@ export async function createOrderPaymentReceiptPdf(payment: OrderPaymentReceiptD
         <p style="margin:0;color:#475569;font-size:11px"><strong>Paid for:</strong> ${escapeHtml(payment.paid_for)}</p>
         ${rows ? `<table style="width:100%;border-collapse:collapse;margin-top:10px"><thead><tr style="background:#1e3a8a;color:white;text-align:left;font-size:10px"><th style="padding:12px">Description</th><th style="padding:12px;text-align:right">Qty</th><th style="padding:12px;text-align:right">Amount</th></tr></thead><tbody>${rows}</tbody></table>` : ''}
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:22px;padding:18px 20px;background:#f8fafc;border-radius:10px"><strong style="font-size:11px;color:#475569">TOTAL RECEIVED</strong><strong style="font-size:23px;color:#1e3a8a">${escapeHtml(money(payment.amount, payment.currency))}</strong></div>
-        <section style="margin-top:28px;padding-top:20px;border-top:1px solid #e2e8f0"><p style="margin:0;font-size:11px;font-weight:800">Payment method: ${escapeHtml(payment.gateway || 'Rhema Bible School')}</p><p style="margin:6px 0 0;color:#64748b;font-size:10px">Provider transaction: ${escapeHtml(payment.gateway_transaction_id || 'Not supplied')}</p><p style="margin:22px 0 0;color:#64748b;font-size:10px;line-height:1.6">This receipt confirms payment received by Rhema Bible School for the item described above. Keep the reference for any payment enquiries.</p></section>
+        <section style="margin-top:28px;padding-top:20px;border-top:1px solid #e2e8f0"><p style="margin:0;font-size:11px;font-weight:800">Payment method: ${escapeHtml(payment.gateway || 'Emit Academy')}</p><p style="margin:6px 0 0;color:#64748b;font-size:10px">Provider transaction: ${escapeHtml(payment.gateway_transaction_id || 'Not supplied')}</p><p style="margin:22px 0 0;color:#64748b;font-size:10px;line-height:1.6">This receipt confirms payment received by Emit Academy for the item described above. Keep the reference for any payment enquiries.</p></section>
       </div>
-      <footer style="position:absolute;bottom:20px;left:52px;right:52px;padding-top:12px;border-top:1px solid #e2e8f0;text-align:center;color:#94a3b8;font-size:9px">Rhema Bible School · This is a computer-generated receipt.</footer>
+      <footer style="position:absolute;bottom:20px;left:52px;right:52px;padding-top:12px;border-top:1px solid #e2e8f0;text-align:center;color:#94a3b8;font-size:9px">Emit Academy · This is a computer-generated receipt.</footer>
     </article>`;
 
   document.body.appendChild(receipt);
@@ -292,7 +292,7 @@ export function openPaymentReceiptBlob(pdf: Blob, mode: 'view' | 'download', ref
 
   const link = document.createElement('a');
   link.href = url;
-  link.download = `Rhema-Receipt-${reference.replace(/[^a-z0-9_-]/gi, '-')}.pdf`;
+  link.download = `Emit-Academy-Receipt-${reference.replace(/[^a-z0-9_-]/gi, '-')}.pdf`;
   link.click();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

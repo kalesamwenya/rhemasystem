@@ -52,7 +52,7 @@ export function createActivityRequestInvoicePdf(invoice: ActivityRequestInvoiceD
     verifications: [{
       label: 'Verify this invoice',
       url: invoice.verification_url,
-      note: 'Scan to confirm this activity charge was issued by Rhema Bible School.',
+      note: 'Scan to confirm this activity charge was issued by Emit Academy.',
     }],
   });
 }

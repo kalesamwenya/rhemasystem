@@ -157,7 +157,7 @@ export default function StudentLibraryPage() {
       await uploadPdfDocument(
         pdf,
         'receipts',
-        `Rhema-Audio-Receipt-${payment.order_reference}.pdf`,
+        `Emit-Academy-Audio-Receipt-${payment.order_reference}.pdf`,
         payment.order_reference,
         'receipt',
         transactionId,

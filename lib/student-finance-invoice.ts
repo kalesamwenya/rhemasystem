@@ -22,7 +22,7 @@ export function createStudentChargeInvoicePdf(invoice: StudentChargeInvoiceData)
   return createBrandedPdfBlob({
     title: 'Student finance invoice',
     subtitle: 'Payment due · Student account',
-    fileName: `Rhema-Invoice-${invoice.reference}.pdf`,
+    fileName: `Emit-Academy-Invoice-${invoice.reference}.pdf`,
     student: {
       name: invoice.student_name,
       id: invoice.student_id,
@@ -49,7 +49,7 @@ export function createStudentChargeInvoicePdf(invoice: StudentChargeInvoiceData)
     verifications: [{
       label: 'Verify this invoice',
       url: invoice.verification_url,
-      note: 'Scan to confirm this charge was issued by Rhema Bible School.',
+      note: 'Scan to confirm this charge was issued by Emit Academy.',
     }],
   });
 }

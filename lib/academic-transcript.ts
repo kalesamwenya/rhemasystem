@@ -37,11 +37,33 @@ async function qrDataUrl(value: string): Promise<string> {
   return canvas.toDataURL('image/png');
 }
 
+async function logoDataUrl(): Promise<string> {
+  const response = await fetch('/emit-academy-mark.svg');
+  if (!response.ok) throw new Error('Unable to load the Emit Academy logo.');
+  const svg = await response.text();
+  const svgUrl = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }));
+  const image = new Image();
+  try {
+    image.src = svgUrl;
+    await image.decode();
+  } finally {
+    URL.revokeObjectURL(svgUrl);
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 128;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Unable to prepare the Emit Academy logo.');
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/png');
+}
+
 function transcriptHtml(
   student: TranscriptStudent,
   grades: StudentGrade[],
   serialNumber: string,
   qrImage: string,
+  logoImage: string,
 ): string {
   const courses = summarizeCourseGrades(grades);
   const cumulativeGpa = calculateGpa(courses);
@@ -71,8 +93,8 @@ function transcriptHtml(
     <article class="transcript-page">
       <div class="watermark" aria-hidden="true">OFFICIAL ACADEMIC RECORD</div>
       <header class="masthead">
-        <img class="brand-mark" src="/emit-academy-mark.svg" alt="Emit Academy">
-        <div class="brand-copy"><p>EMIT ACADEMY</p><span>Rhema Bible School · Office of the Registrar</span></div>
+        <img class="brand-mark" src="${logoImage}" alt="Emit Academy">
+        <div class="brand-copy"><p>EMIT ACADEMY</p><span>Learn. Grow. Lead. · Office of the Registrar</span></div>
         <div class="document-title"><span>ACADEMIC TRANSCRIPT</span><strong>FRONT</strong></div>
       </header>
       <div class="record-line"><span>Transcript serial <strong>${escapeHtml(serialNumber)}</strong></span><span>Issue date <strong>${escapeHtml(issueDate)}</strong></span></div>
@@ -100,8 +122,8 @@ function transcriptHtml(
     <article class="transcript-page">
       <div class="watermark" aria-hidden="true">OFFICIAL ACADEMIC RECORD</div>
       <header class="masthead">
-        <img class="brand-mark" src="/emit-academy-mark.svg" alt="Emit Academy">
-        <div class="brand-copy"><p>EMIT ACADEMY</p><span>Rhema Bible School · Office of the Registrar</span></div>
+        <img class="brand-mark" src="${logoImage}" alt="Emit Academy">
+        <div class="brand-copy"><p>EMIT ACADEMY</p><span>Learn. Grow. Lead. · Office of the Registrar</span></div>
         <div class="document-title"><span>COURSE ATTENDANCE</span><strong>BACK</strong></div>
       </header>
       <div class="record-line"><span>Student <strong>${escapeHtml(student.name)}</strong> · ${escapeHtml(student.student_id)}</span><span>Serial <strong>${escapeHtml(serialNumber)}</strong></span></div>
@@ -120,7 +142,7 @@ function transcriptHtml(
     </article>
     <style>
       *{box-sizing:border-box}
-      .transcript-page{position:relative;display:flex;flex-direction:column;isolation:isolate;width:1122px;min-height:794px;padding:34px 42px 28px;overflow:hidden;border:1px solid #d5deea;background:#fff;color:#152b3c;font-family:Arial,Helvetica,sans-serif;break-after:page;page-break-after:always}
+      .transcript-page{position:relative;display:flex;flex-direction:column;isolation:isolate;width:794px;min-height:1122px;padding:30px 34px 24px;overflow:hidden;border:1px solid #d5deea;background:#fff;color:#152b3c;font-family:Arial,Helvetica,sans-serif;break-after:page;page-break-after:always}
       .transcript-page>*:not(.watermark){position:relative;z-index:1}
       .watermark{position:absolute;z-index:0;top:44%;left:50%;width:100%;transform:translate(-50%,-50%) rotate(-24deg);text-align:center;white-space:nowrap;color:rgba(30,58,138,.055);font-size:58px;font-weight:900;letter-spacing:7px}
       .masthead{display:flex;align-items:center;gap:14px;padding-bottom:16px;border-bottom:4px solid #1e3a8a}
@@ -148,52 +170,59 @@ function transcriptHtml(
     </style>`;
 }
 
-export async function exportAcademicTranscript(
+export async function createAcademicTranscriptPdf(
   student: TranscriptStudent,
   grades: StudentGrade[],
   serialNumber: string,
-  mode: 'view' | 'download',
-): Promise<void> {
+): Promise<Blob> {
   if (!/^RBS-TR-\d{8}-[A-F0-9]{16}$/i.test(serialNumber)) {
     throw new Error('A valid transcript serial number is required.');
   }
-  const preview = mode === 'view' ? window.open('about:blank', '_blank') : null;
-  if (mode === 'view' && !preview) throw new Error('Allow pop-ups to open the transcript PDF.');
   const sourceId = `academic-transcript-${crypto.randomUUID()}`;
-  const safeStudentId = student.student_id.replace(/[^a-z0-9_-]/gi, '-');
   let source: HTMLDivElement | null = null;
   try {
     const verificationUrl = new URL('/verify-transcript', window.location.origin);
     verificationUrl.searchParams.set('serial', serialNumber);
-    const qrImage = await qrDataUrl(verificationUrl.toString());
+    const [qrImage, logoImage] = await Promise.all([
+      qrDataUrl(verificationUrl.toString()),
+      logoDataUrl(),
+    ]);
     source = document.createElement('div');
     source.id = sourceId;
-    source.style.cssText = 'position:fixed;left:-12000px;top:0;width:1122px;background:#fff;';
-    source.innerHTML = transcriptHtml(student, grades, serialNumber, qrImage);
+    source.style.cssText = 'position:fixed;left:-12000px;top:0;width:794px;min-height:2244px;background:#fff;';
+    source.innerHTML = transcriptHtml(student, grades, serialNumber, qrImage, logoImage);
     document.body.appendChild(source);
+    await document.fonts?.ready;
+    await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+    if (source.scrollHeight < 2000 || source.scrollWidth < 700) {
+      throw new Error('The transcript layout could not be prepared for rendering.');
+    }
     const { default: html2pdf } = await import('html2pdf.js');
     const blob = await html2pdf().set({
+      filename: `Emit-Academy-Transcript-${student.student_id}-${serialNumber}.pdf`,
       margin: 0,
-      filename: `Rhema-Transcript-${safeStudentId}-${serialNumber}.pdf`,
       image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' },
+      html2canvas: {
+        scale: 2,
+        useCORS: true,
+        allowTaint: false,
+        backgroundColor: '#ffffff',
+        logging: false,
+        onclone: (clonedDocument: Document) => {
+          const clonedSource = clonedDocument.getElementById(sourceId);
+          if (!clonedSource) throw new Error('The transcript could not be prepared for PDF rendering.');
+          clonedSource.style.position = 'static';
+          clonedSource.style.left = 'auto';
+          clonedSource.style.top = 'auto';
+          clonedSource.style.width = '794px';
+        },
+      },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
     }).from(source).outputPdf('blob');
-    if (!(blob instanceof Blob)) throw new Error('The transcript PDF generator returned an invalid document.');
-    const url = URL.createObjectURL(blob);
-    if (preview) {
-      preview.location.replace(url);
-      window.setTimeout(() => URL.revokeObjectURL(url), 10 * 60 * 1000);
-    } else {
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `Rhema-Transcript-${safeStudentId}-${serialNumber}.pdf`;
-      link.click();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    if (!(blob instanceof Blob) || blob.type !== 'application/pdf' || blob.size < 100) {
+      throw new Error('The transcript PDF generator returned an invalid or empty document.');
     }
-  } catch (error) {
-    preview?.close();
-    throw error;
+    return blob;
   } finally {
     source?.remove();
   }

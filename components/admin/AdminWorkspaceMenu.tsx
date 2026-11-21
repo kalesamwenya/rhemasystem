@@ -40,6 +40,7 @@ const linksByDepartment: Record<string, WorkspaceLink[]> = {
   ],
   registrar: [
     { label: 'Student records', href: '/admin/students', module: 'students' },
+    { label: 'Official transcripts', href: '/admin/transcripts', module: 'transcripts' },
     { label: 'Admissions', href: '/admin/admissions', module: 'admissions' },
     { label: 'Attendance & follow-ups', href: '/admin/student-affairs', module: 'student-affairs' },
     { label: 'Events', href: '/admin/events', module: 'events' },
@@ -47,6 +48,7 @@ const linksByDepartment: Record<string, WorkspaceLink[]> = {
   academic: [
     { label: 'Courses & assessments', href: '/admin/courses', module: 'academics' },
     { label: 'Grade assembly & transcripts', href: '/admin/grade-assembly', module: 'academics' },
+    { label: 'Official transcripts', href: '/admin/transcripts', module: 'transcripts' },
     { label: 'Academic schedule', href: '/admin/schedule', module: 'schedule' },
     { label: 'Library', href: '/admin/library', module: 'library' },
     { label: 'Student affairs', href: '/admin/student-affairs', module: 'student-affairs' },
@@ -69,6 +71,7 @@ const linksByDepartment: Record<string, WorkspaceLink[]> = {
 
 const directorLinks: WorkspaceLink[] = Object.values(linksByDepartment).flat();
 const mediaItLinks: WorkspaceLink[] = [
+  { label: 'Official transcripts', href: '/admin/transcripts', module: 'transcripts' },
   { label: 'Website content', href: '/admin/site-content', module: 'social-media' },
   { label: 'Social media', href: '/admin/social-media', module: 'social-media' },
   { label: 'Facebook Page dashboard', href: '/admin/facebook-page', module: 'social-media' },

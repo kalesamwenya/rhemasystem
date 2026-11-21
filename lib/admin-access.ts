@@ -7,6 +7,7 @@ export type AdminModule =
   | 'students'
   | 'people'
   | 'student-affairs'
+  | 'transcripts'
   | 'academics'
   | 'communications'
   | 'contact-messages'
@@ -32,7 +33,7 @@ export type AdminModule =
   | 'id-cards';
 
 const allModules: AdminModule[] = [
-  'dashboard', 'reports', 'admissions', 'partnerships', 'students', 'people', 'student-affairs', 'academics',
+  'dashboard', 'reports', 'admissions', 'partnerships', 'students', 'people', 'student-affairs', 'transcripts', 'academics',
   'communications', 'contact-messages', 'chatbot', 'social-media', 'events', 'store', 'help-desk', 'tasks',
   'statistics', 'website-statistics', 'analysis', 'performance', 'finance', 'budgets', 'assets', 'activity-requests', 'schedule', 'library', 'profile', 'settings', 'staff-access', 'id-cards',
 ];
@@ -80,6 +81,12 @@ export function isFinanceDepartment(department: string): boolean {
   return /(^|[^a-z])(finance|financial|account|accounts|bursar|payments?)([^a-z]|$)/.test(normalized);
 }
 
+function isTranscriptDepartment(department: string): boolean {
+  const normalized = department.trim().toLowerCase().replace(/[_-]+/g, ' ');
+  return /(^|[^a-z])(academic|academics|education|lecturer|faculty|dean|registrar|student affairs|student services)([^a-z]|$)/.test(normalized)
+    || isMediaOrItDepartment(department);
+}
+
 export function normalizeAdminRole(value: string): AdminRole | null {
   const role = value.trim().toLowerCase();
   return Object.prototype.hasOwnProperty.call(roleModules, role) ? role as AdminRole : null;
@@ -88,6 +95,7 @@ export function normalizeAdminRole(value: string): AdminRole | null {
 export function canAccessAdminModule(roleValue: string, department: string, module: AdminModule): boolean {
   const role = normalizeAdminRole(roleValue);
   if (!role) return false;
+  if (module === 'transcripts') return isTranscriptDepartment(department);
   if (module === 'staff-access') return isItDepartment(department);
   if (module === 'id-cards') {
     return role === 'owner' || role === 'administrator' || role === 'it'
@@ -118,6 +126,7 @@ export function getAdminModuleForPath(pathname: string): AdminModule | null {
   if (pathname.startsWith('/admin/students')) return 'students';
   if (pathname.startsWith('/admin/people')) return 'people';
   if (pathname.startsWith('/admin/student-affairs')) return 'student-affairs';
+  if (pathname.startsWith('/admin/transcripts')) return 'transcripts';
   if (pathname.startsWith('/admin/grade-assembly')) return 'academics';
   if (pathname.startsWith('/admin/courses') || pathname.startsWith('/admin/assessments')) return 'academics';
   if (pathname.startsWith('/admin/communications') || pathname.startsWith('/admin/messages') || pathname.startsWith('/admin/notifications') || pathname.startsWith('/admin/alerts')) return 'communications';

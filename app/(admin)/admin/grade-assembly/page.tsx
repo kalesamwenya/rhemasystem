@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BookOpen, Loader2, Printer, Save, Search } from 'lucide-react';
 import { api } from '@/lib/api';
-import { exportAcademicTranscript } from '@/lib/academic-transcript';
+import { createAcademicTranscriptPdf } from '@/lib/academic-transcript';
 import {
   calculateGpa,
   summarizeCourseGrades,
@@ -151,22 +151,58 @@ export default function GradeAssemblyPage() {
     setPublishingTranscript(true);
     setError('');
     setNotice('');
+    let publicationPrepared = false;
     try {
-      const response = await api.students.setTranscriptPublication({
-        student_id: selectedStudent.student_id,
-        published,
-      }) as { success?: boolean; message?: string; published?: boolean; serial_number?: string | null; generated_at?: string | null };
-      if (!response.success || response.published !== published) {
-        throw new Error(response.message ?? 'Unable to update transcript availability.');
+      if (published) {
+        const publication = await api.students.setTranscriptPublication({
+          student_id: selectedStudent.student_id,
+          published: true,
+        }) as { success?: boolean; message?: string; published?: boolean; existing_pdf?: boolean; serial_number?: string | null; generated_at?: string | null };
+        publicationPrepared = publication.success === true && publication.published === true && publication.existing_pdf !== true;
+        if (!publication.success || publication.published !== true || !publication.serial_number) {
+          throw new Error(publication.message ?? 'Unable to prepare the transcript publication.');
+        }
+        const pdf = await createAcademicTranscriptPdf(selectedStudent, grades, publication.serial_number);
+        const saved = await api.students.saveAdminTranscriptPdf(selectedStudent.student_id, publication.serial_number, pdf) as {
+          success?: boolean;
+          saved?: boolean;
+          generated_at?: string | null;
+          message?: string;
+        };
+        if (!saved.success || saved.saved !== true) {
+          throw new Error(saved.message ?? 'Unable to store the transcript PDF.');
+        }
+        setTranscriptPublished(true);
+        setTranscriptGeneratedAt(saved.generated_at ?? publication.generated_at ?? new Date().toISOString());
+        setTranscriptSerial(publication.serial_number);
+        setNotice('Transcript PDF generated and stored for authorized administrators.');
+      } else {
+        const response = await api.students.setTranscriptPublication({
+          student_id: selectedStudent.student_id,
+          published: false,
+        }) as { success?: boolean; message?: string; published?: boolean };
+        if (!response.success || response.published !== false) {
+          throw new Error(response.message ?? 'Unable to remove the transcript publication.');
+        }
+        setTranscriptPublished(false);
+        setTranscriptGeneratedAt(null);
+        setTranscriptSerial(null);
+        setNotice(response.message ?? 'Transcript publication removed.');
       }
-      setTranscriptPublished(published);
-      setTranscriptGeneratedAt(published ? response.generated_at || new Date().toISOString() : null);
-      setTranscriptSerial(published ? response.serial_number || null : null);
-      setNotice(response.message ?? (published
-        ? 'Transcript generated and made available to the student.'
-        : 'Transcript is no longer available to the student.'));
     } catch (cause) {
-      setError(messageOf(cause, 'Unable to update transcript availability.'));
+      let message = messageOf(cause, published ? 'Unable to generate and store the transcript PDF.' : 'Unable to remove the transcript publication.');
+      if (published && publicationPrepared) {
+        try {
+          const rollback = await api.students.setTranscriptPublication({
+            student_id: selectedStudent.student_id,
+            published: false,
+          }) as { success?: boolean; message?: string };
+          if (!rollback.success) throw new Error(rollback.message ?? 'The incomplete publication could not be removed.');
+        } catch (rollbackCause) {
+          message += ` The incomplete publication could not be removed: ${messageOf(rollbackCause, 'contact an administrator')}`;
+        }
+      }
+      setError(message);
     } finally {
       setPublishingTranscript(false);
     }
@@ -179,13 +215,13 @@ export default function GradeAssemblyPage() {
     }
     setExportingTranscript(true);
     setError('');
-    try {
-      await exportAcademicTranscript(selectedStudent, grades, transcriptSerial, 'view');
-    } catch (cause) {
-      setError(messageOf(cause, 'Unable to prepare the transcript PDF.'));
-    } finally {
+    const preview = window.open(api.students.adminTranscriptPdfUrl(selectedStudent.student_id), '_blank');
+    if (!preview) {
+      setError('Allow pop-ups to open the transcript PDF.');
       setExportingTranscript(false);
+      return;
     }
+    setExportingTranscript(false);
   };
 
   return (
@@ -244,9 +280,9 @@ export default function GradeAssemblyPage() {
             <div className="flex flex-wrap items-center gap-2">
               <button type="button" onClick={() => void setTranscriptPublication(true)} disabled={publishingTranscript} className="inline-flex items-center justify-center gap-2 rounded-xl bg-rhema-red px-4 py-3 text-sm font-bold text-white hover:bg-rhema-red-dark disabled:opacity-60">
                 {publishingTranscript ? <Loader2 className="h-4 w-4 animate-spin" /> : <BookOpen className="h-4 w-4" />}
-                {transcriptPublished ? 'Regenerate transcript' : 'Generate for student'}
+                {transcriptPublished ? 'Regenerate stored PDF' : 'Generate & store PDF'}
               </button>
-              {transcriptPublished && <button type="button" onClick={() => void setTranscriptPublication(false)} disabled={publishingTranscript} className="rounded-xl border border-red-200 bg-white px-4 py-3 text-sm font-bold text-red-800 hover:bg-red-50 disabled:opacity-60">Remove student access</button>}
+              {transcriptPublished && <button type="button" onClick={() => void setTranscriptPublication(false)} disabled={publishingTranscript} className="rounded-xl border border-red-200 bg-white px-4 py-3 text-sm font-bold text-red-800 hover:bg-red-50 disabled:opacity-60">Remove stored PDF</button>}
               <button type="button" onClick={() => void exportTranscript()} disabled={!transcriptSerial || exportingTranscript} className="inline-flex items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm font-bold text-blue-900 hover:bg-blue-50 disabled:opacity-50">
                 {exportingTranscript ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />} Print transcript
               </button>
@@ -254,8 +290,8 @@ export default function GradeAssemblyPage() {
           </div>
           <p role="status" className="text-xs text-slate-600">
             {transcriptPublished
-              ? `Transcript is available to this student${transcriptGeneratedAt ? ` · generated ${new Date(transcriptGeneratedAt).toLocaleString()}` : ''}.`
-              : 'The student can see course grades, but GPA summaries and transcript downloads remain hidden until generated here.'}
+              ? `Stored PDF is available to authorized administrator departments${transcriptGeneratedAt ? ` · generated ${new Date(transcriptGeneratedAt).toLocaleString()}` : ''}.`
+              : 'Generate and store the official transcript PDF to activate its verification serial.'}
           </p>
 
           <section aria-label="Grade point averages" className="grid gap-3 sm:grid-cols-3">

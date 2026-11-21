@@ -2,39 +2,22 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, Download, Eye, Loader2 } from 'lucide-react';
+import { ArrowRight, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
-import { exportAcademicTranscript } from '@/lib/academic-transcript';
 import { calculateGpa, summarizeCourseGrades, summarizeGrades, type StudentGrade } from '@/lib/student-grades';
 
-type GradesResponse = { data: StudentGrade[]; transcript_published?: boolean; transcript_serial?: string | null };
+type GradesResponse = { data: StudentGrade[]; transcript_published?: boolean };
 
 export default function StudentGradesPage() {
   const [grades, setGrades] = useState<StudentGrade[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
-  const [exporting, setExporting] = useState<'view' | 'download' | null>(null);
   const [transcriptPublished, setTranscriptPublished] = useState(false);
-  const [transcriptSerial, setTranscriptSerial] = useState<string | null>(null);
   const overallSummary = summarizeGrades(grades);
   const courseSummaries = summarizeCourseGrades(grades);
   const levelOneGpa = calculateGpa(courseSummaries, 1);
   const levelTwoGpa = calculateGpa(courseSummaries, 2);
   const cumulativeGpa = calculateGpa(courseSummaries);
-
-  const exportTranscript = async (mode: 'view' | 'download') => {
-    setExporting(mode);
-    setError('');
-    try {
-      if (!transcriptSerial) throw new Error('The transcript has no verification serial. Contact the academic department.');
-      const response = await api.students.myProfile() as { data: { student: { name: string; student_id: string; class: string } } };
-      await exportAcademicTranscript(response.data.student, grades, transcriptSerial, mode);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Unable to prepare your transcript PDF.');
-    } finally {
-      setExporting(null);
-    }
-  };
 
   useEffect(() => {
     let active = true;
@@ -43,7 +26,6 @@ export default function StudentGradesPage() {
         if (active) {
           setGrades(response.data);
           setTranscriptPublished(response.transcript_published === true);
-          setTranscriptSerial(response.transcript_serial ?? null);
         }
       })
       .catch((reason: unknown) => {
@@ -62,14 +44,6 @@ export default function StudentGradesPage() {
           <h1 className="text-2xl font-black text-slate-900">My grades</h1>
           <p className="mt-1 text-sm text-slate-500">Published gradebook results for your enrolled courses.</p>
         </div>
-        {!loading && !error && transcriptPublished && grades.length > 0 && <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => void exportTranscript('view')} disabled={exporting !== null} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-60">
-            {exporting === 'view' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}View transcript PDF
-          </button>
-          <button type="button" onClick={() => void exportTranscript('download')} disabled={exporting !== null} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-60">
-            {exporting === 'download' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}Download transcript PDF
-          </button>
-        </div>}
       </header>
       {loading ? (
         <div className="flex items-center gap-2 p-8 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" />Loading grades…</div>
@@ -96,7 +70,7 @@ export default function StudentGradesPage() {
             </>
           ) : (
             <p className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900" role="status">
-              Level GPA summaries and transcript downloads will appear here when the academic department generates your transcript.
+              GPA summaries appear here after the academic department generates the official transcript PDF. PDF access is restricted to authorized administrator departments.
             </p>
           )}
           <section aria-label="Course grades" className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">

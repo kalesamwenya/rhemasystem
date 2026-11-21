@@ -9,6 +9,7 @@ import {
   BriefcaseBusiness,
   Check,
   ChevronRight,
+  Download,
   GraduationCap,
   IdCard,
   Loader2,
@@ -23,6 +24,7 @@ import CustomAlert from "@/components/main/CustomAlert";
 import { confirmWithApp } from "@/components/ui/app-dialogs";
 import { api } from "@/lib/api";
 import { openFlutterwaveInlineCheckout, type FlutterwaveInlineCheckout } from "@/lib/flutterwave-inline";
+import { createBrandedPdfBlob, openPdfBlob } from "@/lib/branded-pdf";
 
 const steps = [
   { id: "personal", label: "Applicant details", icon: UserRound },
@@ -569,6 +571,67 @@ export default function ApplicationPage() {
     if (nextApplication.feeRequired) void startApplicationFeePayment(nextApplication.id, nextApplication.statusToken);
   };
 
+  const downloadApplicationCopy = async () => {
+    if (!application) return;
+    try {
+      const pdf = await createBrandedPdfBlob({
+        title: 'Student Admission Application',
+        subtitle: 'Application copy · admissions record',
+        fileName: `Emit-Academy-Application-${application.id}`,
+        student: {
+          name: `${formData.firstName} ${formData.lastName}`.trim(),
+          id: application.id,
+          cohort: formData.yearApplyingFor,
+        },
+        sections: [
+          {
+            title: 'Applicant details',
+            fields: [
+              { label: 'Full name', value: `${formData.firstName} ${formData.lastName}`.trim() },
+              { label: 'Application reference', value: application.id },
+              { label: 'Program', value: formData.program },
+              { label: 'Year applying for', value: formData.yearApplyingFor },
+              { label: 'Preferred class', value: formData.preferredClass },
+              { label: 'Email', value: formData.email },
+              { label: 'Phone', value: formData.phone },
+            ],
+          },
+          {
+            title: 'Education',
+            fields: [
+              { label: 'Secondary school', value: formData.secondarySchool },
+              { label: 'High school attended', value: formData.highSchoolAttended },
+              { label: 'College attended', value: formData.collegeAttended },
+              { label: 'Diploma earned', value: formData.diplomaEarned },
+            ],
+          },
+          {
+            title: 'Application status',
+            fields: [
+              { label: 'Status', value: application.status },
+              { label: 'Application fee', value: application.feeRequired
+                ? `${application.currency} ${application.feeAmount.toFixed(2)} · ${application.paymentStatus}`
+                : 'Not required' },
+            ],
+          },
+        ],
+      });
+      await api.admissions.uploadApplicationPdf(
+        application.id,
+        application.statusToken,
+        pdf,
+        `Emit-Academy-Application-${application.id}.pdf`,
+      );
+      openPdfBlob(pdf, 'download', `Emit-Academy-Application-${application.id}.pdf`);
+    } catch (cause) {
+      setStatus({
+        type: 'error',
+        title: 'Application PDF unavailable',
+        message: cause instanceof Error ? cause.message : 'Unable to download the application copy.',
+      });
+    }
+  };
+
   const startApplicationFeePayment = async (applicationId: string, statusToken: string) => {
     setIsSubmitting(true);
     try {
@@ -1033,6 +1096,14 @@ export default function ApplicationPage() {
                         View application progress and payment
                       </a>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => void downloadApplicationCopy()}
+                      className="mt-4 inline-flex items-center gap-2 rounded-full border border-[#003da5]/20 bg-white px-4 py-2.5 text-sm font-bold text-[#003da5] shadow-sm transition hover:border-[#003da5]/40 hover:bg-blue-50"
+                    >
+                      <Download className="h-4 w-4" />
+                      Download application PDF
+                    </button>
                     <p className="mt-3 text-xs text-emerald-900">
                       Email updates: pastor {application.recommendationEmailsSent.pastoral ? "sent" : "not sent"} · personal recommender {application.recommendationEmailsSent.personal ? "sent" : "not sent"} · next of kin {application.nextOfKinEmailSent ? "sent" : "not sent"}
                     </p>

@@ -1,6 +1,8 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
+import "react-quill-new/dist/quill.snow.css";
 import {
   ArrowLeft,
   Check,
@@ -19,6 +21,8 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/api";
 
+const QuillEditor = dynamic(() => import("react-quill-new"), { ssr: false });
+
 type AudienceId = "students" | "applicants" | "website-contacts" | "followups";
 
 type Channel = "sms" | "whatsapp" | "email" | "call";
@@ -33,7 +37,10 @@ type Contact = {
   email: string;
   phone: string;
   notes: string;
+  reason_items?: FollowupReason[];
 };
+
+type FollowupReason = { type: string; text: string };
 
 type HistoryEntry = {
   id: number;
@@ -81,6 +88,15 @@ const channels = [
 ] as const;
 
 const dialKeys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"];
+const editorModules = {
+  toolbar: [
+    ["bold", "italic", "underline"],
+    [{ header: [2, 3, false] }],
+    [{ list: "ordered" }, { list: "bullet" }],
+    ["link"],
+    ["clean"],
+  ],
+};
 
 const formatInitials = (name = "") =>
   name
@@ -90,6 +106,74 @@ const formatInitials = (name = "") =>
     .map((part) => part[0])
     .join("")
     .toUpperCase() || "N";
+
+const escapeHtml = (value: string) =>
+  value.replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  })[character] || character);
+
+function createFollowupDraft(contact: Contact) {
+  const reasonItems = contact.reason_items?.length
+    ? contact.reason_items
+    : contact.notes.split(" · ").filter(Boolean).map((text) => ({ type: "other", text }));
+  const groupForType = (type: string) => {
+    if (type.startsWith("missed_") || type.startsWith("failed_")) return "Academic progress";
+    if (type === "tuition_balance" || type === "liability") return "Fees and balances";
+    if (type === "code_violation" || type === "service_hours") return "Student affairs";
+    if (type === "missed_class" || type === "late_slip") return "Attendance";
+    return "Student record";
+  };
+  const groups = new Map<string, string[]>();
+  for (const reason of reasonItems) {
+    const heading = groupForType(reason.type);
+    groups.set(heading, [...(groups.get(heading) ?? []), reason.text]);
+  }
+  const sections = [...groups].map(([heading, items]) => `
+    <h3>${escapeHtml(heading)}</h3>
+    <ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+  `).join("");
+  return {
+    subject: `Student support follow-up — ${contact.name} (${contact.student_id || "student"})`,
+    html: `<p>Dear ${escapeHtml(contact.name)},</p>
+      <p>We are reaching out from Emit Academy / Rhema Bible School to support you with the following items in your student record:</p>
+      ${sections}
+      <p>Please review these items and reply if anything is incorrect, already resolved, or if you need help planning the next steps. Our team is available to support you.</p>
+      <p>Kind regards,<br>Student Support Team<br>Emit Academy / Rhema Bible School</p>`,
+  };
+}
+
+function messageTextFromHtml(html: string, whatsapp = false): string {
+  const parsed = new DOMParser().parseFromString(html, "text/html");
+  const render = (node: Node): string => {
+    if (node.nodeType === Node.TEXT_NODE) return node.textContent || "";
+    if (!(node instanceof HTMLElement)) return Array.from(node.childNodes, render).join("");
+
+    const content = Array.from(node.childNodes, render).join("");
+    switch (node.tagName) {
+      case "BR": return "\n";
+      case "LI": return `• ${content.trim()}\n`;
+      case "P":
+      case "DIV": return `${content.trim()}\n\n`;
+      case "H1":
+      case "H2":
+      case "H3": return `${whatsapp ? "*" : ""}${content.trim()}${whatsapp ? "*" : ""}\n`;
+      case "STRONG":
+      case "B": return whatsapp ? `*${content}*` : content;
+      case "EM":
+      case "I": return whatsapp ? `_${content}_` : content;
+      case "A": {
+        const href = (node as HTMLAnchorElement).href;
+        return href ? `${content} (${href})` : content;
+      }
+      default: return content;
+    }
+  };
+  return render(parsed.body).replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+}
 
 export default function CommunicationsPage() {
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -104,6 +188,7 @@ export default function CommunicationsPage() {
   const [activeAudience, setActiveAudience] = useState<AudienceId>("students");
   const [channel, setChannel] = useState<Channel>("sms");
   const [message, setMessage] = useState("");
+  const [emailSubject, setEmailSubject] = useState("Message from Emit Academy");
   const [dialNumber, setDialNumber] = useState("");
   const [search, setSearch] = useState("");
   const [notice, setNotice] = useState("");
@@ -127,7 +212,7 @@ export default function CommunicationsPage() {
         api.students.adminRoster() as Promise<{ data?: Array<{ student_id: string; name: string; class: string; email?: string; phone?: string }>; warnings?: string[] }>,
         api.admissions.list() as Promise<{ data?: Array<{ id: string; applicant_name: string; applicant_email: string; applicant_phone?: string; program?: string; student_id?: string | null }> }>,
         api.contactMessages.list() as Promise<{ data?: Array<{ id: number; name: string; email: string; phone?: string; enquiry?: string; page_path?: string }> }>,
-        api.students.communicationFollowups() as Promise<{ data?: Array<{ student_id: string; name: string; class: string; reasons: string[] }> }>,
+        api.students.communicationFollowups() as Promise<{ data?: Array<{ student_id: string; name: string; class: string; reasons: string[]; reason_items?: FollowupReason[] }> }>,
       ]);
       const errors: Partial<Record<AudienceId, string>> = {};
       const errorMessage = (result: PromiseSettledResult<unknown>, fallback: string) => (
@@ -194,6 +279,7 @@ export default function CommunicationsPage() {
             email: rosterRecord?.email || "",
             phone: rosterRecord?.phone || "",
             notes: student.reasons.join(" · "),
+            reason_items: student.reason_items,
           };
         })
         : [];
@@ -274,10 +360,22 @@ export default function CommunicationsPage() {
     const wasSelected = selectedIds.includes(id);
     const nextSelectedIds = wasSelected
       ? selectedIds.filter((selectedId) => selectedId !== id)
-      : [...selectedIds, id];
+      : selectedContact.audience === "followups"
+        ? [id]
+        : [...selectedIds, id];
     setSelectedIds(nextSelectedIds);
     const nextDialContact = contacts.find((item) => item.id === nextSelectedIds[nextSelectedIds.length - 1]);
     setDialNumber(nextDialContact?.phone || "");
+    if (selectedContact.audience === "followups") {
+      if (wasSelected) {
+        setMessage("");
+        setEmailSubject("Message from Emit Academy");
+      } else {
+        const draft = createFollowupDraft(selectedContact);
+        setMessage(draft.html);
+        setEmailSubject(draft.subject);
+      }
+    }
     setNotice("");
   };
 
@@ -317,26 +415,31 @@ export default function CommunicationsPage() {
       return;
     }
 
-    if (!message.trim() && channel !== "email") {
+    const messageText = messageTextFromHtml(message, channel === "whatsapp");
+    if (!messageText) {
       setNotice(`Write a ${channel} message first.`);
       return;
     }
 
     const hasMultipleRecipients = selectedContacts.length > 1;
-    if (channel !== "email" && hasMultipleRecipients) {
+    if ((channel !== "email" || activeAudience === "followups") && hasMultipleRecipients) {
       setNotice(`Select one contact at a time to open a ${channel === "whatsapp" ? "WhatsApp" : "SMS"} draft.`);
       return;
     }
     const recipient = selectedContacts[0];
-    const encodedMessage = encodeURIComponent(message.trim());
+    const encodedMessage = encodeURIComponent(messageText);
     let destination = "";
     if (channel === "email") {
+      if (!emailSubject.trim()) {
+        setNotice("Enter a subject before opening the email draft.");
+        return;
+      }
       const emailAddresses = validEmailContacts.map((item) => item.email).filter(Boolean);
       if (emailAddresses.length !== selectedContacts.length) {
         setNotice("Every selected contact needs an email address before opening an email draft.");
         return;
       }
-      destination = `mailto:?bcc=${encodeURIComponent(emailAddresses.join(","))}&subject=${encodeURIComponent("Message from Emit Academy")}&body=${encodedMessage}`;
+      destination = `mailto:?bcc=${encodeURIComponent(emailAddresses.join(","))}&subject=${encodeURIComponent(emailSubject.trim())}&body=${encodedMessage}`;
     } else {
       const number = recipient.phone.replace(/[^\d+]/g, "");
       if (!number) {
@@ -353,7 +456,7 @@ export default function CommunicationsPage() {
       contact_name: channel === "email" ? `${validEmailContacts.length} selected contact(s)` : recipient.name,
       channel,
       status: "draft opened",
-      body: message.trim() || "Email draft opened.",
+      body: messageText,
     }, ...current]);
     setNotice(`Opening a ${channel.toUpperCase()} draft for ${channel === "email" ? `${validEmailContacts.length} selected contact(s)` : recipient.name}.`);
     window.open(destination, channel === "whatsapp" ? "_blank" : "_self", "noopener,noreferrer");
