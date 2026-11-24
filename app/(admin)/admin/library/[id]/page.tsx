@@ -3,8 +3,10 @@
 import React, { useState } from 'react';
 import { Save, Trash2, ArrowLeft, History, Edit3, ShieldAlert, Archive } from 'lucide-react';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
 
-export default function LibraryDetail({ assetId = "ASSET-102" }) {
+export default function LibraryDetail() {
+  const { id: assetId } = useParams<{ id: string }>();
   const [isEditing, setIsEditing] = useState(false);
   const [assetData, setAssetData] = useState({
     title: "Software Architecture Patterns",
